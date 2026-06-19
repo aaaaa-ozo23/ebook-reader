@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@reader/core": "workspace:*",
+    "@tanstack/react-virtual": "^3.14.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",

@@ -24,6 +24,7 @@ import {
   saveReaderTheme,
   saveReadingProgress,
 } from "../tauri/reader";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -70,7 +71,31 @@ interface ReaderShellProps {
 
 interface ReaderBlock {
   chapter: TxtChapter;
-  paragraphs: string[];
+  paragraphs: ReaderParagraph[];
+}
+
+interface ReaderParagraph {
+  text: string;
+  charOffset: number;
+}
+
+interface ReaderVirtualBlock {
+  id: string;
+  kind: "heading" | "paragraph";
+  chapterId: string;
+  chapterTitle: string;
+  charOffset: number;
+  text: string;
+}
+
+interface ChapterJumpRequest {
+  chapterId: string;
+  requestId: number;
+}
+
+interface RenderedVirtualItem {
+  index: number;
+  start: number;
 }
 
 export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
@@ -83,6 +108,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] = useState<ReaderProgress<TxtLocator> | null>(null);
+  const [chapterJumpRequest, setChapterJumpRequest] = useState<ChapterJumpRequest | null>(null);
   const progressSaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -191,11 +217,12 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
 
   const handleJumpToChapter = useCallback(
     (chapterId: string) => {
-      const chapterElement = globalThis.document?.getElementById(getChapterElementId(chapterId));
-      chapterElement?.scrollIntoView?.({ block: "start" });
-
       const chapter = document?.chapters.find((currentChapter) => currentChapter.id === chapterId);
       if (chapter !== undefined && document !== null) {
+        setChapterJumpRequest((currentRequest) => ({
+          chapterId,
+          requestId: (currentRequest?.requestId ?? 0) + 1,
+        }));
         handleProgressChange(
           {
             kind: "txt",
@@ -271,6 +298,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
           error={error}
           initialProgress={readingProgress}
           isLoading={isLoading}
+          jumpRequest={chapterJumpRequest}
           onProgressChange={handleProgressChange}
           onBackToLibrary={onBackToLibrary}
         />
@@ -337,6 +365,7 @@ interface ReaderContentProps {
   error: string | null;
   initialProgress: ReaderProgress<TxtLocator> | null;
   isLoading: boolean;
+  jumpRequest: ChapterJumpRequest | null;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onBackToLibrary: () => void;
 }
@@ -347,11 +376,34 @@ function ReaderContent({
   error,
   initialProgress,
   isLoading,
+  jumpRequest,
   onProgressChange,
   onBackToLibrary,
 }: ReaderContentProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const hasRestoredProgressRef = useRef(false);
+  const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
+  // TanStack Virtual owns imperative scroll state for this reader surface.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: virtualBlocks.length,
+    getScrollElement: () => viewportRef.current,
+    estimateSize: (index) => (virtualBlocks[index]?.kind === "heading" ? 96 : 68),
+    initialRect: {
+      width: 780,
+      height: 720,
+    },
+    overscan: 12,
+  });
+  const measuredVirtualItems = virtualizer.getVirtualItems();
+  const renderedVirtualItems =
+    measuredVirtualItems.length > 0
+      ? measuredVirtualItems.map((item) => ({
+          index: item.index,
+          start: item.start,
+        }))
+      : buildEstimatedVirtualItems(virtualBlocks);
+  const totalVirtualSize = Math.max(virtualizer.getTotalSize(), estimateTotalSize(virtualBlocks));
 
   useEffect(() => {
     if (
@@ -359,41 +411,59 @@ function ReaderContent({
       isLoading ||
       document === null ||
       initialProgress === null ||
-      blocks.length === 0
+      virtualBlocks.length === 0
     ) {
       return;
     }
 
-    const targetChapter = findProgressTargetChapter(blocks, initialProgress.locator);
-    const chapterElement =
-      targetChapter === null
-        ? null
-        : globalThis.document?.getElementById(getChapterElementId(targetChapter.id));
+    const targetIndex = findProgressTargetIndex(virtualBlocks, initialProgress.locator);
 
-    chapterElement?.scrollIntoView?.({ block: "start" });
+    if (targetIndex !== -1) {
+      virtualizer.scrollToIndex(targetIndex, { align: "start" });
+    }
     hasRestoredProgressRef.current = true;
-  }, [blocks, document, initialProgress, isLoading]);
+  }, [document, initialProgress, isLoading, virtualBlocks, virtualizer]);
+
+  useEffect(() => {
+    if (jumpRequest === null || virtualBlocks.length === 0) {
+      return;
+    }
+
+    const targetIndex = virtualBlocks.findIndex(
+      (block) => block.kind === "heading" && block.chapterId === jumpRequest.chapterId,
+    );
+
+    if (targetIndex !== -1) {
+      virtualizer.scrollToIndex(targetIndex, { align: "start" });
+    }
+  }, [jumpRequest, virtualBlocks, virtualizer]);
 
   const handleScroll = useCallback(() => {
     if (document === null || viewportRef.current === null) {
       return;
     }
 
-    const activeChapter = findActiveChapter(blocks, viewportRef.current);
+    const activeBlock = renderedVirtualItems[0];
 
-    if (activeChapter === null) {
+    if (activeBlock === undefined) {
+      return;
+    }
+
+    const block = virtualBlocks[activeBlock.index];
+
+    if (block === undefined) {
       return;
     }
 
     onProgressChange(
       {
         kind: "txt",
-        chapterId: activeChapter.id,
-        charOffset: activeChapter.startChar,
+        chapterId: block.chapterId,
+        charOffset: block.charOffset,
       },
-      activeChapter.startChar / Math.max(document.charCount, 1),
+      block.charOffset / Math.max(document.charCount, 1),
     );
-  }, [blocks, document, onProgressChange]);
+  }, [document, onProgressChange, renderedVirtualItems, virtualBlocks]);
 
   if (isLoading) {
     return (
@@ -427,21 +497,40 @@ function ReaderContent({
       aria-label={`${document.book.title} content`}
       onScroll={handleScroll}
     >
-      <article className="reader-page">
+      <article className="reader-page reader-page--virtual">
         <ReaderMeta document={document} />
-        {blocks.map((block) => (
-          <section
-            key={block.chapter.id}
-            id={getChapterElementId(block.chapter.id)}
-            className="reader-chapter"
-            aria-labelledby={`${getChapterElementId(block.chapter.id)}-title`}
-          >
-            <h2 id={`${getChapterElementId(block.chapter.id)}-title`}>{block.chapter.title}</h2>
-            {block.paragraphs.map((paragraph, paragraphIndex) => (
-              <p key={`${block.chapter.id}-${paragraphIndex}`}>{paragraph}</p>
-            ))}
-          </section>
-        ))}
+        <div
+          className="reader-virtual-canvas"
+          style={{
+            height: `${totalVirtualSize}px`,
+          }}
+        >
+          {renderedVirtualItems.map((virtualItem) => {
+            const block = virtualBlocks[virtualItem.index];
+
+            if (block === undefined) {
+              return null;
+            }
+
+            return (
+              <div
+                key={block.id}
+                ref={virtualizer.measureElement}
+                className={`reader-virtual-row reader-virtual-row--${block.kind}`}
+                data-index={virtualItem.index}
+                style={{
+                  transform: `translateY(${virtualItem.start}px)`,
+                }}
+              >
+                {block.kind === "heading" ? (
+                  <h2>{block.text}</h2>
+                ) : (
+                  <p>{block.text}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </article>
     </section>
   );
@@ -607,60 +696,101 @@ function ThemeSlider({ label, max, min, step, value, onChange }: ThemeSliderProp
   );
 }
 
-function splitChapterParagraphs(chapter: TxtChapter): string[] {
-  return chapter.text
-    .split(/\n+/)
-    .map((paragraph) => paragraph.trim())
-    .filter((paragraph) => paragraph.length > 0 && paragraph !== chapter.title);
+function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {
+  const paragraphs: ReaderParagraph[] = [];
+  let localCharOffset = 0;
+
+  for (const line of chapter.text.split("\n")) {
+    const paragraph = line.trim();
+
+    if (paragraph.length > 0 && paragraph !== chapter.title) {
+      paragraphs.push({
+        text: paragraph,
+        charOffset: chapter.startChar + localCharOffset,
+      });
+    }
+
+    localCharOffset += Array.from(line).length + 1;
+  }
+
+  return paragraphs;
 }
 
-function findProgressTargetChapter(blocks: ReaderBlock[], locator: TxtLocator): TxtChapter | null {
+function flattenReaderBlocks(blocks: ReaderBlock[]): ReaderVirtualBlock[] {
+  return blocks.flatMap((block) => [
+    {
+      id: `heading-${block.chapter.id}`,
+      kind: "heading" as const,
+      chapterId: block.chapter.id,
+      chapterTitle: block.chapter.title,
+      charOffset: block.chapter.startChar,
+      text: block.chapter.title,
+    },
+    ...block.paragraphs.map((paragraph, paragraphIndex) => ({
+      id: `paragraph-${block.chapter.id}-${paragraphIndex}`,
+      kind: "paragraph" as const,
+      chapterId: block.chapter.id,
+      chapterTitle: block.chapter.title,
+      charOffset: paragraph.charOffset,
+      text: paragraph.text,
+    })),
+  ]);
+}
+
+function findProgressTargetIndex(blocks: ReaderVirtualBlock[], locator: TxtLocator): number {
   if (locator.chapterId !== undefined) {
-    const chapterById = blocks.find((block) => block.chapter.id === locator.chapterId);
-
-    if (chapterById !== undefined) {
-      return chapterById.chapter;
-    }
-  }
-
-  let targetChapter = blocks[0]?.chapter ?? null;
-
-  for (const block of blocks) {
-    if (block.chapter.startChar <= locator.charOffset) {
-      targetChapter = block.chapter;
-    } else {
-      break;
-    }
-  }
-
-  return targetChapter;
-}
-
-function findActiveChapter(blocks: ReaderBlock[], viewport: HTMLElement): TxtChapter | null {
-  const viewportTop = viewport.getBoundingClientRect().top + 120;
-  let activeChapter = blocks[0]?.chapter ?? null;
-
-  for (const block of blocks) {
-    const chapterElement = globalThis.document?.getElementById(
-      getChapterElementId(block.chapter.id),
+    const chapterIndex = blocks.findIndex(
+      (block) => block.kind === "heading" && block.chapterId === locator.chapterId,
     );
 
-    if (chapterElement === null || chapterElement === undefined) {
-      continue;
+    if (chapterIndex !== -1) {
+      return chapterIndex;
     }
+  }
 
-    if (chapterElement.getBoundingClientRect().top <= viewportTop) {
-      activeChapter = block.chapter;
+  let targetIndex = blocks.length > 0 ? 0 : -1;
+
+  for (const [index, block] of blocks.entries()) {
+    if (block.charOffset <= locator.charOffset) {
+      targetIndex = index;
     } else {
       break;
     }
   }
 
-  return activeChapter;
+  return targetIndex;
 }
 
-function getChapterElementId(chapterId: string): string {
-  return `reader-chapter-${chapterId}`;
+function buildEstimatedVirtualItems(blocks: ReaderVirtualBlock[]): RenderedVirtualItem[] {
+  const visibleCount = Math.min(blocks.length, 24);
+  const items: RenderedVirtualItem[] = [];
+  let offset = 0;
+
+  for (let index = 0; index < visibleCount; index += 1) {
+    items.push({
+      index,
+      start: offset,
+    });
+    offset += estimateVirtualBlockSize(blocks[index]);
+  }
+
+  return items;
+}
+
+function estimateTotalSize(blocks: ReaderVirtualBlock[]): number {
+  return blocks.reduce((totalSize, block) => totalSize + estimateVirtualBlockSize(block), 0);
+}
+
+function estimateVirtualBlockSize(block: ReaderVirtualBlock | undefined): number {
+  if (block === undefined) {
+    return 68;
+  }
+
+  if (block.kind === "heading") {
+    return 96;
+  }
+
+  return Math.max(68, Math.ceil(block.text.length / 34) * 34);
 }
 
 function getErrorMessage(error: unknown): string {

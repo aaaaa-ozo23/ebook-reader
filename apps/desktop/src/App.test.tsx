@@ -256,9 +256,6 @@ describe("App", () => {
 
   it("restores saved TXT progress and saves table-of-contents jumps", async () => {
     const user = userEvent.setup();
-    const scrollIntoViewMock = vi.fn();
-    const originalScrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = scrollIntoViewMock;
     const txtBook = createBook({ id: "progress-txt", title: "Progress TXT", format: "txt" });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
@@ -274,31 +271,27 @@ describe("App", () => {
       updatedAt: "2026-06-19T12:00:00.000Z",
     });
 
-    try {
-      render(<App />);
-      expect(await screen.findByRole("heading", { name: "Progress TXT" })).toBeVisible();
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Progress TXT" })).toBeVisible();
 
-      await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
 
-      await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
-      expect(getReadingProgressMock).toHaveBeenCalledWith("progress-txt");
+    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
+    expect(getReadingProgressMock).toHaveBeenCalledWith("progress-txt");
 
-      await user.click(screen.getByRole("button", { name: "第二章 风起" }));
+    await user.click(screen.getByRole("button", { name: "第二章 风起" }));
 
-      await waitFor(() =>
-        expect(saveReadingProgressMock).toHaveBeenCalledWith(
-          "progress-txt",
-          {
-            kind: "txt",
-            chapterId: "chapter-2-13",
-            charOffset: 13,
-          },
-          expect.any(Number),
-        ),
-      );
-    } finally {
-      Element.prototype.scrollIntoView = originalScrollIntoView;
-    }
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "progress-txt",
+        {
+          kind: "txt",
+          chapterId: "chapter-2-13",
+          charOffset: 13,
+        },
+        expect.any(Number),
+      ),
+    );
   });
 });
 
