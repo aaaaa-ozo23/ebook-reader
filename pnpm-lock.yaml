@@ -14,6 +14,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@reader/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@tauri-apps/api':
         specifier: ^2
         version: 2.11.1
