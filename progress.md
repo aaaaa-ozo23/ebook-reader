@@ -49,6 +49,25 @@
   - `findings.md`
   - `progress.md`
 
+### 阶段 0.3：共享模型基线
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 从集成分支创建 `codex/stage0-core-models`。
+  - 在 `@reader/core` 定义书籍、目录、主题、定位、标注、搜索结果和 reader adapter 类型。
+  - 添加 `defaultReaderTheme`。
+  - 在 `@reader/desktop` 中通过 workspace dependency 引用 `@reader/core`。
+  - 运行 `pnpm.cmd install`。
+  - 串行运行 `pnpm.cmd --filter @reader/core build` 和 `pnpm.cmd --filter @reader/desktop build`。
+  - 运行 `pnpm.cmd build` 验证 workspace 拓扑构建顺序。
+- 创建/修改的文件：
+  - `packages/core/src/index.ts`
+  - `apps/desktop/package.json`
+  - `apps/desktop/src/App.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 1：读取文档与建立规划
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -111,6 +130,9 @@
 | 阶段 0.2 install | `pnpm.cmd install` | workspace 安装成功 | 首次被 pnpm build-script 审批拦截；批准 `esbuild` 后安装成功 | 通过 |
 | 阶段 0.2 desktop build | `pnpm.cmd --filter @reader/desktop build` | 桌面前端构建成功 | Vite production build 成功 | 通过 |
 | 阶段 0.2 Rust compile | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | Tauri Rust 空壳可编译 | 0 tests，编译通过 | 通过 |
+| 阶段 0.3 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 0.3 desktop build | `pnpm.cmd --filter @reader/desktop build` | desktop 可引用 core 构建产物 | 串行构建成功 | 通过 |
+| 阶段 0.3 root build | `pnpm.cmd build` | workspace 拓扑顺序构建成功 | core 先构建，desktop 后构建 | 通过 |
 
 ## 错误日志
 
@@ -119,13 +141,14 @@
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
+| 2026-06-19 | 并行运行 core build 与 desktop build 时，desktop 读取旧的 `@reader/core` declaration | 1 | 改为串行验证，并确认 `pnpm.cmd build` 会按拓扑顺序执行 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0.2 Tauri 桌面空壳已完成，准备合并到集成分支 |
-| 我要去哪里？ | 继续执行阶段 0.3 共享模型基线 |
+| 我在哪里？ | 阶段 0.3 共享模型基线已完成，准备合并到集成分支 |
+| 我要去哪里？ | 继续执行阶段 0.4 Rust 与 SQLite 基线 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
