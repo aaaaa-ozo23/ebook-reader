@@ -2,6 +2,7 @@
   "name": "ebook-reader",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@11.1.2",
   "engines": {
     "node": ">=26.1.0",
@@ -9,9 +10,20 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "check": "pnpm -r build"
+    "check": "pnpm run lint && pnpm run format && pnpm run build && pnpm run test",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint .",
+    "test": "pnpm -r --if-present test"
   },
   "devDependencies": {
-    "typescript": "^6.0.3"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.5.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.3",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.1"
   }
 }
