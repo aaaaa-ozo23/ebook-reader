@@ -90,6 +90,38 @@
   - `findings.md`
   - `progress.md`
 
+### 阶段 0.5：质量门禁
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 从集成分支创建 `codex/stage0-quality-gates`。
+  - 安装 root lint/format 依赖：ESLint、TypeScript ESLint、Prettier、React hooks/refresh 插件。
+  - 安装 desktop 测试依赖：Vitest、Testing Library、jsdom、Playwright Test、Node types。
+  - 新增 ESLint flat config、Prettier 配置和 ignore。
+  - 新增 Vitest config、Testing Library setup、`App.test.tsx`。
+  - 新增 Playwright config 和 `tests/smoke.spec.ts`。
+  - 新增 root `lint`、`format`、`test`、`check` 脚本和 desktop `lint`、`test`、`test:e2e` 脚本。
+  - 运行 `pnpm.cmd run format:write` 后复查 `pnpm.cmd run format`。
+  - 运行 `pnpm.cmd --filter @reader/desktop lint`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test`。
+  - 运行 `pnpm.cmd --filter @reader/desktop build`。
+- 创建/修改的文件：
+  - `eslint.config.js`
+  - `.prettierrc.json`
+  - `.prettierignore`
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `apps/desktop/package.json`
+  - `apps/desktop/vitest.config.ts`
+  - `apps/desktop/playwright.config.ts`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/test/setup.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 1：读取文档与建立规划
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -157,6 +189,10 @@
 | 阶段 0.3 root build | `pnpm.cmd build` | workspace 拓扑顺序构建成功 | core 先构建，desktop 后构建 | 通过 |
 | 阶段 0.4 Rust fmt | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` | Rust 代码格式化成功 | 无错误 | 通过 |
 | 阶段 0.4 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | migration 和 Tauri Rust 代码通过测试 | 2 passed，0 failed | 通过 |
+| 阶段 0.5 format | `pnpm.cmd run format` | 代码和配置格式通过 | 更新 ignore 并格式化后通过 | 通过 |
+| 阶段 0.5 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 0.5 desktop test | `pnpm.cmd --filter @reader/desktop test` | Vitest 通过 | 1 passed，0 failed | 通过 |
+| 阶段 0.5 desktop build | `pnpm.cmd --filter @reader/desktop build` | desktop 构建通过 | Vite production build 成功 | 通过 |
 
 ## 错误日志
 
@@ -166,13 +202,15 @@
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
 | 2026-06-19 | 并行运行 core build 与 desktop build 时，desktop 读取旧的 `@reader/core` declaration | 1 | 改为串行验证，并确认 `pnpm.cmd build` 会按拓扑顺序执行 |
+| 2026-06-19 | `pnpm.cmd --filter @reader/desktop test` 被 Vitest 扫描到 Playwright `tests/smoke.spec.ts` 导致失败 | 1 | 在 `vitest.config.ts` 中限定 include 为 `src/**/*.test.{ts,tsx}` |
+| 2026-06-19 | `pnpm.cmd run format` 首次检查发现 Markdown、lockfile 和脚手架文件格式差异 | 1 | `.prettierignore` 忽略 Markdown 和 lockfile，对代码/配置执行 `format:write` 后复查通过 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0.4 Rust 与 SQLite 基线已完成，准备合并到集成分支 |
-| 我要去哪里？ | 继续执行阶段 0.5 质量门禁 |
+| 我在哪里？ | 阶段 0.5 质量门禁已完成，准备合并到集成分支并运行最终验证 |
+| 我要去哪里？ | 运行阶段 0 全量验收，合并回 `main` 并推送 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

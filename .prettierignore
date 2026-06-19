@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+target
+apps/desktop/src-tauri/gen
+apps/desktop/src-tauri/target
+*.tsbuildinfo
+*.lock
+*.md
+pnpm-lock.yaml
+**/Cargo.lock
