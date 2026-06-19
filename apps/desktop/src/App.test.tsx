@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Book, ImportBookResult } from "@reader/core";
+import type { Book, ImportBookResult, TxtDocument } from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { importBook, listBooks, pickBookFile } from "./tauri/library";
+import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
+import { openTxtBook } from "./tauri/reader";
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -13,14 +14,24 @@ vi.mock("./tauri/library", () => ({
   pickBookFile: vi.fn(),
 }));
 
+vi.mock("./tauri/reader", () => ({
+  openTxtBook: vi.fn(),
+}));
+
 const importBookMock = vi.mocked(importBook);
 const listBooksMock = vi.mocked(listBooks);
+const markBookOpenedMock = vi.mocked(markBookOpened);
+const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listBooksMock.mockResolvedValue([]);
+    markBookOpenedMock.mockImplementation(async (bookId) =>
+      createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
+    );
+    openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     pickBookFileMock.mockResolvedValue(null);
   });
 
@@ -133,6 +144,67 @@ describe("App", () => {
     expect(screen.getByText("unsupported book format")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
+
+  it("opens a TXT book in the reader shell and returns to the shelf", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({ id: "txt-book", title: "长夜将明", format: "txt" });
+    const openedBook = {
+      ...txtBook,
+      lastOpenedAt: "2026-06-19T11:00:00.000Z",
+    };
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(openedBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "长夜将明" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(markBookOpenedMock).toHaveBeenCalledWith("txt-book");
+    expect(openTxtBookMock).toHaveBeenCalledWith("txt-book");
+    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "第一章 初见" })).toBeVisible();
+    expect(screen.getByText("她推开门。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to shelf" }));
+
+    expect(await screen.findByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
+  });
+
+  it("shows a later-stage reader message for EPUB and PDF books", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "epub-book", title: "Layout Notes", format: "epub" });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Layout Notes" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Reader support coming later")).toBeVisible();
+    expect(screen.getByText("EPUB reading will be added in a later stage.")).toBeInTheDocument();
+    expect(markBookOpenedMock).not.toHaveBeenCalled();
+    expect(openTxtBookMock).not.toHaveBeenCalled();
+  });
+
+  it("shows TXT reader errors inside the reader shell", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({ id: "broken-txt", title: "Broken TXT", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockRejectedValueOnce(new Error("failed to decode TXT file"));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Broken TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Book could not be opened");
+    expect(screen.getByText("failed to decode TXT file")).toBeInTheDocument();
+  });
 });
 
 function createBook(overrides: Partial<Book> = {}): Book {
@@ -154,6 +226,34 @@ function createBook(overrides: Partial<Book> = {}): Book {
 
 function createImportResult(status: ImportBookResult["status"], book: Book): ImportBookResult {
   return { status, book };
+}
+
+function createTxtDocument(book: Book): TxtDocument {
+  const text = "第一章 初见\n她推开门。\n第二章 风起\n灯火亮了。";
+
+  return {
+    book,
+    encoding: "UTF-8",
+    byteLength: 64,
+    charCount: text.length,
+    lineCount: 4,
+    chapters: [
+      {
+        id: "chapter-1-0",
+        title: "第一章 初见",
+        startChar: 0,
+        endChar: 12,
+        text: "第一章 初见\n她推开门。",
+      },
+      {
+        id: "chapter-2-13",
+        title: "第二章 风起",
+        startChar: 13,
+        endChar: text.length,
+        text: "第二章 风起\n灯火亮了。",
+      },
+    ],
+  };
 }
 
 function createResolvablePromise<T>() {
