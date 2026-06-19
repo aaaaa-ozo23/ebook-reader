@@ -133,11 +133,11 @@ export interface ReaderAdapter<TLocator extends Locator = Locator> {
 export const defaultReaderTheme: ReaderTheme = {
   mode: "sepia",
   fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    '"Noto Serif SC", "Songti SC", "Microsoft YaHei", Georgia, serif',
   fontSize: 18,
   lineHeight: 1.75,
   paragraphSpacing: 12,
   pageMargin: 32,
-  backgroundColor: "#f7f5ef",
-  textColor: "#1f2933",
+  backgroundColor: "#f7f1e3",
+  textColor: "#25211d",
 };

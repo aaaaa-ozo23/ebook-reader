@@ -1,11 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { Book, ImportBookResult, TxtDocument } from "@reader/core";
+import { defaultReaderTheme, type Book, type ImportBookResult, type TxtDocument } from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
-import { openTxtBook } from "./tauri/reader";
+import { getReaderTheme, openTxtBook, saveReaderTheme } from "./tauri/reader";
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -15,14 +15,18 @@ vi.mock("./tauri/library", () => ({
 }));
 
 vi.mock("./tauri/reader", () => ({
+  getReaderTheme: vi.fn(),
   openTxtBook: vi.fn(),
+  saveReaderTheme: vi.fn(),
 }));
 
+const getReaderThemeMock = vi.mocked(getReaderTheme);
 const importBookMock = vi.mocked(importBook);
 const listBooksMock = vi.mocked(listBooks);
 const markBookOpenedMock = vi.mocked(markBookOpened);
 const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
+const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 
 describe("App", () => {
   beforeEach(() => {
@@ -31,7 +35,9 @@ describe("App", () => {
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
     );
+    getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
+    saveReaderThemeMock.mockImplementation(async (theme) => theme);
     pickBookFileMock.mockResolvedValue(null);
   });
 
@@ -204,6 +210,31 @@ describe("App", () => {
     expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
     expect(await screen.findByRole("alert")).toHaveTextContent("Book could not be opened");
     expect(screen.getByText("failed to decode TXT file")).toBeInTheDocument();
+  });
+
+  it("applies and saves reader theme changes immediately", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({ id: "theme-txt", title: "Theme TXT", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Theme TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    await user.click(screen.getByRole("button", { name: "dark" }));
+
+    expect(saveReaderThemeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "dark",
+        backgroundColor: "#171a1d",
+        textColor: "#f0e8d7",
+      }),
+    );
+    expect(reader).toHaveStyle("--txt-reader-background: #171a1d");
   });
 });
 

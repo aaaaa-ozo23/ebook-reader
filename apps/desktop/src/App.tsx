@@ -17,7 +17,8 @@ interface Feedback {
 const readerThemeStyle = {
   "--reader-background": defaultReaderTheme.backgroundColor,
   "--reader-foreground": defaultReaderTheme.textColor,
-  "--reader-font-family": defaultReaderTheme.fontFamily,
+  "--reader-font-family":
+    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 } as CSSProperties;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {

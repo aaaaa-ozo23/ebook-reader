@@ -13,13 +13,14 @@ use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::{Encoding, BIG5, GB18030, GBK, UTF_8};
 use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
 const DB_FILE_NAME: &str = "ebook-reader.sqlite3";
 const LIBRARY_DIR_NAME: &str = "library";
+const READER_THEME_SETTING_KEY: &str = "reader_theme";
 
 struct Migration {
     version: i64,
@@ -159,6 +160,28 @@ pub struct TxtDocument {
     pub chapters: Vec<TxtChapter>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReaderThemeMode {
+    Light,
+    Dark,
+    Sepia,
+    Green,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReaderTheme {
+    pub mode: ReaderThemeMode,
+    pub font_family: String,
+    pub font_size: f64,
+    pub line_height: f64,
+    pub paragraph_spacing: f64,
+    pub page_margin: f64,
+    pub background_color: String,
+    pub text_color: String,
+}
+
 #[derive(Debug, Clone)]
 struct DecodedText {
     text: String,
@@ -209,6 +232,16 @@ pub fn mark_book_opened(app: &AppHandle, book_id: &str) -> anyhow::Result<Book> 
 pub fn open_txt_book(app: &AppHandle, book_id: &str) -> anyhow::Result<TxtDocument> {
     let database_path = init_app_database(app)?;
     open_txt_book_at(&database_path, book_id)
+}
+
+pub fn get_reader_theme(app: &AppHandle) -> anyhow::Result<ReaderTheme> {
+    let database_path = init_app_database(app)?;
+    get_reader_theme_at(&database_path)
+}
+
+pub fn save_reader_theme(app: &AppHandle, theme: ReaderTheme) -> anyhow::Result<ReaderTheme> {
+    let database_path = init_app_database(app)?;
+    save_reader_theme_at(&database_path, &theme)
 }
 
 pub fn init_app_database(app: &AppHandle) -> anyhow::Result<PathBuf> {
@@ -369,6 +402,45 @@ pub fn open_txt_book_at(database_path: &Path, book_id: &str) -> anyhow::Result<T
         line_count,
         chapters,
     })
+}
+
+pub fn get_reader_theme_at(database_path: &Path) -> anyhow::Result<ReaderTheme> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let value_json = conn
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key = ?1",
+            params![READER_THEME_SETTING_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    match value_json {
+        Some(value) => serde_json::from_str(&value).context("failed to parse saved reader theme"),
+        None => Ok(default_reader_theme()),
+    }
+}
+
+pub fn save_reader_theme_at(
+    database_path: &Path,
+    theme: &ReaderTheme,
+) -> anyhow::Result<ReaderTheme> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let theme = normalize_reader_theme(theme.clone());
+    let value_json = serde_json::to_string(&theme).context("failed to serialize reader theme")?;
+    let now = current_timestamp(&conn)?;
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+        VALUES (?1, ?2, ?3)
+        ON CONFLICT(key) DO UPDATE SET
+            value_json = excluded.value_json,
+            updated_at = excluded.updated_at",
+        params![READER_THEME_SETTING_KEY, value_json, now],
+    )?;
+
+    Ok(theme)
 }
 
 fn open_database(database_path: &Path) -> anyhow::Result<Connection> {
@@ -659,6 +731,28 @@ fn fallback_chapter_title(default_title: &str) -> String {
     }
 }
 
+fn default_reader_theme() -> ReaderTheme {
+    ReaderTheme {
+        mode: ReaderThemeMode::Sepia,
+        font_family: "\"Noto Serif SC\", \"Songti SC\", \"Microsoft YaHei\", Georgia, serif"
+            .to_string(),
+        font_size: 18.0,
+        line_height: 1.75,
+        paragraph_spacing: 12.0,
+        page_margin: 32.0,
+        background_color: "#f7f1e3".to_string(),
+        text_color: "#25211d".to_string(),
+    }
+}
+
+fn normalize_reader_theme(mut theme: ReaderTheme) -> ReaderTheme {
+    theme.font_size = theme.font_size.clamp(14.0, 30.0);
+    theme.line_height = theme.line_height.clamp(1.35, 2.4);
+    theme.paragraph_spacing = theme.paragraph_spacing.clamp(0.0, 36.0);
+    theme.page_margin = theme.page_margin.clamp(12.0, 96.0);
+    theme
+}
+
 fn is_plausible_text(text: &str) -> bool {
     if text.is_empty() {
         return true;
@@ -810,8 +904,9 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        import_book_at, init_database_at, list_books_at, mark_book_opened_at, open_txt_book_at,
-        schema_version, BookFormat, ImportBookStatus, DB_FILE_NAME,
+        get_reader_theme_at, import_book_at, init_database_at, list_books_at, mark_book_opened_at,
+        open_txt_book_at, save_reader_theme_at, schema_version, BookFormat, ImportBookStatus,
+        ReaderTheme, ReaderThemeMode, DB_FILE_NAME,
     };
 
     #[test]
@@ -1119,6 +1214,43 @@ mod tests {
         assert_eq!(document.chapters[0].start_char, 0);
         assert_eq!(document.chapters[0].end_char, text.chars().count());
         assert_eq!(document.chapters[0].text, text);
+    }
+
+    #[test]
+    fn reader_theme_defaults_without_saved_setting() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+
+        let theme = get_reader_theme_at(&database_path).expect("get default reader theme");
+
+        assert_eq!(theme.mode, ReaderThemeMode::Sepia);
+        assert_eq!(theme.font_size, 18.0);
+        assert_eq!(theme.line_height, 1.75);
+        assert!(theme.font_family.contains("Noto Serif SC"));
+    }
+
+    #[test]
+    fn reader_theme_persists_after_reopen() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let theme = ReaderTheme {
+            mode: ReaderThemeMode::Dark,
+            font_family: "system-ui".to_string(),
+            font_size: 42.0,
+            line_height: 1.5,
+            paragraph_spacing: 10.0,
+            page_margin: 20.0,
+            background_color: "#121212".to_string(),
+            text_color: "#f6f1e8".to_string(),
+        };
+
+        let saved = save_reader_theme_at(&database_path, &theme).expect("save reader theme");
+        init_database_at(&database_path).expect("reopen database");
+        let restored = get_reader_theme_at(&database_path).expect("restore reader theme");
+
+        assert_eq!(saved.font_size, 30.0);
+        assert_eq!(restored, saved);
+        assert_eq!(restored.mode, ReaderThemeMode::Dark);
     }
 
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {
