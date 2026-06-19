@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-规划基线已建立；下一步进入阶段 0：项目骨架。
+阶段 0：项目骨架与工程基线已完成；下一步进入阶段 1：本地书库与导入链路。
 
 ## 分支策略
 
@@ -31,6 +31,16 @@
 | 0.3 共享模型基线 | `codex/stage0-core-models` | 在 `packages/core` 定义 `Book`、`TocItem`、`ReaderTheme`、`Locator`、`Annotation`、`ReaderAdapter` 等基础类型 | core 包可被 desktop 引用；类型测试或 `tsc` 通过 |
 | 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | 配置 `src-tauri` Rust 模块、`rusqlite` bundled、迁移目录、数据库打开与初始化逻辑 | `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过 |
 | 0.5 质量门禁 | `codex/stage0-quality-gates` | 配置 ESLint、Prettier、Vitest、基础 Playwright 目录；写入 CI 候选命令文档 | `pnpm.cmd --filter @reader/desktop lint`、`test`、`build` 全部可运行 |
+
+### 阶段 0 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 0.1 工作区初始化 | `codex/stage0-workspace` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build` |
+| 0.2 Tauri 桌面空壳 | `codex/stage0-tauri-shell` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` |
+| 0.3 共享模型基线 | `codex/stage0-core-models` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop build`；`pnpm.cmd build` |
+| 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` |
+| 0.5 质量门禁 | `codex/stage0-quality-gates` | complete | `pnpm.cmd run format`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`；`pnpm.cmd --filter @reader/desktop build` |
 
 ## 大阶段 1：本地书库与导入链路
 
@@ -173,3 +183,4 @@ pnpm.cmd --filter @reader/desktop tauri:build
 - 任何外部资料、依赖许可、渲染器行为发现应写入 `findings.md`，不要直接塞入本计划。
 - 每完成一个小阶段，应更新本文件对应状态或在阶段表旁追加完成记录。
 - 如果后续从 `main` 创建 `codex/v0.1.0-mvp-integration`，应先确认 `main` 已包含本计划和 `DEVELOPMENT.md`。
+- 阶段 0 已完成并通过完整验收，后续阶段应从最新 `main` 或 `codex/v0.1.0-mvp-integration` 继续拉分支。
