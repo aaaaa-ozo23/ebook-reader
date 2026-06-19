@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "r
 import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/core";
 
 import "./App.css";
+import { ReaderShell } from "./components/ReaderShell";
 import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
 
 type FeedbackKind = "success" | "info" | "error";
@@ -16,7 +17,8 @@ interface Feedback {
 const readerThemeStyle = {
   "--reader-background": defaultReaderTheme.backgroundColor,
   "--reader-foreground": defaultReaderTheme.textColor,
-  "--reader-font-family": defaultReaderTheme.fontFamily,
+  "--reader-font-family":
+    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
 } as CSSProperties;
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
@@ -32,6 +34,7 @@ function App() {
   const [openingBookId, setOpeningBookId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [readerBookId, setReaderBookId] = useState<string | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -99,16 +102,22 @@ function App() {
 
   const handleOpenBook = useCallback(async (book: Book) => {
     setFeedback(null);
+
+    if (book.format !== "txt") {
+      setFeedback({
+        kind: "info",
+        title: "Reader support coming later",
+        message: `${formatBookFormat(book.format)} reading will be added in a later stage.`,
+      });
+      return;
+    }
+
     setOpeningBookId(book.id);
 
     try {
       const openedBook = await markBookOpened(book.id);
       setBooks((currentBooks) => upsertBook(currentBooks, openedBook));
-      setFeedback({
-        kind: "success",
-        title: "Recent reading updated",
-        message: `${openedBook.title} is now first in Recent reading.`,
-      });
+      setReaderBookId(openedBook.id);
     } catch (error) {
       setFeedback({
         kind: "error",
@@ -120,6 +129,10 @@ function App() {
     }
   }, []);
 
+  const handleBackToLibrary = useCallback(() => {
+    setReaderBookId(null);
+  }, []);
+
   const showGridView = useCallback(() => {
     setViewMode("grid");
   }, []);
@@ -127,6 +140,10 @@ function App() {
   const showListView = useCallback(() => {
     setViewMode("list");
   }, []);
+
+  if (readerBookId !== null) {
+    return <ReaderShell bookId={readerBookId} onBackToLibrary={handleBackToLibrary} />;
+  }
 
   return (
     <main className="app-shell" style={readerThemeStyle} aria-label="Ebook Reader bookshelf">

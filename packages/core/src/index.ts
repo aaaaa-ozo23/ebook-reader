@@ -25,6 +25,23 @@ export interface ImportBookResult {
   book: Book;
 }
 
+export interface TxtChapter {
+  id: string;
+  title: string;
+  startChar: number;
+  endChar: number;
+  text: string;
+}
+
+export interface TxtDocument {
+  book: Book;
+  encoding: string;
+  byteLength: number;
+  charCount: number;
+  lineCount: number;
+  chapters: TxtChapter[];
+}
+
 export interface TocItem {
   id: string;
   title: string;
@@ -77,6 +94,13 @@ export interface PdfLocator extends LocatorContext {
 
 export type Locator = TxtLocator | EpubLocator | PdfLocator;
 
+export interface ReaderProgress<TLocator extends Locator = Locator> {
+  bookId: string;
+  locator: TLocator;
+  progress?: number;
+  updatedAt: string;
+}
+
 export interface Annotation {
   id: string;
   bookId: string;
@@ -109,11 +133,11 @@ export interface ReaderAdapter<TLocator extends Locator = Locator> {
 export const defaultReaderTheme: ReaderTheme = {
   mode: "sepia",
   fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    '"Noto Serif SC", "Songti SC", "Microsoft YaHei", Georgia, serif',
   fontSize: 18,
   lineHeight: 1.75,
   paragraphSpacing: 12,
   pageMargin: 32,
-  backgroundColor: "#f7f5ef",
-  textColor: "#1f2933",
+  backgroundColor: "#f7f1e3",
+  textColor: "#25211d",
 };

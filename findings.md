@@ -27,6 +27,20 @@
 - 阶段 1 后端已提供 `list_books`、`import_book`、`mark_book_opened` Tauri 命令；`import_book` 返回 `imported` 或 `duplicate`。
 - 阶段 1 前端已从空壳切换到书架首屏，浏览器非 Tauri 环境下 `listBooks()` 返回空数组，便于 Playwright/Vite smoke 验证。
 - 阶段 1 导入交互只使用 Tauri dialog 插件选择文件，未注册 fs 插件；真实文件复制、hash 和入库仍在 Rust 命令中完成。
+- 阶段 2 架构决策：TXT 解码、编码检测、章节识别放在 Rust 后端；React 前端只消费已解码的 `TxtDocument`。
+- 阶段 2.1 已新增 `encoding_rs` 和 `chardetng`，`open_txt_book` 仅允许 `format = "txt"`，从 `books.library_path` 读取应用书库副本。
+- 阶段 2.1 `TxtDocument` 当前返回单章全文、编码名、字节数、字符数和行数；真实章节识别留给 2.2 替换。
+- 阶段 2.2 已在 Rust 中实现章节识别，支持“第 1 章 / 第一章 / 第二回 / 第十节 / 第三卷”一类中文标题和 `Chapter 1` / `Chapter II` 英文标题。
+- 阶段 2.2 若首个章节标题前存在正文，会保留为 `preface-0`、标题 `卷首`；若没有任何章节标题，仍返回 `full-text` 单章。
+- 阶段 2.3 已新增 `ReaderShell`，TXT 书籍从书架进入阅读页，EPUB/PDF 继续显示“后续阶段支持”的非阻塞提示。
+- 阶段 2.3 浏览器 fallback 的 `openTxtBook` 只读取显式写入 `localStorage` 的测试 fixture；未注入 fixture 时仍报 Tauri runtime 需求，不假装能读真实本地文件。
+- 阶段 2.4 已新增 `get_reader_theme`、`save_reader_theme`，复用 `app_settings` 表保存阅读主题 JSON。
+- 阶段 2.4 阅读主题支持 light、sepia、green、dark、字体、字号、行高、段距和页边距，前端通过 CSS 自定义属性即时应用。
+- 阶段 2.5 已新增 `get_reading_progress`、`save_reading_progress`，复用 `reading_progress` 表保存 TXT `chapterId + charOffset` locator。
+- 阶段 2.5 阅读页打开 TXT 时并行加载文档、主题和进度；进度恢复优先用 `chapterId`，缺失时按 `charOffset` 找最近章节。
+- 阶段 2.6 已接入 `@tanstack/react-virtual`，正文按章节标题和段落拆成虚拟块，Playwright 长 TXT fixture 验证 DOM 段落数量低于 80。
+- 阶段 2.6 浏览器 e2e 使用显式 `localStorage` fallback 书库和 TXT 文档 fixture，真实文件导入仍由 Rust 测试覆盖。
+- 阶段 2 最终 Browser QA：桌面 1280x800 与窄屏约 375x760 下书架首屏无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互。
 
 ## 技术决策
 
@@ -46,6 +60,13 @@
 | 阶段 1 用 SHA-256 内容哈希识别重复书籍，书籍 id 使用 UUID v4 | 内容哈希稳定表达“同一本文件”，UUID 让数据库主键不绑定去重策略 |
 | 阶段 1 不引入 Tauri fs 插件 | 文件读写、复制和哈希都在 Rust 命令中完成，前端只需要 dialog 选择路径 |
 | 阶段 1 书架 UI 暂不引入路由或阅读器页 | 当前目标是导入、展示和恢复闭环，阅读器页面留给后续 TXT/EPUB/PDF 阶段 |
+| 阶段 2 TXT 文件读取不新增前端 fs 权限 | Rust 已有本地文件读取权限和书库副本路径，前端只调用 Tauri 命令 |
+| 阶段 2.1 解码失败按用户可理解错误返回 | 二进制或明显不可解码内容返回“supported encodings are UTF-8, GBK, GB18030, and Big5” |
+| 阶段 2.2 章节 ID 使用 `chapter-{index}-{startChar}` | 对同一文本稳定，前端可用于目录跳转和 `TxtLocator.chapterId` |
+| 阶段 2.3 不引入前端路由库 | 当前只有书架和 TXT 阅读页两种状态，用本地 view state 足够，避免路由范围膨胀 |
+| 阶段 2.4 主题设置存在 core/Rust 双默认值 | 将 `defaultReaderTheme` 和 Rust `default_reader_theme()` 对齐，书架字体单独固定为系统 sans |
+| 阶段 2.5 进度保存不依赖页码 | 保存 `TxtLocator`，目录跳转和滚动保存 `chapterId` 与全局 `charOffset`，`progress` 仅作辅助比例 |
+| 阶段 2.6 虚拟化必须有有界滚动容器 | `reader-shell`/`reader-main` 使用 `100vh`，`reader-viewport` 内部滚动；否则 TanStack Virtual 会把全部段落视为可见 |
 
 ## 遇到的问题
 
@@ -58,6 +79,10 @@
 | Vitest 默认扫描 Playwright `tests/*.spec.ts` | 将 Vitest include 限定为 `src/**/*.test.{ts,tsx}`，Playwright 用独立 `test:e2e` 脚本 |
 | Playwright webServer 命令不能使用 `pnpm.cmd dev -- --host` | 在 pnpm script 环境下会把 `--` 作为字面参数传给 Vite；改用 `pnpm.cmd dev --host 127.0.0.1` |
 | 本机首次运行 Playwright 需要浏览器缓存 | 已执行 `pnpm.cmd --filter @reader/desktop exec playwright install chromium` 安装 Chromium/FFmpeg/Winldd 到用户缓存 |
+| `cargo fmt --check` 首次检查阶段 2.1 代码有自动换行差异 | 已运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 格式化 |
+| `chardetng` 1.0.0 不接受旧式布尔参数 | 使用 `EncodingDetector::new(Iso2022JpDetection::Deny)` 和 `guess(None, Utf8Detection::Allow)` |
+| 阶段 2.2 章节识别使编码测试样本从 `full-text` 变为 `chapter-*` | 已把编码测试改为校验所有章节文本拼接等于原文，章节 ID 由章节测试覆盖 |
+| Playwright 长文本测试首次发现 `.reader-virtual-row--paragraph` 数量为 240 | 修正阅读器布局高度约束后重跑 e2e 通过，段落 DOM 数量低于 80 |
 
 ## 资源
 
@@ -70,6 +95,8 @@
 
 - 阶段 1 Browser QA 使用 `http://127.0.0.1:1420/` 检查书架首屏：桌面和窄屏均显示左侧/顶部导航、导入按钮、空书架状态，无旧空壳文案、无 Vite overlay、无 console warning/error。
 - 视图切换交互验证通过：点击 `List` 后 `List` 的 `aria-pressed` 为 `true`，`Grid` 为 `false`。
+- 阶段 2 Browser QA 使用 `http://127.0.0.1:1420/` 检查书架首屏：1280x800 桌面布局左侧窄栏、导入按钮、空状态不重叠；约 375x760 窄屏顶部导航、导入按钮、空状态纵向排列正常。
+- 阶段 2 Playwright seeded TXT smoke 验证阅读页可打开长 TXT fixture、主题切换可保存到 UI 状态、返回书架可用，虚拟化段落 DOM 数量低于 80。
 
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*

@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 1：本地书库与导入链路已完成；下一步进入阶段 2：TXT 阅读器优先打磨。
+阶段 2：TXT 阅读器优先打磨已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
 
 ## 分支策略
 
@@ -90,6 +90,31 @@
 | 2.4 主题设置 | `codex/stage2-reader-theme` | 字体、字号、行高、段距、页边距、背景、夜间模式即时生效；设置持久化 | 设置变更即时反映，重启恢复 |
 | 2.5 进度定位 | `codex/stage2-txt-progress` | 实现 `TxtLocator`，按 `chapterId` 和 `charOffset` 保存/恢复 | 关闭重开能回到接近原位置；定位不依赖临时页码 |
 | 2.6 长文本性能 | `codex/stage2-txt-virtualization` | 对长 TXT 做分段或虚拟化渲染；避免一次性渲染超大 DOM | 大样本打开、滚动、翻页不卡顿；无明显内存暴涨 |
+
+### 阶段 2 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 2.1 TXT 解码与元数据 | `codex/stage2-txt-decoding` | complete | `pnpm.cmd --filter @reader/core build`；`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，11 tests |
+| 2.2 章节识别 | `codex/stage2-txt-chapters` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，14 tests |
+| 2.3 阅读页布局 | `codex/stage2-reader-shell` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，9 tests；`pnpm.cmd --filter @reader/desktop build` |
+| 2.4 主题设置 | `codex/stage2-reader-theme` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，16 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，10 tests；`pnpm.cmd --filter @reader/desktop build` |
+| 2.5 进度定位 | `codex/stage2-txt-progress` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build` |
+| 2.6 长文本性能 | `codex/stage2-txt-virtualization` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，2 tests |
+
+### 阶段 2 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，11 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，18 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，2 Chromium smoke tests |
+| Browser QA | passed，桌面 1280x800 和窄屏约 375x760 书架首屏无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 3：EPUB 阅读器
 
@@ -181,7 +206,7 @@ pnpm.cmd --filter @reader/desktop tauri:build
 ## 关键问题
 
 1. 首版许可证最终选择 MIT、Apache-2.0 还是双许可。
-2. TXT 解码和章节识别放在 Rust 后端还是 TypeScript reader-engine，需要在阶段 2.1 前确定。
+2. TXT 解码和章节识别放在 Rust 后端还是 TypeScript reader-engine，需要在阶段 2.1 前确定。已决定放在 Rust 后端。
 3. PDF MVP 是否包含精确文本高亮，阶段 4.5 预研后再定。
 4. 是否在 v0.1 发布前加入自动更新；默认不纳入 MVP。
 
@@ -195,12 +220,16 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | TXT 在 EPUB/PDF 之前打磨 | 中文网文体验是关键差异点，能尽早验证阅读壳和主题系统 |
 | 每个小阶段独立分支 | 降低合并风险，便于回滚和逐阶段验证 |
 | MVP 排除账号、云同步、AI 翻译、在线书城、推荐系统 | 避免首版范围膨胀，保持本地优先 |
+| 阶段 2 TXT 解码、编码检测和章节识别放在 Rust 后端 | 后端已持有 `library_path` 和本地文件权限，前端不需要新增 fs 权限 |
 
 ## 遇到的错误
 
 | 错误 | 尝试次数 | 解决方案 |
 |------|---------|---------|
-| 暂无 | 0 | 暂无 |
+| `cargo fmt --check` 发现 `open_txt_book_at` 一处自动换行差异 | 1 | 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 后继续测试 |
+| `chardetng` 1.0.0 的 `EncodingDetector::new` 和 `guess` 需要枚举参数 | 1 | 改用 `Iso2022JpDetection::Deny` 和 `Utf8Detection::Allow` |
+| 阶段 2.1 解码测试仍断言 `full-text`，与 2.2 章节识别冲突 | 1 | 将该测试收窄为校验拼接后的解码文本，章节 ID 交给章节测试覆盖 |
+| 阶段 2.6 首次 Playwright 长文本测试发现虚拟列表渲染全部 240 段 | 1 | 将 `reader-shell` 和 `reader-main` 约束为 `100vh`，让 `reader-viewport` 成为内部滚动容器 |
 
 ## 备注
 

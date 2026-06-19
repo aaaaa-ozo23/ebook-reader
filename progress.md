@@ -2,6 +2,193 @@
 
 ## 会话：2026-06-19
 
+### 产品大阶段 2：TXT 阅读器优先打磨启动
+- **状态：** in_progress
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 读取 `planning-with-files-zh` 技能说明、React 性能实践摘要、`task_plan.md`、`findings.md`、`progress.md`。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage2-txt-decoding` 分支。
+  - 新增 Rust 依赖 `encoding_rs`、`chardetng`。
+  - 在 `@reader/core` 新增 `TxtChapter`、`TxtDocument`、`ReaderProgress` 纯类型。
+  - 实现并注册 Tauri 命令 `open_txt_book(book_id)`，仅允许 TXT，读取 `library_path` 后返回解码文本和基础统计。
+  - 添加 UTF-8、GBK、GB18030、Big5、非法字节、非 TXT 拒绝的 Rust 测试。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
+### 阶段 2.1：TXT 解码与元数据
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，11 tests。
+
+### 阶段 2.2：章节识别
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-txt-chapters` 分支。
+  - 新增 Rust 依赖 `regex`。
+  - 将 `open_txt_book` 的单章全文替换为后端章节识别结果。
+  - 支持中文“第 x 章/回/节/卷/部/篇”和英文 `Chapter x` 章节标题。
+  - 对章节标题前正文保留 `preface-0`，无章节文件回退为 `full-text`。
+  - 修正阶段 2.1 编码测试中与章节识别冲突的旧 `full-text` 断言。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，14 tests。
+
+### 阶段 2.3：阅读页布局
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-reader-shell` 分支。
+  - 新增 `apps/desktop/src/tauri/reader.ts`，封装 `openTxtBook` Tauri 命令和显式测试 fixture fallback。
+  - 新增 `ReaderShell`，包含返回书架、目录侧栏、顶部栏、专注模式和居中 TXT 正文视口。
+  - 修改书架 `Continue`：TXT 进入阅读页，EPUB/PDF 显示后续阶段提示。
+  - 扩展 Vitest 覆盖 TXT 打开、返回书架、非 TXT fallback 和 TXT 打开错误。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，9 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 2.4：主题设置
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-reader-theme` 分支。
+  - 在 Rust 后端新增 `ReaderTheme` 类型、`get_reader_theme` 和 `save_reader_theme` Tauri 命令，复用 `app_settings` 保存主题 JSON。
+  - 将 `@reader/core` 的 `defaultReaderTheme` 与 Rust 默认主题对齐，书架继续使用固定系统 sans 字体。
+  - 在 `tauri/reader.ts` 新增 `getReaderTheme`、`saveReaderTheme`，浏览器 fallback 使用显式 localStorage 测试状态。
+  - 在 `ReaderShell` 添加主题面板，支持 light/sepia/green/dark、字体、字号、行高、段距、页边距即时生效并保存。
+  - 扩展 Vitest 覆盖主题切换即时应用和保存。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，16 tests。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，10 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 2.5：进度定位
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-txt-progress` 分支。
+  - 在 Rust 后端新增 `TxtLocator`、`ReaderProgress`、`get_reading_progress`、`save_reading_progress`，复用 `reading_progress` 表。
+  - 后端校验 progress locator `kind = "txt"`，并确保仅 TXT 书籍可保存 TXT 进度。
+  - 在 `tauri/reader.ts` 新增进度读取/保存 wrapper 和浏览器测试 fallback。
+  - 阅读页打开时并行加载 TXT 文档、主题和进度；恢复时优先 `chapterId`，否则使用 `charOffset`。
+  - 目录跳转和滚动会产生 `TxtLocator`，保存操作做 450ms 节流。
+  - 扩展 Vitest 覆盖进度恢复和目录跳转保存。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，11 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 2.6：长文本性能
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-txt-virtualization` 分支。
+  - 安装 `@tanstack/react-virtual`。
+  - 将阅读正文从章节/段落全量 DOM 改为标题块和段落块虚拟渲染。
+  - 目录跳转和进度恢复改为通过 virtualizer 滚动到对应虚拟块。
+  - 在无布局测量环境下增加估算虚拟项 fallback，保证 Vitest/jsdom 稳定渲染首屏块。
+  - 为浏览器 fallback 书库新增显式 localStorage fixture，使 Playwright 可打开 seeded TXT 阅读页。
+  - 扩展 Playwright smoke：打开 240 段长 TXT fixture，验证阅读页、主题切换、返回书架和 DOM 段落数量受控。
+- 创建/修改的文件：
+  - `apps/desktop/package.json`
+  - `pnpm-lock.yaml`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/library.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，11 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 首次发现未约束滚动容器导致 240 段全量渲染；修正 `reader-shell`/`reader-main` 高度后重跑通过，2 tests。
+
+### 阶段 2：最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 在 `codex/v0.1.0-mvp-integration` 上运行阶段 2 全量验收。
+  - 运行 `pnpm.cmd install`。
+  - 运行 `pnpm.cmd --filter @reader/core build`。
+  - 运行 `pnpm.cmd --filter @reader/desktop lint`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test`。
+  - 运行 `pnpm.cmd --filter @reader/desktop build`。
+  - 运行 `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test:e2e`。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/`：桌面 1280x800 和窄屏约 375x760 书架首屏可见、无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，11 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，2 Chromium smoke tests。
+  - Browser QA 通过。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 `ebook-reader-desktop.exe`、MSI 和 NSIS setup。
+
 ### 产品大阶段 1：本地书库与导入链路启动
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -275,6 +462,38 @@
 | 阶段 1 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 书架首屏 smoke 通过 | 1 passed，0 failed | 通过 |
 | 阶段 1 Browser QA | Browser 插件访问 `http://127.0.0.1:1420/` | 书架首屏非空、无 overlay、无 console warning/error、视图切换可交互 | desktop 与窄屏检查通过 | 通过 |
 | 阶段 1 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
+| 阶段 2.1 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2.1 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | TXT 解码、非法字节、非 TXT 拒绝和既有书库测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2.2 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 中文/英文章节识别、无章节回退和既有解码导入测试通过 | 14 passed，0 failed | 通过 |
+| 阶段 2.3 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.3 desktop test | `pnpm.cmd --filter @reader/desktop test` | 书架、导入、阅读壳组件测试通过 | 9 passed，0 failed | 通过 |
+| 阶段 2.3 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2.4 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 主题默认值、持久化和既有后端测试通过 | 16 passed，0 failed | 通过 |
+| 阶段 2.4 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2.4 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.4 desktop test | `pnpm.cmd --filter @reader/desktop test` | 主题面板和既有前端测试通过 | 10 passed，0 failed | 通过 |
+| 阶段 2.4 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2.5 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 进度保存/恢复、非 TXT 拒绝和既有后端测试通过 | 18 passed，0 failed | 通过 |
+| 阶段 2.5 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2.5 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.5 desktop test | `pnpm.cmd --filter @reader/desktop test` | 进度恢复、目录跳转保存和既有前端测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2.5 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2.6 install | `pnpm.cmd install` | 新增 `@tanstack/react-virtual` 后 lockfile 稳定 | Already up to date | 通过 |
+| 阶段 2.6 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2.6 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.6 desktop test | `pnpm.cmd --filter @reader/desktop test` | 虚拟化阅读页和既有前端测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2.6 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2.6 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 后端测试无回归 | 18 passed，0 failed | 通过 |
+| 阶段 2.6 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 空书架和 seeded 长 TXT 阅读页 smoke 通过 | 2 passed，0 failed | 通过 |
+| 阶段 2 final install | `pnpm.cmd install` | workspace 安装状态稳定 | Already up to date | 通过 |
+| 阶段 2 final core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2 final desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2 final desktop test | `pnpm.cmd --filter @reader/desktop test` | 前端测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2 final desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2 final Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 后端测试通过 | 18 passed，0 failed | 通过 |
+| 阶段 2 final Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 空书架和 seeded 长 TXT 阅读页 smoke 通过 | 2 passed，0 failed | 通过 |
+| 阶段 2 final Browser QA | Browser 插件访问 `http://127.0.0.1:1420/` | 桌面/窄屏书架首屏正常、无 console warning/error、视图切换可交互 | 检查通过 | 通过 |
+| 阶段 2 final Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 
 ## 错误日志
 
@@ -288,13 +507,17 @@
 | 2026-06-19 | `pnpm.cmd run format` 首次检查发现 Markdown、lockfile 和脚手架文件格式差异 | 1 | `.prettierignore` 忽略 Markdown 和 lockfile，对代码/配置执行 `format:write` 后复查通过 |
 | 2026-06-19 | `pnpm.cmd --filter @reader/desktop test:e2e` 首次等待 webServer 超时 | 1 | 将 Playwright webServer 命令从 `pnpm.cmd dev -- --host 127.0.0.1` 改为 `pnpm.cmd dev --host 127.0.0.1` |
 | 2026-06-19 | Playwright Chromium executable missing | 1 | 执行 `pnpm.cmd --filter @reader/desktop exec playwright install chromium` 安装浏览器缓存 |
+| 2026-06-19 | `cargo fmt --check` 发现阶段 2.1 Rust 代码一处自动换行差异 | 1 | 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` |
+| 2026-06-19 | `chardetng` 1.0.0 的 API 需要 `Iso2022JpDetection` 和 `Utf8Detection` 枚举参数 | 1 | 按本地 crate 源码修正 `EncodingDetector::new` 和 `guess` 调用 |
+| 2026-06-19 | 阶段 2.1 编码测试断言单章 `full-text`，阶段 2.2 识别章节后失败 | 1 | 改为断言章节文本拼接等于原始文本 |
+| 2026-06-19 | 阶段 2.6 Playwright 长文本 smoke 首次发现虚拟列表渲染全部 240 段 | 1 | 约束 `reader-shell` 与 `reader-main` 为 `100vh`，让 `reader-viewport` 作为内部滚动容器 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 1 本地书库与导入链路已完成，正在准备合并并推送 |
-| 我要去哪里？ | 阶段 1 本地书库与导入链路已完成，后续从阶段 2 TXT 阅读器优先打磨继续 |
+| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨已完成并通过全量验收 |
+| 我要去哪里？ | 合回并推送 `main`，后续进入阶段 3 EPUB 阅读器 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

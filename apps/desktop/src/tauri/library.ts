@@ -1,6 +1,7 @@
 import type { Book, ImportBookResult } from "@reader/core";
 
 const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
+const FALLBACK_BOOKS_KEY = "reader:fallback:books";
 
 function hasTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -14,7 +15,7 @@ async function invokeCommand<T>(command: string, args?: Record<string, unknown>)
 
 export async function listBooks(): Promise<Book[]> {
   if (!hasTauriRuntime()) {
-    return [];
+    return getFallbackBooks();
   }
 
   return invokeCommand<Book[]>("list_books");
@@ -30,7 +31,19 @@ export async function importBook(path: string): Promise<ImportBookResult> {
 
 export async function markBookOpened(bookId: string): Promise<Book> {
   if (!hasTauriRuntime()) {
-    throw new Error(`Opening a book failed. ${DESKTOP_RUNTIME_ERROR}`);
+    const books = getFallbackBooks();
+    const book = books.find((currentBook) => currentBook.id === bookId);
+
+    if (book === undefined) {
+      throw new Error(`Opening a book failed. ${DESKTOP_RUNTIME_ERROR}`);
+    }
+
+    const openedBook = {
+      ...book,
+      lastOpenedAt: new Date().toISOString(),
+    };
+    setFallbackBooks(books.map((currentBook) => (currentBook.id === bookId ? openedBook : currentBook)));
+    return openedBook;
   }
 
   return invokeCommand<Book>("mark_book_opened", { bookId });
@@ -58,4 +71,30 @@ export async function pickBookFile(): Promise<string | null> {
   }
 
   return selected;
+}
+
+function getFallbackBooks(): Book[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const rawBooks = window.localStorage.getItem(FALLBACK_BOOKS_KEY);
+
+  if (rawBooks === null) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(rawBooks) as Book[];
+  } catch {
+    return [];
+  }
+}
+
+function setFallbackBooks(books: Book[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(FALLBACK_BOOKS_KEY, JSON.stringify(books));
 }
