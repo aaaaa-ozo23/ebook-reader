@@ -164,6 +164,31 @@
   - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
   - `pnpm.cmd --filter @reader/desktop test:e2e` 首次发现未约束滚动容器导致 240 段全量渲染；修正 `reader-shell`/`reader-main` 高度后重跑通过，2 tests。
 
+### 阶段 2：最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 在 `codex/v0.1.0-mvp-integration` 上运行阶段 2 全量验收。
+  - 运行 `pnpm.cmd install`。
+  - 运行 `pnpm.cmd --filter @reader/core build`。
+  - 运行 `pnpm.cmd --filter @reader/desktop lint`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test`。
+  - 运行 `pnpm.cmd --filter @reader/desktop build`。
+  - 运行 `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test:e2e`。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/`：桌面 1280x800 和窄屏约 375x760 书架首屏可见、无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，11 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，2 Chromium smoke tests。
+  - Browser QA 通过。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 `ebook-reader-desktop.exe`、MSI 和 NSIS setup。
+
 ### 产品大阶段 1：本地书库与导入链路启动
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -460,6 +485,15 @@
 | 阶段 2.6 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
 | 阶段 2.6 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 后端测试无回归 | 18 passed，0 failed | 通过 |
 | 阶段 2.6 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 空书架和 seeded 长 TXT 阅读页 smoke 通过 | 2 passed，0 failed | 通过 |
+| 阶段 2 final install | `pnpm.cmd install` | workspace 安装状态稳定 | Already up to date | 通过 |
+| 阶段 2 final core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2 final desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2 final desktop test | `pnpm.cmd --filter @reader/desktop test` | 前端测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2 final desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2 final Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 后端测试通过 | 18 passed，0 failed | 通过 |
+| 阶段 2 final Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 空书架和 seeded 长 TXT 阅读页 smoke 通过 | 2 passed，0 failed | 通过 |
+| 阶段 2 final Browser QA | Browser 插件访问 `http://127.0.0.1:1420/` | 桌面/窄屏书架首屏正常、无 console warning/error、视图切换可交互 | 检查通过 | 通过 |
+| 阶段 2 final Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 
 ## 错误日志
 
@@ -482,8 +516,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨小阶段 2.1-2.6 已完成 |
-| 我要去哪里？ | 在集成分支执行阶段 2 全量验证，然后合回并推送 `main` |
+| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨已完成并通过全量验收 |
+| 我要去哪里？ | 合回并推送 `main`，后续进入阶段 3 EPUB 阅读器 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

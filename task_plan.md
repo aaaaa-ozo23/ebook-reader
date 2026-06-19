@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 2：TXT 阅读器优先打磨小阶段已完成；下一步在集成分支执行阶段 2 全量验证。
+阶段 2：TXT 阅读器优先打磨已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
 
 ## 分支策略
 
@@ -101,6 +101,20 @@
 | 2.4 主题设置 | `codex/stage2-reader-theme` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，16 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，10 tests；`pnpm.cmd --filter @reader/desktop build` |
 | 2.5 进度定位 | `codex/stage2-txt-progress` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build` |
 | 2.6 长文本性能 | `codex/stage2-txt-virtualization` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，2 tests |
+
+### 阶段 2 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，11 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，18 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，2 Chromium smoke tests |
+| Browser QA | passed，桌面 1280x800 和窄屏约 375x760 书架首屏无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 3：EPUB 阅读器
 
