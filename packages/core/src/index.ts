@@ -18,6 +18,13 @@ export interface Book {
   lastOpenedAt?: string;
 }
 
+export type ImportBookStatus = "imported" | "duplicate";
+
+export interface ImportBookResult {
+  status: ImportBookStatus;
+  book: Book;
+}
+
 export interface TocItem {
   id: string;
   title: string;

@@ -54,6 +54,13 @@
 | 1.4 导入交互 | `codex/stage1-import-flow` | 接入 Tauri dialog/fs 插件；支持 EPUB/TXT/PDF 选择、导入反馈、重复文件提示 | Playwright 或 Tauri smoke 验证导入样本文件后书架出现记录 |
 | 1.5 持久化恢复 | `codex/stage1-library-persistence` | 应用重启后从 SQLite 加载书库；记录 `last_opened_at` | 重启后书籍仍存在；最近阅读排序稳定 |
 
+### 阶段 1 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 1.1 数据 schema 和迁移 | `codex/stage1-db-schema` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；`pnpm.cmd --filter @reader/core build` |
+| 1.2 文件导入命令 | `codex/stage1-db-schema` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 覆盖合法导入、重复导入、非法文件、持久化列表和最近打开排序 |
+
 ## 大阶段 2：TXT 阅读器优先打磨
 
 目标：先把中文网文阅读体验做扎实，形成主题、定位、进度保存和阅读页布局基线。
