@@ -136,6 +136,8 @@
   - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
   - 首次运行 `pnpm.cmd --filter @reader/desktop test:e2e` 时修正 Playwright webServer 参数，并安装 Playwright Chromium 缓存。
   - 重跑 `pnpm.cmd --filter @reader/desktop test:e2e` 通过。
+  - 将 `codex/v0.1.0-mvp-integration` 合并回 `main`。
+  - 推送 `main` 到 `origin/main`。
 - 创建/修改的文件：
   - `.gitignore`
   - `.prettierignore`
@@ -223,6 +225,7 @@
 | 阶段 0 最终 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | Rust 测试通过 | 2 passed，0 failed | 通过 |
 | 阶段 0 最终 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 | 阶段 0 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 浏览器 smoke 通过 | 1 passed，0 failed | 通过 |
+| 阶段 0 push | `git push origin main` | 远程 main 更新成功 | `44afcc3..59ff259  main -> main` | 通过 |
 
 ## 错误日志
 
@@ -241,8 +244,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0 项目骨架与工程基线已完成并通过最终验收 |
-| 我要去哪里？ | 合并回 `main` 并推送远程 |
+| 我在哪里？ | 阶段 0 项目骨架与工程基线已完成、合并并推送 |
+| 我要去哪里？ | 后续从阶段 1 本地书库与导入链路继续 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
