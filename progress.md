@@ -2,6 +2,46 @@
 
 ## 会话：2026-06-19
 
+### 产品大阶段 1：本地书库与导入链路启动
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 读取当前 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 0 已完成，下一步为产品大阶段 1。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage1-db-schema` 分支准备实施后端 schema/import 基线。
+  - 启动后端 worker subagent，负责 Rust/SQLite/Tauri 命令和 core import 类型。
+  - 后端 worker 完成迁移 v2、库目录、`list_books`、`import_book`、`mark_book_opened` 和 `ImportBookResult` 类型。
+  - 复查并运行后端验证：`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/core build`。
+  - 将 `codex/stage1-db-schema` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 创建 `codex/stage1-bookshelf-ui` 分支。
+  - 启动前端 worker subagent，负责 Tauri dialog 接入、typed wrapper、书架 UI、组件测试和 Playwright smoke。
+  - 前端 worker 完成 `@tauri-apps/plugin-dialog` / `tauri-plugin-dialog` 接入、`src/tauri/library.ts`、书架首屏 UI 和测试更新。
+  - 复查并运行前端/后端验证：`pnpm.cmd install`、`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/desktop lint`、`pnpm.cmd --filter @reader/desktop test`、`pnpm.cmd --filter @reader/desktop build`、`pnpm.cmd --filter @reader/desktop test:e2e`。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/`：书架首屏可见、无旧空壳文案、无 Vite overlay、无 console warning/error，桌面和窄屏截图无明显重叠。
+  - 将 `codex/stage1-bookshelf-ui` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 在集成分支运行阶段 1 全量验收：`pnpm.cmd install`、`pnpm.cmd --filter @reader/core build`、`pnpm.cmd --filter @reader/desktop lint`、`pnpm.cmd --filter @reader/desktop test`、`pnpm.cmd --filter @reader/desktop build`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/desktop test:e2e`。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/capabilities/default.json`
+  - `apps/desktop/src-tauri/migrations/0002_unique_books_file_hash.sql`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/package.json`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/tauri/library.ts`
+  - `apps/desktop/src/test/setup.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `packages/core/src/index.ts`
+  - `pnpm-lock.yaml`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 0.1：工作区初始化
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -226,6 +266,15 @@
 | 阶段 0 最终 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 | 阶段 0 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 浏览器 smoke 通过 | 1 passed，0 failed | 通过 |
 | 阶段 0 push | `git push origin main` | 远程 main 更新成功 | `44afcc3..59ff259  main -> main` | 通过 |
+| 阶段 1 install | `pnpm.cmd install` | workspace 安装状态稳定 | Already up to date | 通过 |
+| 阶段 1 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 1 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 1 desktop test | `pnpm.cmd --filter @reader/desktop test` | 书架和导入交互组件测试通过 | 6 passed，0 failed | 通过 |
+| 阶段 1 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 1 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 迁移、导入、去重、恢复、最近打开测试通过 | 8 passed，0 failed | 通过 |
+| 阶段 1 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 书架首屏 smoke 通过 | 1 passed，0 failed | 通过 |
+| 阶段 1 Browser QA | Browser 插件访问 `http://127.0.0.1:1420/` | 书架首屏非空、无 overlay、无 console warning/error、视图切换可交互 | desktop 与窄屏检查通过 | 通过 |
+| 阶段 1 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 
 ## 错误日志
 
@@ -244,8 +293,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0 项目骨架与工程基线已完成、合并并推送 |
-| 我要去哪里？ | 后续从阶段 1 本地书库与导入链路继续 |
+| 我在哪里？ | 阶段 1 本地书库与导入链路已完成，正在准备合并并推送 |
+| 我要去哪里？ | 阶段 1 本地书库与导入链路已完成，后续从阶段 2 TXT 阅读器优先打磨继续 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

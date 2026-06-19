@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 0：项目骨架与工程基线已完成；下一步进入阶段 1：本地书库与导入链路。
+阶段 1：本地书库与导入链路已完成；下一步进入阶段 2：TXT 阅读器优先打磨。
 
 ## 分支策略
 
@@ -53,6 +53,30 @@
 | 1.3 书架 UI | `codex/stage1-bookshelf-ui` | 实现打开即书架：左侧窄栏、书籍网格/列表、空状态、最近阅读入口 | 组件测试覆盖空状态和列表渲染；无营销落地页 |
 | 1.4 导入交互 | `codex/stage1-import-flow` | 接入 Tauri dialog/fs 插件；支持 EPUB/TXT/PDF 选择、导入反馈、重复文件提示 | Playwright 或 Tauri smoke 验证导入样本文件后书架出现记录 |
 | 1.5 持久化恢复 | `codex/stage1-library-persistence` | 应用重启后从 SQLite 加载书库；记录 `last_opened_at` | 重启后书籍仍存在；最近阅读排序稳定 |
+
+### 阶段 1 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 1.1 数据 schema 和迁移 | `codex/stage1-db-schema` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；`pnpm.cmd --filter @reader/core build` |
+| 1.2 文件导入命令 | `codex/stage1-db-schema` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 覆盖合法导入、重复导入、非法文件、持久化列表和最近打开排序 |
+| 1.3 书架 UI | `codex/stage1-bookshelf-ui` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`；`pnpm.cmd --filter @reader/desktop build`；Browser QA |
+| 1.4 导入交互 | `codex/stage1-bookshelf-ui` | complete | Vitest 覆盖取消、成功、重复、失败反馈；Playwright smoke 验证书架首屏 |
+| 1.5 持久化恢复 | `codex/stage1-bookshelf-ui` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；前端 mount 调用 `list_books` 并按最近阅读排序 |
+
+### 阶段 1 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，6 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，8 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，1 Chromium smoke |
+| Browser QA | passed，桌面和窄屏书架首屏无 overlay、无 console warning/error |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 2：TXT 阅读器优先打磨
 
