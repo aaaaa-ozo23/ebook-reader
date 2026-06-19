@@ -425,10 +425,12 @@ button:disabled {
 
 .reader-shell {
   display: grid;
+  height: 100vh;
   min-height: 100vh;
   grid-template-columns: minmax(240px, 292px) minmax(0, 1fr);
   background: var(--txt-reader-background, #f7f1e3);
   color: var(--txt-reader-text, #25211d);
+  overflow: hidden;
 }
 
 .reader-shell:not(.reader-shell--toc-open) {
@@ -506,8 +508,10 @@ button:disabled {
 
 .reader-main {
   display: grid;
+  height: 100vh;
   min-width: 0;
   grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
 }
 
 .reader-topbar {
@@ -595,6 +599,10 @@ button:disabled {
   line-height: var(--txt-reader-line-height, 1.75);
 }
 
+.reader-page--virtual {
+  position: relative;
+}
+
 .reader-meta {
   display: flex;
   flex-wrap: wrap;
@@ -635,7 +643,21 @@ button:disabled {
   margin-top: 48px;
 }
 
-.reader-chapter h2 {
+.reader-virtual-canvas {
+  position: relative;
+  min-height: 260px;
+}
+
+.reader-virtual-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 0 0 2px;
+}
+
+.reader-chapter h2,
+.reader-virtual-row--heading h2 {
   margin: 0 0 28px;
   color: #1d282d;
   font-size: 1.48rem;
@@ -644,9 +666,14 @@ button:disabled {
   letter-spacing: 0;
 }
 
-.reader-chapter p {
+.reader-chapter p,
+.reader-virtual-row--paragraph p {
   margin: 0 0 var(--txt-reader-paragraph-spacing, 12px);
   text-indent: 2em;
+}
+
+.reader-virtual-row--paragraph p {
+  min-height: 1.4em;
 }
 
 .reader-state {
@@ -825,7 +852,10 @@ button:disabled {
 
   .reader-shell,
   .reader-shell.reader-shell--toc-open {
+    height: auto;
+    min-height: 100vh;
     grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .reader-sidebar {
@@ -839,6 +869,11 @@ button:disabled {
   .reader-topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .reader-main {
+    height: auto;
+    min-height: 100vh;
   }
 
   .reader-toolbar,

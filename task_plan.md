@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 2：TXT 阅读器优先打磨进行中；2.1-2.5 已完成，下一步进入 2.6 长文本性能。
+阶段 2：TXT 阅读器优先打磨小阶段已完成；下一步在集成分支执行阶段 2 全量验证。
 
 ## 分支策略
 
@@ -100,6 +100,7 @@
 | 2.3 阅读页布局 | `codex/stage2-reader-shell` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，9 tests；`pnpm.cmd --filter @reader/desktop build` |
 | 2.4 主题设置 | `codex/stage2-reader-theme` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，16 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，10 tests；`pnpm.cmd --filter @reader/desktop build` |
 | 2.5 进度定位 | `codex/stage2-txt-progress` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build` |
+| 2.6 长文本性能 | `codex/stage2-txt-virtualization` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，11 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，18 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，2 tests |
 
 ## 大阶段 3：EPUB 阅读器
 
@@ -214,6 +215,7 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | `cargo fmt --check` 发现 `open_txt_book_at` 一处自动换行差异 | 1 | 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 后继续测试 |
 | `chardetng` 1.0.0 的 `EncodingDetector::new` 和 `guess` 需要枚举参数 | 1 | 改用 `Iso2022JpDetection::Deny` 和 `Utf8Detection::Allow` |
 | 阶段 2.1 解码测试仍断言 `full-text`，与 2.2 章节识别冲突 | 1 | 将该测试收窄为校验拼接后的解码文本，章节 ID 交给章节测试覆盖 |
+| 阶段 2.6 首次 Playwright 长文本测试发现虚拟列表渲染全部 240 段 | 1 | 将 `reader-shell` 和 `reader-main` 约束为 `100vh`，让 `reader-viewport` 成为内部滚动容器 |
 
 ## 备注
 
