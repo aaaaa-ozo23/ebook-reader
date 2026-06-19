@@ -39,7 +39,7 @@
 | 0.1 工作区初始化 | `codex/stage0-workspace` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build` |
 | 0.2 Tauri 桌面空壳 | `codex/stage0-tauri-shell` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` |
 | 0.3 共享模型基线 | `codex/stage0-core-models` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop build`；`pnpm.cmd build` |
-| 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | pending | 待执行 |
+| 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` |
 | 0.5 质量门禁 | `codex/stage0-quality-gates` | pending | 待执行 |
 
 ## 大阶段 1：本地书库与导入链路
