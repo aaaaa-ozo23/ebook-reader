@@ -2,6 +2,27 @@
 
 ## 会话：2026-06-19
 
+### 产品大阶段 1：本地书库与导入链路启动
+- **状态：** in_progress
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 读取当前 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 0 已完成，下一步为产品大阶段 1。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage1-db-schema` 分支准备实施后端 schema/import 基线。
+  - 启动后端 worker subagent，负责 Rust/SQLite/Tauri 命令和 core import 类型。
+  - 后端 worker 完成迁移 v2、库目录、`list_books`、`import_book`、`mark_book_opened` 和 `ImportBookResult` 类型。
+  - 复查并运行后端验证：`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/core build`。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/migrations/0002_unique_books_file_hash.sql`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `progress.md`
+
 ### 阶段 0.1：工作区初始化
 - **状态：** complete
 - **开始时间：** 2026-06-19
