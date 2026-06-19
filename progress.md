@@ -68,6 +68,28 @@
   - `findings.md`
   - `progress.md`
 
+### 阶段 0.4：Rust 与 SQLite 基线
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 从集成分支创建 `codex/stage0-rust-sqlite`。
+  - 添加 Rust 依赖：`rusqlite` bundled、`anyhow`、`thiserror`、`tempfile` dev-dependency。
+  - 新增 `0001_initial.sql` migration，创建 `schema_migrations`、`books`、`reading_progress`、`bookmarks`、`annotations`、`app_settings`。
+  - 新增数据库初始化模块，在 Tauri app data dir 创建 `ebook-reader.sqlite3`。
+  - 新增 `app_health` Tauri 命令，返回数据库路径和 schema version。
+  - 新增 migration 建表和幂等执行单测。
+  - 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`。
+  - 运行 `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/migrations/0001_initial.sql`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 1：读取文档与建立规划
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -133,6 +155,8 @@
 | 阶段 0.3 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
 | 阶段 0.3 desktop build | `pnpm.cmd --filter @reader/desktop build` | desktop 可引用 core 构建产物 | 串行构建成功 | 通过 |
 | 阶段 0.3 root build | `pnpm.cmd build` | workspace 拓扑顺序构建成功 | core 先构建，desktop 后构建 | 通过 |
+| 阶段 0.4 Rust fmt | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` | Rust 代码格式化成功 | 无错误 | 通过 |
+| 阶段 0.4 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | migration 和 Tauri Rust 代码通过测试 | 2 passed，0 failed | 通过 |
 
 ## 错误日志
 
@@ -147,8 +171,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0.3 共享模型基线已完成，准备合并到集成分支 |
-| 我要去哪里？ | 继续执行阶段 0.4 Rust 与 SQLite 基线 |
+| 我在哪里？ | 阶段 0.4 Rust 与 SQLite 基线已完成，准备合并到集成分支 |
+| 我要去哪里？ | 继续执行阶段 0.5 质量门禁 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
