@@ -38,6 +38,24 @@ fn save_reader_theme(
     db::save_reader_theme(&app, theme).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn get_reading_progress(
+    app: tauri::AppHandle,
+    book_id: String,
+) -> Result<Option<db::ReaderProgress>, String> {
+    db::get_reading_progress(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_reading_progress(
+    app: tauri::AppHandle,
+    book_id: String,
+    locator: db::TxtLocator,
+    progress: Option<f64>,
+) -> Result<db::ReaderProgress, String> {
+    db::save_reading_progress(&app, &book_id, locator, progress).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -54,7 +72,9 @@ pub fn run() {
             mark_book_opened,
             open_txt_book,
             get_reader_theme,
-            save_reader_theme
+            save_reader_theme,
+            get_reading_progress,
+            save_reading_progress
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
