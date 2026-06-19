@@ -2,6 +2,32 @@
 
 ## 会话：2026-06-19
 
+### 阶段 0.1：工作区初始化
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 从 `main` 创建 `codex/v0.1.0-mvp-integration`。
+  - 从集成分支创建 `codex/stage0-workspace`。
+  - 创建根 workspace 配置、TypeScript 基础配置、`@reader/core` 最小包、`docs/`、`fixtures/`。
+  - 使用 `pnpm.cmd add -Dw typescript` 安装 workspace 级 TypeScript。
+  - 运行 `pnpm.cmd install`。
+  - 运行 `pnpm.cmd --filter @reader/core build`。
+- 创建/修改的文件：
+  - `.editorconfig`
+  - `.gitignore`
+  - `package.json`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `tsconfig.base.json`
+  - `docs/.gitkeep`
+  - `fixtures/.gitkeep`
+  - `packages/core/package.json`
+  - `packages/core/tsconfig.json`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 1：读取文档与建立规划
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -59,6 +85,8 @@
 | 提交前 whitespace 检查 | `git diff --check` | 无 whitespace 错误或冲突标记 | 无输出 | 通过 |
 | 规划文件结构检查 | `Select-String '^#|^## '` | 三个规划文件标题结构完整 | 标题结构完整 | 通过 |
 | 暂存区 whitespace 检查 | `git diff --cached --check` | 无 whitespace 错误或冲突标记 | 首次发现 `DEVELOPMENT.md` 两处尾随空格，修复后复查无输出 | 通过 |
+| 阶段 0.1 install | `pnpm.cmd install` | workspace 安装成功 | lockfile up to date，安装成功 | 通过 |
+| 阶段 0.1 core build | `pnpm.cmd --filter @reader/core build` | core 包 TypeScript 构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
 
 ## 错误日志
 
@@ -70,8 +98,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 本次规划、检查、提交、推送已完成 |
-| 我要去哪里？ | 后续可从阶段 0 创建 `codex/v0.1.0-mvp-integration` 与 `codex/stage0-*` 分支开始开发 |
+| 我在哪里？ | 阶段 0.1 工作区初始化已完成，准备合并到集成分支 |
+| 我要去哪里？ | 继续执行阶段 0.2 Tauri 桌面空壳 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

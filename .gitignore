@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# JavaScript and TypeScript build outputs
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Tauri and Rust build outputs
+target/
+**/target/
+
+# Environment and local tooling
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

@@ -32,6 +32,16 @@
 | 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | 配置 `src-tauri` Rust 模块、`rusqlite` bundled、迁移目录、数据库打开与初始化逻辑 | `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` 通过 |
 | 0.5 质量门禁 | `codex/stage0-quality-gates` | 配置 ESLint、Prettier、Vitest、基础 Playwright 目录；写入 CI 候选命令文档 | `pnpm.cmd --filter @reader/desktop lint`、`test`、`build` 全部可运行 |
 
+### 阶段 0 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 0.1 工作区初始化 | `codex/stage0-workspace` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build` |
+| 0.2 Tauri 桌面空壳 | `codex/stage0-tauri-shell` | pending | 待执行 |
+| 0.3 共享模型基线 | `codex/stage0-core-models` | pending | 待执行 |
+| 0.4 Rust 与 SQLite 基线 | `codex/stage0-rust-sqlite` | pending | 待执行 |
+| 0.5 质量门禁 | `codex/stage0-quality-gates` | pending | 待执行 |
+
 ## 大阶段 1：本地书库与导入链路
 
 目标：实现本地优先的数据闭环：选择文件、导入、去重、入库、展示、重启恢复。
