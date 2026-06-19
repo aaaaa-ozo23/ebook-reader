@@ -32,6 +32,27 @@
   - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
   - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，11 tests。
 
+### 阶段 2.2：章节识别
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-txt-chapters` 分支。
+  - 新增 Rust 依赖 `regex`。
+  - 将 `open_txt_book` 的单章全文替换为后端章节识别结果。
+  - 支持中文“第 x 章/回/节/卷/部/篇”和英文 `Chapter x` 章节标题。
+  - 对章节标题前正文保留 `preface-0`，无章节文件回退为 `full-text`。
+  - 修正阶段 2.1 编码测试中与章节识别冲突的旧 `full-text` 断言。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，14 tests。
+
 ### 产品大阶段 1：本地书库与导入链路启动
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -307,6 +328,7 @@
 | 阶段 1 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
 | 阶段 2.1 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
 | 阶段 2.1 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | TXT 解码、非法字节、非 TXT 拒绝和既有书库测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2.2 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 中文/英文章节识别、无章节回退和既有解码导入测试通过 | 14 passed，0 failed | 通过 |
 
 ## 错误日志
 
@@ -322,13 +344,14 @@
 | 2026-06-19 | Playwright Chromium executable missing | 1 | 执行 `pnpm.cmd --filter @reader/desktop exec playwright install chromium` 安装浏览器缓存 |
 | 2026-06-19 | `cargo fmt --check` 发现阶段 2.1 Rust 代码一处自动换行差异 | 1 | 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` |
 | 2026-06-19 | `chardetng` 1.0.0 的 API 需要 `Iso2022JpDetection` 和 `Utf8Detection` 枚举参数 | 1 | 按本地 crate 源码修正 `EncodingDetector::new` 和 `guess` 调用 |
+| 2026-06-19 | 阶段 2.1 编码测试断言单章 `full-text`，阶段 2.2 识别章节后失败 | 1 | 改为断言章节文本拼接等于原始文本 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1 TXT 解码与元数据已完成 |
-| 我要去哪里？ | 继续 2.2 章节识别，然后进入阅读壳、主题、进度和虚拟化 |
+| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1 解码与 2.2 章节识别已完成 |
+| 我要去哪里？ | 继续 2.3 阅读页布局，然后进入主题、进度和虚拟化 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |

@@ -853,6 +853,7 @@ dependencies = [
  "chardetng",
  "encoding_rs",
  "hex",
+ "regex",
  "rusqlite",
  "serde",
  "serde_json",

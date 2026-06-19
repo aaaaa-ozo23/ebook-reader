@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 2：TXT 阅读器优先打磨进行中；2.1 TXT 解码与元数据已完成，下一步进入 2.2 章节识别。
+阶段 2：TXT 阅读器优先打磨进行中；2.1 TXT 解码与元数据、2.2 章节识别已完成，下一步进入 2.3 阅读页布局。
 
 ## 分支策略
 
@@ -96,6 +96,7 @@
 | 小阶段 | 分支 | 状态 | 验证 |
 |--------|------|------|------|
 | 2.1 TXT 解码与元数据 | `codex/stage2-txt-decoding` | complete | `pnpm.cmd --filter @reader/core build`；`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，11 tests |
+| 2.2 章节识别 | `codex/stage2-txt-chapters` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，14 tests |
 
 ## 大阶段 3：EPUB 阅读器
 
@@ -209,6 +210,7 @@ pnpm.cmd --filter @reader/desktop tauri:build
 |------|---------|---------|
 | `cargo fmt --check` 发现 `open_txt_book_at` 一处自动换行差异 | 1 | 运行 `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 后继续测试 |
 | `chardetng` 1.0.0 的 `EncodingDetector::new` 和 `guess` 需要枚举参数 | 1 | 改用 `Iso2022JpDetection::Deny` 和 `Utf8Detection::Allow` |
+| 阶段 2.1 解码测试仍断言 `full-text`，与 2.2 章节识别冲突 | 1 | 将该测试收窄为校验拼接后的解码文本，章节 ID 交给章节测试覆盖 |
 
 ## 备注
 

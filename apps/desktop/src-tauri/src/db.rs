@@ -5,11 +5,13 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
+    sync::OnceLock,
 };
 
 use anyhow::{bail, Context};
 use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
 use encoding_rs::{Encoding, BIG5, GB18030, GBK, UTF_8};
+use regex::Regex;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -161,6 +163,13 @@ pub struct TxtDocument {
 struct DecodedText {
     text: String,
     encoding: String,
+}
+
+#[derive(Debug)]
+struct TextLine {
+    start_byte: usize,
+    start_char: usize,
+    text: String,
 }
 
 struct AppStoragePaths {
@@ -350,13 +359,7 @@ pub fn open_txt_book_at(database_path: &Path, book_id: &str) -> anyhow::Result<T
     let text = normalize_line_endings(decoded.text);
     let char_count = text.chars().count();
     let line_count = text.lines().count();
-    let chapter = TxtChapter {
-        id: "full-text".to_string(),
-        title: book.title.clone(),
-        start_char: 0,
-        end_char: char_count,
-        text,
-    };
+    let chapters = detect_txt_chapters(&book.title, &text);
 
     Ok(TxtDocument {
         book,
@@ -364,7 +367,7 @@ pub fn open_txt_book_at(database_path: &Path, book_id: &str) -> anyhow::Result<T
         byte_length: bytes.len() as u64,
         char_count,
         line_count,
-        chapters: vec![chapter],
+        chapters,
     })
 }
 
@@ -537,6 +540,123 @@ fn cow_to_string(value: Cow<'_, str>) -> String {
 
 fn normalize_line_endings(text: String) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn detect_txt_chapters(default_title: &str, text: &str) -> Vec<TxtChapter> {
+    let char_count = text.chars().count();
+    let lines = collect_text_lines(text);
+    let heading_lines = lines
+        .iter()
+        .filter(|line| is_chapter_heading(&line.text))
+        .collect::<Vec<_>>();
+
+    if heading_lines.is_empty() {
+        return vec![TxtChapter {
+            id: "full-text".to_string(),
+            title: fallback_chapter_title(default_title),
+            start_char: 0,
+            end_char: char_count,
+            text: text.to_string(),
+        }];
+    }
+
+    let mut chapters = Vec::new();
+
+    if let Some(first_heading) = heading_lines.first() {
+        let preface = &text[..first_heading.start_byte];
+        if !preface.trim().is_empty() {
+            chapters.push(TxtChapter {
+                id: "preface-0".to_string(),
+                title: "卷首".to_string(),
+                start_char: 0,
+                end_char: first_heading.start_char,
+                text: preface.to_string(),
+            });
+        }
+    }
+
+    for (heading_index, heading_line) in heading_lines.iter().enumerate() {
+        let next_heading = heading_lines.get(heading_index + 1);
+        let end_byte = next_heading
+            .map(|line| line.start_byte)
+            .unwrap_or_else(|| text.len());
+        let end_char = next_heading
+            .map(|line| line.start_char)
+            .unwrap_or(char_count);
+        let chapter_number = chapters.len() + 1;
+
+        chapters.push(TxtChapter {
+            id: format!("chapter-{chapter_number}-{}", heading_line.start_char),
+            title: heading_line.text.trim().to_string(),
+            start_char: heading_line.start_char,
+            end_char,
+            text: text[heading_line.start_byte..end_byte].to_string(),
+        });
+    }
+
+    chapters
+}
+
+fn collect_text_lines(text: &str) -> Vec<TextLine> {
+    let mut lines = Vec::new();
+    let mut byte_offset = 0;
+    let mut char_offset = 0;
+
+    for segment in text.split_inclusive('\n') {
+        let line_text = segment.trim_end_matches('\n');
+        lines.push(TextLine {
+            start_byte: byte_offset,
+            start_char: char_offset,
+            text: line_text.to_string(),
+        });
+        byte_offset += segment.len();
+        char_offset += segment.chars().count();
+    }
+
+    if text.is_empty() {
+        return lines;
+    }
+
+    if !text.ends_with('\n') && lines.is_empty() {
+        lines.push(TextLine {
+            start_byte: 0,
+            start_char: 0,
+            text: text.to_string(),
+        });
+    }
+
+    lines
+}
+
+fn is_chapter_heading(line: &str) -> bool {
+    let trimmed = line.trim();
+
+    if trimmed.is_empty() || trimmed.chars().count() > 80 {
+        return false;
+    }
+
+    chapter_heading_regex().is_match(trimmed)
+}
+
+fn chapter_heading_regex() -> &'static Regex {
+    static CHAPTER_HEADING_REGEX: OnceLock<Regex> = OnceLock::new();
+
+    CHAPTER_HEADING_REGEX.get_or_init(|| {
+        Regex::new(
+            r"(?iu)^(?:第\s*[0-9０-９一二两三四五六七八九十百千万零〇壹贰叁肆伍陆柒捌玖拾佰仟]+\s*[章节回卷部篇][^\r\n]{0,60}|chapter\s+[0-9ivxlcdm]+[^\r\n]{0,60})$",
+        )
+        .expect("valid chapter heading regex")
+    })
+}
+
+fn fallback_chapter_title(default_title: &str) -> String {
+    let trimmed = default_title.trim();
+
+    if trimmed.is_empty() {
+        "全文".to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn is_plausible_text(text: &str) -> bool {
@@ -916,9 +1036,14 @@ mod tests {
             assert_eq!(document.book.id, imported.book.id);
             assert!(document.byte_length > 0);
             assert_eq!(document.char_count, text.chars().count());
-            assert_eq!(document.chapters.len(), 1);
-            assert_eq!(document.chapters[0].id, "full-text");
-            assert_eq!(document.chapters[0].text, text);
+            assert_eq!(
+                document
+                    .chapters
+                    .iter()
+                    .map(|chapter| chapter.text.as_str())
+                    .collect::<String>(),
+                text
+            );
         }
     }
 
@@ -954,6 +1079,48 @@ mod tests {
         assert!(error.to_string().contains("TXT reader only supports txt"));
     }
 
+    #[test]
+    fn open_txt_book_detects_chinese_chapters() {
+        let text = "楔子\n旧城下雨。\n\n第 1 章 初见\n她推开门。\n\n第二回 风起\n灯火亮了。\n";
+        let document = import_and_open_txt(text);
+
+        assert_eq!(document.chapters.len(), 3);
+        assert_eq!(document.chapters[0].id, "preface-0");
+        assert_eq!(document.chapters[0].title, "卷首");
+        assert!(document.chapters[0].text.contains("楔子"));
+        assert_eq!(document.chapters[1].title, "第 1 章 初见");
+        assert_eq!(
+            document.chapters[1].start_char,
+            char_offset_of(text, "第 1 章 初见")
+        );
+        assert_eq!(document.chapters[2].title, "第二回 风起");
+        assert!(document.chapters[2].text.contains("灯火亮了。"));
+    }
+
+    #[test]
+    fn open_txt_book_detects_english_chapters() {
+        let text = "Chapter 1 Arrival\nThe train stopped.\n\nChapter II The Gate\nThe door opened.";
+        let document = import_and_open_txt(text);
+
+        assert_eq!(document.chapters.len(), 2);
+        assert_eq!(document.chapters[0].title, "Chapter 1 Arrival");
+        assert_eq!(document.chapters[1].title, "Chapter II The Gate");
+        assert!(document.chapters[1].id.starts_with("chapter-2-"));
+    }
+
+    #[test]
+    fn open_txt_book_falls_back_to_full_text_without_chapters() {
+        let text = "这里没有章节标题。\n只有连续正文。\n";
+        let document = import_and_open_txt(text);
+
+        assert_eq!(document.chapters.len(), 1);
+        assert_eq!(document.chapters[0].id, "full-text");
+        assert_eq!(document.chapters[0].title, "sample");
+        assert_eq!(document.chapters[0].start_char, 0);
+        assert_eq!(document.chapters[0].end_char, text.chars().count());
+        assert_eq!(document.chapters[0].text, text);
+    }
+
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {
         conn.execute(
             "INSERT INTO books (
@@ -980,5 +1147,23 @@ mod tests {
         let (encoded, _, had_errors) = encoding.encode(text);
         assert!(!had_errors);
         encoded.into_owned()
+    }
+
+    fn import_and_open_txt(text: &str) -> super::TxtDocument {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("sample.txt");
+        fs::write(&source_path, text).expect("write txt source");
+
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+
+        open_txt_book_at(&database_path, &imported.book.id).expect("open txt")
+    }
+
+    fn char_offset_of(text: &str, needle: &str) -> usize {
+        let byte_index = text.find(needle).expect("needle exists");
+        text[..byte_index].chars().count()
     }
 }
