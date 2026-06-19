@@ -53,6 +53,29 @@
   - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
   - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，14 tests。
 
+### 阶段 2.3：阅读页布局
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-reader-shell` 分支。
+  - 新增 `apps/desktop/src/tauri/reader.ts`，封装 `openTxtBook` Tauri 命令和显式测试 fixture fallback。
+  - 新增 `ReaderShell`，包含返回书架、目录侧栏、顶部栏、专注模式和居中 TXT 正文视口。
+  - 修改书架 `Continue`：TXT 进入阅读页，EPUB/PDF 显示后续阶段提示。
+  - 扩展 Vitest 覆盖 TXT 打开、返回书架、非 TXT fallback 和 TXT 打开错误。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，9 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 产品大阶段 1：本地书库与导入链路启动
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -329,6 +352,9 @@
 | 阶段 2.1 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
 | 阶段 2.1 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | TXT 解码、非法字节、非 TXT 拒绝和既有书库测试通过 | 11 passed，0 failed | 通过 |
 | 阶段 2.2 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 中文/英文章节识别、无章节回退和既有解码导入测试通过 | 14 passed，0 failed | 通过 |
+| 阶段 2.3 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.3 desktop test | `pnpm.cmd --filter @reader/desktop test` | 书架、导入、阅读壳组件测试通过 | 9 passed，0 failed | 通过 |
+| 阶段 2.3 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
 
 ## 错误日志
 
@@ -350,8 +376,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1 解码与 2.2 章节识别已完成 |
-| 我要去哪里？ | 继续 2.3 阅读页布局，然后进入主题、进度和虚拟化 |
+| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1 解码、2.2 章节识别、2.3 阅读页布局已完成 |
+| 我要去哪里？ | 继续 2.4 主题设置，然后进入进度和虚拟化 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
