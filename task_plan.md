@@ -60,6 +60,9 @@
 |--------|------|------|------|
 | 1.1 数据 schema 和迁移 | `codex/stage1-db-schema` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；`pnpm.cmd --filter @reader/core build` |
 | 1.2 文件导入命令 | `codex/stage1-db-schema` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 覆盖合法导入、重复导入、非法文件、持久化列表和最近打开排序 |
+| 1.3 书架 UI | `codex/stage1-bookshelf-ui` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`；`pnpm.cmd --filter @reader/desktop build`；Browser QA |
+| 1.4 导入交互 | `codex/stage1-bookshelf-ui` | complete | Vitest 覆盖取消、成功、重复、失败反馈；Playwright smoke 验证书架首屏 |
+| 1.5 持久化恢复 | `codex/stage1-bookshelf-ui` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；前端 mount 调用 `list_books` 并按最近阅读排序 |
 
 ## 大阶段 2：TXT 阅读器优先打磨
 
