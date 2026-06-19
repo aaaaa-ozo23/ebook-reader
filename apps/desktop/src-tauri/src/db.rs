@@ -182,6 +182,25 @@ pub struct ReaderTheme {
     pub text_color: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxtLocator {
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub chapter_id: Option<String>,
+    pub char_offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReaderProgress {
+    pub book_id: String,
+    pub locator: TxtLocator,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone)]
 struct DecodedText {
     text: String,
@@ -242,6 +261,24 @@ pub fn get_reader_theme(app: &AppHandle) -> anyhow::Result<ReaderTheme> {
 pub fn save_reader_theme(app: &AppHandle, theme: ReaderTheme) -> anyhow::Result<ReaderTheme> {
     let database_path = init_app_database(app)?;
     save_reader_theme_at(&database_path, &theme)
+}
+
+pub fn get_reading_progress(
+    app: &AppHandle,
+    book_id: &str,
+) -> anyhow::Result<Option<ReaderProgress>> {
+    let database_path = init_app_database(app)?;
+    get_reading_progress_at(&database_path, book_id)
+}
+
+pub fn save_reading_progress(
+    app: &AppHandle,
+    book_id: &str,
+    locator: TxtLocator,
+    progress: Option<f64>,
+) -> anyhow::Result<ReaderProgress> {
+    let database_path = init_app_database(app)?;
+    save_reading_progress_at(&database_path, book_id, locator, progress)
 }
 
 pub fn init_app_database(app: &AppHandle) -> anyhow::Result<PathBuf> {
@@ -441,6 +478,63 @@ pub fn save_reader_theme_at(
     )?;
 
     Ok(theme)
+}
+
+pub fn get_reading_progress_at(
+    database_path: &Path,
+    book_id: &str,
+) -> anyhow::Result<Option<ReaderProgress>> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+
+    conn.query_row(
+        "SELECT book_id, locator_json, progress, updated_at
+        FROM reading_progress
+        WHERE book_id = ?1",
+        params![book_id],
+        row_to_reader_progress,
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn save_reading_progress_at(
+    database_path: &Path,
+    book_id: &str,
+    locator: TxtLocator,
+    progress: Option<f64>,
+) -> anyhow::Result<ReaderProgress> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    validate_txt_locator(&locator)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+
+    if book.format != BookFormat::Txt {
+        bail!("TXT progress can only be saved for txt books");
+    }
+
+    let normalized_progress = progress.map(|value| value.clamp(0.0, 1.0));
+    let locator_json =
+        serde_json::to_string(&locator).context("failed to serialize reading locator")?;
+    let now = current_timestamp(&conn)?;
+
+    conn.execute(
+        "INSERT INTO reading_progress (book_id, locator_json, progress, updated_at)
+        VALUES (?1, ?2, ?3, ?4)
+        ON CONFLICT(book_id) DO UPDATE SET
+            locator_json = excluded.locator_json,
+            progress = excluded.progress,
+            updated_at = excluded.updated_at",
+        params![book_id, locator_json, normalized_progress, now],
+    )?;
+
+    Ok(ReaderProgress {
+        book_id: book_id.to_string(),
+        locator,
+        progress: normalized_progress,
+        updated_at: now,
+    })
 }
 
 fn open_database(database_path: &Path) -> anyhow::Result<Connection> {
@@ -753,6 +847,28 @@ fn normalize_reader_theme(mut theme: ReaderTheme) -> ReaderTheme {
     theme
 }
 
+fn validate_txt_locator(locator: &TxtLocator) -> anyhow::Result<()> {
+    if locator.kind != "txt" {
+        bail!("reading progress locator must have kind txt");
+    }
+
+    Ok(())
+}
+
+fn row_to_reader_progress(row: &Row<'_>) -> rusqlite::Result<ReaderProgress> {
+    let locator_json: String = row.get(1)?;
+    let locator = serde_json::from_str(&locator_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(1, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+
+    Ok(ReaderProgress {
+        book_id: row.get(0)?,
+        locator,
+        progress: row.get(2)?,
+        updated_at: row.get(3)?,
+    })
+}
+
 fn is_plausible_text(text: &str) -> bool {
     if text.is_empty() {
         return true;
@@ -904,9 +1020,10 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        get_reader_theme_at, import_book_at, init_database_at, list_books_at, mark_book_opened_at,
-        open_txt_book_at, save_reader_theme_at, schema_version, BookFormat, ImportBookStatus,
-        ReaderTheme, ReaderThemeMode, DB_FILE_NAME,
+        get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
+        list_books_at, mark_book_opened_at, open_txt_book_at, save_reader_theme_at,
+        save_reading_progress_at, schema_version, BookFormat, ImportBookStatus, ReaderTheme,
+        ReaderThemeMode, TxtLocator, DB_FILE_NAME,
     };
 
     #[test]
@@ -1251,6 +1368,72 @@ mod tests {
         assert_eq!(saved.font_size, 30.0);
         assert_eq!(restored, saved);
         assert_eq!(restored.mode, ReaderThemeMode::Dark);
+    }
+
+    #[test]
+    fn reading_progress_persists_for_txt_books() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("progress.txt");
+        fs::write(&source_path, "第一章 初见\n正文").expect("write source");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+        let locator = TxtLocator {
+            kind: "txt".to_string(),
+            chapter_id: Some("chapter-1-0".to_string()),
+            char_offset: 6,
+        };
+
+        let saved = save_reading_progress_at(
+            &database_path,
+            &imported.book.id,
+            locator.clone(),
+            Some(1.4),
+        )
+        .expect("save progress");
+        init_database_at(&database_path).expect("reopen database");
+        let restored = get_reading_progress_at(&database_path, &imported.book.id)
+            .expect("get progress")
+            .expect("progress exists");
+
+        assert_eq!(saved.book_id, imported.book.id);
+        assert_eq!(saved.progress, Some(1.0));
+        assert_eq!(restored.locator, locator);
+        assert_eq!(restored.progress, Some(1.0));
+    }
+
+    #[test]
+    fn reading_progress_rejects_non_txt_books_and_invalid_locator_kind() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let epub_path = temp_dir.path().join("book.epub");
+        fs::write(&epub_path, "epub placeholder").expect("write epub");
+        let imported =
+            import_book_at(&database_path, &library_dir, &epub_path).expect("import epub");
+        let valid_locator = TxtLocator {
+            kind: "txt".to_string(),
+            chapter_id: None,
+            char_offset: 0,
+        };
+        let invalid_locator = TxtLocator {
+            kind: "epub".to_string(),
+            chapter_id: None,
+            char_offset: 0,
+        };
+
+        let non_txt_error =
+            save_reading_progress_at(&database_path, &imported.book.id, valid_locator, Some(0.2))
+                .expect_err("epub progress should fail");
+        let invalid_kind_error =
+            save_reading_progress_at(&database_path, "missing", invalid_locator, None)
+                .expect_err("invalid locator should fail");
+
+        assert!(non_txt_error
+            .to_string()
+            .contains("TXT progress can only be saved"));
+        assert!(invalid_kind_error.to_string().contains("kind txt"));
     }
 
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {

@@ -2,19 +2,28 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ChangeEvent,
 } from "react";
 import {
   defaultReaderTheme,
+  type ReaderProgress,
   type ReaderTheme,
   type ReaderThemeMode,
   type TxtChapter,
   type TxtDocument,
+  type TxtLocator,
 } from "@reader/core";
 
-import { getReaderTheme, openTxtBook, saveReaderTheme } from "../tauri/reader";
+import {
+  getReaderTheme,
+  getReadingProgress,
+  openTxtBook,
+  saveReaderTheme,
+  saveReadingProgress,
+} from "../tauri/reader";
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -73,6 +82,8 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
+  const [readingProgress, setReadingProgress] = useState<ReaderProgress<TxtLocator> | null>(null);
+  const progressSaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -82,11 +93,16 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       setError(null);
 
       try {
-        const [openedDocument, savedTheme] = await Promise.all([openTxtBook(bookId), getReaderTheme()]);
+        const [openedDocument, savedTheme, savedProgress] = await Promise.all([
+          openTxtBook(bookId),
+          getReaderTheme(),
+          getReadingProgress(bookId),
+        ]);
 
         if (isCurrent) {
           setDocument(openedDocument);
           setTheme(savedTheme);
+          setReadingProgress(savedProgress);
         }
       } catch (openError) {
         if (isCurrent) {
@@ -105,6 +121,15 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       isCurrent = false;
     };
   }, [bookId]);
+
+  useEffect(
+    () => () => {
+      if (progressSaveTimerRef.current !== null) {
+        window.clearTimeout(progressSaveTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -135,11 +160,6 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
     setIsChromeHidden(false);
   }, []);
 
-  const handleJumpToChapter = useCallback((chapterId: string) => {
-    const chapterElement = globalThis.document?.getElementById(getChapterElementId(chapterId));
-    chapterElement?.scrollIntoView({ block: "start" });
-  }, []);
-
   const handleThemeChange = useCallback((nextTheme: ReaderTheme) => {
     setTheme(nextTheme);
     setThemeError(null);
@@ -148,6 +168,46 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       setThemeError(getErrorMessage(saveError));
     });
   }, []);
+
+  const handleProgressChange = useCallback(
+    (locator: TxtLocator, progressValue?: number) => {
+      setReadingProgress({
+        bookId,
+        locator,
+        progress: progressValue,
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (progressSaveTimerRef.current !== null) {
+        window.clearTimeout(progressSaveTimerRef.current);
+      }
+
+      progressSaveTimerRef.current = window.setTimeout(() => {
+        void saveReadingProgress(bookId, locator, progressValue);
+      }, 450);
+    },
+    [bookId],
+  );
+
+  const handleJumpToChapter = useCallback(
+    (chapterId: string) => {
+      const chapterElement = globalThis.document?.getElementById(getChapterElementId(chapterId));
+      chapterElement?.scrollIntoView?.({ block: "start" });
+
+      const chapter = document?.chapters.find((currentChapter) => currentChapter.id === chapterId);
+      if (chapter !== undefined && document !== null) {
+        handleProgressChange(
+          {
+            kind: "txt",
+            chapterId: chapter.id,
+            charOffset: chapter.startChar,
+          },
+          chapter.startChar / Math.max(document.charCount, 1),
+        );
+      }
+    },
+    [document, handleProgressChange],
+  );
 
   const readerStyle = useMemo(
     () =>
@@ -209,7 +269,9 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
           blocks={blocks}
           document={document}
           error={error}
+          initialProgress={readingProgress}
           isLoading={isLoading}
+          onProgressChange={handleProgressChange}
           onBackToLibrary={onBackToLibrary}
         />
         <ThemePanel
@@ -273,7 +335,9 @@ interface ReaderContentProps {
   blocks: ReaderBlock[];
   document: TxtDocument | null;
   error: string | null;
+  initialProgress: ReaderProgress<TxtLocator> | null;
   isLoading: boolean;
+  onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onBackToLibrary: () => void;
 }
 
@@ -281,9 +345,56 @@ function ReaderContent({
   blocks,
   document,
   error,
+  initialProgress,
   isLoading,
+  onProgressChange,
   onBackToLibrary,
 }: ReaderContentProps) {
+  const viewportRef = useRef<HTMLElement | null>(null);
+  const hasRestoredProgressRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      hasRestoredProgressRef.current ||
+      isLoading ||
+      document === null ||
+      initialProgress === null ||
+      blocks.length === 0
+    ) {
+      return;
+    }
+
+    const targetChapter = findProgressTargetChapter(blocks, initialProgress.locator);
+    const chapterElement =
+      targetChapter === null
+        ? null
+        : globalThis.document?.getElementById(getChapterElementId(targetChapter.id));
+
+    chapterElement?.scrollIntoView?.({ block: "start" });
+    hasRestoredProgressRef.current = true;
+  }, [blocks, document, initialProgress, isLoading]);
+
+  const handleScroll = useCallback(() => {
+    if (document === null || viewportRef.current === null) {
+      return;
+    }
+
+    const activeChapter = findActiveChapter(blocks, viewportRef.current);
+
+    if (activeChapter === null) {
+      return;
+    }
+
+    onProgressChange(
+      {
+        kind: "txt",
+        chapterId: activeChapter.id,
+        charOffset: activeChapter.startChar,
+      },
+      activeChapter.startChar / Math.max(document.charCount, 1),
+    );
+  }, [blocks, document, onProgressChange]);
+
   if (isLoading) {
     return (
       <section className="reader-state" aria-label="Loading TXT book">
@@ -310,7 +421,12 @@ function ReaderContent({
   }
 
   return (
-    <section className="reader-viewport" aria-label={`${document.book.title} content`}>
+    <section
+      ref={viewportRef}
+      className="reader-viewport"
+      aria-label={`${document.book.title} content`}
+      onScroll={handleScroll}
+    >
       <article className="reader-page">
         <ReaderMeta document={document} />
         {blocks.map((block) => (
@@ -496,6 +612,51 @@ function splitChapterParagraphs(chapter: TxtChapter): string[] {
     .split(/\n+/)
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0 && paragraph !== chapter.title);
+}
+
+function findProgressTargetChapter(blocks: ReaderBlock[], locator: TxtLocator): TxtChapter | null {
+  if (locator.chapterId !== undefined) {
+    const chapterById = blocks.find((block) => block.chapter.id === locator.chapterId);
+
+    if (chapterById !== undefined) {
+      return chapterById.chapter;
+    }
+  }
+
+  let targetChapter = blocks[0]?.chapter ?? null;
+
+  for (const block of blocks) {
+    if (block.chapter.startChar <= locator.charOffset) {
+      targetChapter = block.chapter;
+    } else {
+      break;
+    }
+  }
+
+  return targetChapter;
+}
+
+function findActiveChapter(blocks: ReaderBlock[], viewport: HTMLElement): TxtChapter | null {
+  const viewportTop = viewport.getBoundingClientRect().top + 120;
+  let activeChapter = blocks[0]?.chapter ?? null;
+
+  for (const block of blocks) {
+    const chapterElement = globalThis.document?.getElementById(
+      getChapterElementId(block.chapter.id),
+    );
+
+    if (chapterElement === null || chapterElement === undefined) {
+      continue;
+    }
+
+    if (chapterElement.getBoundingClientRect().top <= viewportTop) {
+      activeChapter = block.chapter;
+    } else {
+      break;
+    }
+  }
+
+  return activeChapter;
 }
 
 function getChapterElementId(chapterId: string): string {

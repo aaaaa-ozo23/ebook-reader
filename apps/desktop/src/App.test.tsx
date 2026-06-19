@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
-import { getReaderTheme, openTxtBook, saveReaderTheme } from "./tauri/reader";
+import {
+  getReaderTheme,
+  getReadingProgress,
+  openTxtBook,
+  saveReaderTheme,
+  saveReadingProgress,
+} from "./tauri/reader";
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -16,17 +22,21 @@ vi.mock("./tauri/library", () => ({
 
 vi.mock("./tauri/reader", () => ({
   getReaderTheme: vi.fn(),
+  getReadingProgress: vi.fn(),
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
+  saveReadingProgress: vi.fn(),
 }));
 
 const getReaderThemeMock = vi.mocked(getReaderTheme);
+const getReadingProgressMock = vi.mocked(getReadingProgress);
 const importBookMock = vi.mocked(importBook);
 const listBooksMock = vi.mocked(listBooks);
 const markBookOpenedMock = vi.mocked(markBookOpened);
 const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
+const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 
 describe("App", () => {
   beforeEach(() => {
@@ -36,8 +46,15 @@ describe("App", () => {
       createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
     );
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
+    getReadingProgressMock.mockResolvedValue(null);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
+    saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
+      bookId,
+      locator,
+      progress,
+      updatedAt: "2026-06-19T12:00:00.000Z",
+    }));
     pickBookFileMock.mockResolvedValue(null);
   });
 
@@ -235,6 +252,53 @@ describe("App", () => {
       }),
     );
     expect(reader).toHaveStyle("--txt-reader-background: #171a1d");
+  });
+
+  it("restores saved TXT progress and saves table-of-contents jumps", async () => {
+    const user = userEvent.setup();
+    const scrollIntoViewMock = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoViewMock;
+    const txtBook = createBook({ id: "progress-txt", title: "Progress TXT", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+    getReadingProgressMock.mockResolvedValueOnce({
+      bookId: "progress-txt",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-2-13",
+        charOffset: 13,
+      },
+      progress: 0.5,
+      updatedAt: "2026-06-19T12:00:00.000Z",
+    });
+
+    try {
+      render(<App />);
+      expect(await screen.findByRole("heading", { name: "Progress TXT" })).toBeVisible();
+
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+
+      await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled());
+      expect(getReadingProgressMock).toHaveBeenCalledWith("progress-txt");
+
+      await user.click(screen.getByRole("button", { name: "第二章 风起" }));
+
+      await waitFor(() =>
+        expect(saveReadingProgressMock).toHaveBeenCalledWith(
+          "progress-txt",
+          {
+            kind: "txt",
+            chapterId: "chapter-2-13",
+            charOffset: 13,
+          },
+          expect.any(Number),
+        ),
+      );
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+    }
   });
 });
 

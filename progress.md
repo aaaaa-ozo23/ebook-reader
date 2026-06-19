@@ -106,6 +106,34 @@
   - `pnpm.cmd --filter @reader/desktop test` 通过，10 tests。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 2.5：进度定位
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 创建 `codex/stage2-txt-progress` 分支。
+  - 在 Rust 后端新增 `TxtLocator`、`ReaderProgress`、`get_reading_progress`、`save_reading_progress`，复用 `reading_progress` 表。
+  - 后端校验 progress locator `kind = "txt"`，并确保仅 TXT 书籍可保存 TXT 进度。
+  - 在 `tauri/reader.ts` 新增进度读取/保存 wrapper 和浏览器测试 fallback。
+  - 阅读页打开时并行加载 TXT 文档、主题和进度；恢复时优先 `chapterId`，否则使用 `charOffset`。
+  - 目录跳转和滚动会产生 `TxtLocator`，保存操作做 450ms 节流。
+  - 扩展 Vitest 覆盖进度恢复和目录跳转保存。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，11 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 产品大阶段 1：本地书库与导入链路启动
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -390,6 +418,11 @@
 | 阶段 2.4 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
 | 阶段 2.4 desktop test | `pnpm.cmd --filter @reader/desktop test` | 主题面板和既有前端测试通过 | 10 passed，0 failed | 通过 |
 | 阶段 2.4 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 2.5 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | 进度保存/恢复、非 TXT 拒绝和既有后端测试通过 | 18 passed，0 failed | 通过 |
+| 阶段 2.5 core build | `pnpm.cmd --filter @reader/core build` | core 类型构建成功 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 2.5 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 2.5 desktop test | `pnpm.cmd --filter @reader/desktop test` | 进度恢复、目录跳转保存和既有前端测试通过 | 11 passed，0 failed | 通过 |
+| 阶段 2.5 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
 
 ## 错误日志
 
@@ -411,8 +444,8 @@
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1-2.4 已完成 |
-| 我要去哪里？ | 继续 2.5 进度定位，然后进入 2.6 虚拟化 |
+| 我在哪里？ | 阶段 2 TXT 阅读器优先打磨进行中，2.1-2.5 已完成 |
+| 我要去哪里？ | 继续 2.6 长文本性能与虚拟化 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
