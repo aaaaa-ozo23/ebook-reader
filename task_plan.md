@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-规划基线已建立；下一步进入阶段 0：项目骨架。
+阶段 0：项目骨架与工程基线已完成；下一步进入阶段 1：本地书库与导入链路。
 
 ## 分支策略
 
@@ -183,3 +183,4 @@ pnpm.cmd --filter @reader/desktop tauri:build
 - 任何外部资料、依赖许可、渲染器行为发现应写入 `findings.md`，不要直接塞入本计划。
 - 每完成一个小阶段，应更新本文件对应状态或在阶段表旁追加完成记录。
 - 如果后续从 `main` 创建 `codex/v0.1.0-mvp-integration`，应先确认 `main` 已包含本计划和 `DEVELOPMENT.md`。
+- 阶段 0 已完成并通过完整验收，后续阶段应从最新 `main` 或 `codex/v0.1.0-mvp-integration` 继续拉分支。

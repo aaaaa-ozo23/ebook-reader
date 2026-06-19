@@ -4,6 +4,8 @@ node_modules/
 # JavaScript and TypeScript build outputs
 dist/
 coverage/
+playwright-report/
+test-results/
 .vite/
 *.tsbuildinfo
 

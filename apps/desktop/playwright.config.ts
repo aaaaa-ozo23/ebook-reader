@@ -11,7 +11,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm.cmd dev -- --host 127.0.0.1",
+    command: "pnpm.cmd dev --host 127.0.0.1",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: !process.env.CI,
   },

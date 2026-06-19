@@ -122,6 +122,28 @@
   - `findings.md`
   - `progress.md`
 
+### 阶段 0：最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-19
+- 执行的操作：
+  - 在 `codex/v0.1.0-mvp-integration` 上运行阶段 0 全量验收。
+  - 运行 `pnpm.cmd install`。
+  - 运行 `pnpm.cmd --filter @reader/core build`。
+  - 运行 `pnpm.cmd --filter @reader/desktop lint`。
+  - 运行 `pnpm.cmd --filter @reader/desktop test`。
+  - 运行 `pnpm.cmd --filter @reader/desktop build`。
+  - 运行 `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+  - 首次运行 `pnpm.cmd --filter @reader/desktop test:e2e` 时修正 Playwright webServer 参数，并安装 Playwright Chromium 缓存。
+  - 重跑 `pnpm.cmd --filter @reader/desktop test:e2e` 通过。
+- 创建/修改的文件：
+  - `.gitignore`
+  - `.prettierignore`
+  - `apps/desktop/playwright.config.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+
 ### 阶段 1：读取文档与建立规划
 - **状态：** complete
 - **开始时间：** 2026-06-19
@@ -193,6 +215,14 @@
 | 阶段 0.5 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
 | 阶段 0.5 desktop test | `pnpm.cmd --filter @reader/desktop test` | Vitest 通过 | 1 passed，0 failed | 通过 |
 | 阶段 0.5 desktop build | `pnpm.cmd --filter @reader/desktop build` | desktop 构建通过 | Vite production build 成功 | 通过 |
+| 阶段 0 最终 install | `pnpm.cmd install` | workspace 安装状态稳定 | Already up to date | 通过 |
+| 阶段 0 最终 core build | `pnpm.cmd --filter @reader/core build` | core 构建通过 | `tsc -p tsconfig.json` 成功 | 通过 |
+| 阶段 0 最终 desktop lint | `pnpm.cmd --filter @reader/desktop lint` | ESLint 通过 | 无错误 | 通过 |
+| 阶段 0 最终 desktop test | `pnpm.cmd --filter @reader/desktop test` | Vitest 通过 | 1 passed，0 failed | 通过 |
+| 阶段 0 最终 desktop build | `pnpm.cmd --filter @reader/desktop build` | Vite production build 通过 | 构建成功 | 通过 |
+| 阶段 0 最终 Rust test | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | Rust 测试通过 | 2 passed，0 failed | 通过 |
+| 阶段 0 最终 Tauri build | `pnpm.cmd --filter @reader/desktop tauri:build` | release build 和 Windows bundle 通过 | 生成 release exe、MSI、NSIS installer | 通过 |
+| 阶段 0 Playwright smoke | `pnpm.cmd --filter @reader/desktop test:e2e` | 浏览器 smoke 通过 | 1 passed，0 failed | 通过 |
 
 ## 错误日志
 
@@ -204,13 +234,15 @@
 | 2026-06-19 | 并行运行 core build 与 desktop build 时，desktop 读取旧的 `@reader/core` declaration | 1 | 改为串行验证，并确认 `pnpm.cmd build` 会按拓扑顺序执行 |
 | 2026-06-19 | `pnpm.cmd --filter @reader/desktop test` 被 Vitest 扫描到 Playwright `tests/smoke.spec.ts` 导致失败 | 1 | 在 `vitest.config.ts` 中限定 include 为 `src/**/*.test.{ts,tsx}` |
 | 2026-06-19 | `pnpm.cmd run format` 首次检查发现 Markdown、lockfile 和脚手架文件格式差异 | 1 | `.prettierignore` 忽略 Markdown 和 lockfile，对代码/配置执行 `format:write` 后复查通过 |
+| 2026-06-19 | `pnpm.cmd --filter @reader/desktop test:e2e` 首次等待 webServer 超时 | 1 | 将 Playwright webServer 命令从 `pnpm.cmd dev -- --host 127.0.0.1` 改为 `pnpm.cmd dev --host 127.0.0.1` |
+| 2026-06-19 | Playwright Chromium executable missing | 1 | 执行 `pnpm.cmd --filter @reader/desktop exec playwright install chromium` 安装浏览器缓存 |
 
 ## 五问重启检查
 
 | 问题 | 答案 |
 |------|------|
-| 我在哪里？ | 阶段 0.5 质量门禁已完成，准备合并到集成分支并运行最终验证 |
-| 我要去哪里？ | 运行阶段 0 全量验收，合并回 `main` 并推送 |
+| 我在哪里？ | 阶段 0 项目骨架与工程基线已完成并通过最终验收 |
+| 我要去哪里？ | 合并回 `main` 并推送远程 |
 | 目标是什么？ | 基于 `DEVELOPMENT.md` 建立可执行、带分支策略的分阶段开发计划 |
 | 我学到了什么？ | 见 `findings.md` |
 | 我做了什么？ | 见上方记录 |
