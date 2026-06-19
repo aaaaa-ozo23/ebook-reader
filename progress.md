@@ -13,14 +13,30 @@
   - 启动后端 worker subagent，负责 Rust/SQLite/Tauri 命令和 core import 类型。
   - 后端 worker 完成迁移 v2、库目录、`list_books`、`import_book`、`mark_book_opened` 和 `ImportBookResult` 类型。
   - 复查并运行后端验证：`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/core build`。
+  - 将 `codex/stage1-db-schema` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 创建 `codex/stage1-bookshelf-ui` 分支。
+  - 启动前端 worker subagent，负责 Tauri dialog 接入、typed wrapper、书架 UI、组件测试和 Playwright smoke。
+  - 前端 worker 完成 `@tauri-apps/plugin-dialog` / `tauri-plugin-dialog` 接入、`src/tauri/library.ts`、书架首屏 UI 和测试更新。
+  - 复查并运行前端/后端验证：`pnpm.cmd install`、`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check`、`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`、`pnpm.cmd --filter @reader/desktop lint`、`pnpm.cmd --filter @reader/desktop test`、`pnpm.cmd --filter @reader/desktop build`、`pnpm.cmd --filter @reader/desktop test:e2e`。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/`：书架首屏可见、无旧空壳文案、无 Vite overlay、无 console warning/error，桌面和窄屏截图无明显重叠。
 - 创建/修改的文件：
   - `apps/desktop/src-tauri/Cargo.toml`
   - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/capabilities/default.json`
   - `apps/desktop/src-tauri/migrations/0002_unique_books_file_hash.sql`
   - `apps/desktop/src-tauri/src/db.rs`
   - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/package.json`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/tauri/library.ts`
+  - `apps/desktop/src/test/setup.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
   - `packages/core/src/index.ts`
+  - `pnpm-lock.yaml`
   - `task_plan.md`
+  - `findings.md`
   - `progress.md`
 
 ### 阶段 0.1：工作区初始化
