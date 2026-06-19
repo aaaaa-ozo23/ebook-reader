@@ -25,6 +25,19 @@ fn open_txt_book(app: tauri::AppHandle, book_id: String) -> Result<db::TxtDocume
     db::open_txt_book(&app, &book_id).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn get_reader_theme(app: tauri::AppHandle) -> Result<db::ReaderTheme, String> {
+    db::get_reader_theme(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_reader_theme(
+    app: tauri::AppHandle,
+    theme: db::ReaderTheme,
+) -> Result<db::ReaderTheme, String> {
+    db::save_reader_theme(&app, theme).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -39,7 +52,9 @@ pub fn run() {
             list_books,
             import_book,
             mark_book_opened,
-            open_txt_book
+            open_txt_book,
+            get_reader_theme,
+            save_reader_theme
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
