@@ -25,6 +25,23 @@ export interface ImportBookResult {
   book: Book;
 }
 
+export interface TxtChapter {
+  id: string;
+  title: string;
+  startChar: number;
+  endChar: number;
+  text: string;
+}
+
+export interface TxtDocument {
+  book: Book;
+  encoding: string;
+  byteLength: number;
+  charCount: number;
+  lineCount: number;
+  chapters: TxtChapter[];
+}
+
 export interface TocItem {
   id: string;
   title: string;
@@ -76,6 +93,13 @@ export interface PdfLocator extends LocatorContext {
 }
 
 export type Locator = TxtLocator | EpubLocator | PdfLocator;
+
+export interface ReaderProgress<TLocator extends Locator = Locator> {
+  bookId: string;
+  locator: TLocator;
+  progress?: number;
+  updatedAt: string;
+}
 
 export interface Annotation {
   id: string;

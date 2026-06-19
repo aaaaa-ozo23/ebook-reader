@@ -20,6 +20,11 @@ fn mark_book_opened(app: tauri::AppHandle, book_id: String) -> Result<db::Book, 
     db::mark_book_opened(&app, &book_id).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn open_txt_book(app: tauri::AppHandle, book_id: String) -> Result<db::TxtDocument, String> {
+    db::open_txt_book(&app, &book_id).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -33,7 +38,8 @@ pub fn run() {
             app_health,
             list_books,
             import_book,
-            mark_book_opened
+            mark_book_opened,
+            open_txt_book
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

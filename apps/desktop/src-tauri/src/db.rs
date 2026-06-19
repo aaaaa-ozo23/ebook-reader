@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     error::Error,
     fmt, fs,
     fs::File,
@@ -7,6 +8,8 @@ use std::{
 };
 
 use anyhow::{bail, Context};
+use chardetng::{EncodingDetector, Iso2022JpDetection, Utf8Detection};
+use encoding_rs::{Encoding, BIG5, GB18030, GBK, UTF_8};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -133,6 +136,33 @@ pub struct ImportBookResult {
     pub book: Book,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxtChapter {
+    pub id: String,
+    pub title: String,
+    pub start_char: usize,
+    pub end_char: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxtDocument {
+    pub book: Book,
+    pub encoding: String,
+    pub byte_length: u64,
+    pub char_count: usize,
+    pub line_count: usize,
+    pub chapters: Vec<TxtChapter>,
+}
+
+#[derive(Debug, Clone)]
+struct DecodedText {
+    text: String,
+    encoding: String,
+}
+
 struct AppStoragePaths {
     database_path: PathBuf,
     library_dir: PathBuf,
@@ -165,6 +195,11 @@ pub fn import_book<P: AsRef<Path>>(app: &AppHandle, path: P) -> anyhow::Result<I
 pub fn mark_book_opened(app: &AppHandle, book_id: &str) -> anyhow::Result<Book> {
     let database_path = init_app_database(app)?;
     mark_book_opened_at(&database_path, book_id)
+}
+
+pub fn open_txt_book(app: &AppHandle, book_id: &str) -> anyhow::Result<TxtDocument> {
+    let database_path = init_app_database(app)?;
+    open_txt_book_at(&database_path, book_id)
 }
 
 pub fn init_app_database(app: &AppHandle) -> anyhow::Result<PathBuf> {
@@ -294,6 +329,45 @@ pub fn mark_book_opened_at(database_path: &Path, book_id: &str) -> anyhow::Resul
         .with_context(|| format!("book not found after update: {}", book_id))
 }
 
+pub fn open_txt_book_at(database_path: &Path, book_id: &str) -> anyhow::Result<TxtDocument> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+
+    if book.format != BookFormat::Txt {
+        bail!("TXT reader only supports txt books");
+    }
+
+    let library_path = PathBuf::from(&book.library_path);
+    let bytes = fs::read(&library_path).with_context(|| {
+        format!(
+            "failed to read TXT library copy at {}",
+            library_path.display()
+        )
+    })?;
+    let decoded = decode_txt_bytes(&bytes)?;
+    let text = normalize_line_endings(decoded.text);
+    let char_count = text.chars().count();
+    let line_count = text.lines().count();
+    let chapter = TxtChapter {
+        id: "full-text".to_string(),
+        title: book.title.clone(),
+        start_char: 0,
+        end_char: char_count,
+        text,
+    };
+
+    Ok(TxtDocument {
+        book,
+        encoding: decoded.encoding,
+        byte_length: bytes.len() as u64,
+        char_count,
+        line_count,
+        chapters: vec![chapter],
+    })
+}
+
 fn open_database(database_path: &Path) -> anyhow::Result<Connection> {
     let conn = Connection::open(database_path).with_context(|| {
         format!(
@@ -395,6 +469,91 @@ fn current_timestamp(conn: &Connection) -> rusqlite::Result<String> {
     conn.query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", [], |row| {
         row.get(0)
     })
+}
+
+fn decode_txt_bytes(bytes: &[u8]) -> anyhow::Result<DecodedText> {
+    let mut candidates = Vec::new();
+    let mut detector = EncodingDetector::new(Iso2022JpDetection::Deny);
+    detector.feed(bytes, true);
+    let detected_encoding = detector.guess(None, Utf8Detection::Allow);
+
+    push_encoding_candidate(&mut candidates, detected_encoding);
+    push_encoding_candidate(&mut candidates, UTF_8);
+    push_encoding_candidate(&mut candidates, GB18030);
+    push_encoding_candidate(&mut candidates, GBK);
+    push_encoding_candidate(&mut candidates, BIG5);
+
+    for encoding in candidates {
+        let (decoded, used_encoding, had_errors) = encoding.decode(bytes);
+        if had_errors {
+            continue;
+        }
+
+        let text = cow_to_string(decoded);
+        if is_plausible_text(&text) {
+            return Ok(DecodedText {
+                text,
+                encoding: used_encoding.name().to_string(),
+            });
+        }
+    }
+
+    bail!("failed to decode TXT file; supported encodings are UTF-8, GBK, GB18030, and Big5")
+}
+
+fn push_encoding_candidate(candidates: &mut Vec<&'static Encoding>, encoding: &'static Encoding) {
+    if supported_txt_encoding(encoding).is_none() {
+        return;
+    }
+
+    if !candidates
+        .iter()
+        .any(|candidate| candidate.name().eq_ignore_ascii_case(encoding.name()))
+    {
+        candidates.push(encoding);
+    }
+}
+
+fn supported_txt_encoding(encoding: &'static Encoding) -> Option<&'static Encoding> {
+    let name = encoding.name();
+
+    if name.eq_ignore_ascii_case("utf-8")
+        || name.eq_ignore_ascii_case("gbk")
+        || name.eq_ignore_ascii_case("gb18030")
+        || name.eq_ignore_ascii_case("big5")
+    {
+        Some(encoding)
+    } else {
+        None
+    }
+}
+
+fn cow_to_string(value: Cow<'_, str>) -> String {
+    match value {
+        Cow::Borrowed(text) => text.to_string(),
+        Cow::Owned(text) => text,
+    }
+}
+
+fn normalize_line_endings(text: String) -> String {
+    text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn is_plausible_text(text: &str) -> bool {
+    if text.is_empty() {
+        return true;
+    }
+
+    let total_chars = text.chars().count();
+    let suspicious_chars = text
+        .chars()
+        .filter(|character| {
+            *character == '\u{fffd}'
+                || (character.is_control() && !matches!(character, '\n' | '\r' | '\t'))
+        })
+        .count();
+
+    suspicious_chars * 100 <= total_chars * 5
 }
 
 fn insert_book(conn: &mut Connection, book: &Book) -> anyhow::Result<()> {
@@ -525,13 +684,14 @@ fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
 mod tests {
     use std::{fs, path::PathBuf, thread, time::Duration};
 
+    use encoding_rs::{Encoding, BIG5, GB18030, GBK, UTF_8};
     use rusqlite::{params, Connection};
     use tempfile::tempdir;
     use uuid::Uuid;
 
     use super::{
-        import_book_at, init_database_at, list_books_at, mark_book_opened_at, schema_version,
-        BookFormat, ImportBookStatus, DB_FILE_NAME,
+        import_book_at, init_database_at, list_books_at, mark_book_opened_at, open_txt_book_at,
+        schema_version, BookFormat, ImportBookStatus, DB_FILE_NAME,
     };
 
     #[test]
@@ -732,6 +892,68 @@ mod tests {
         assert!(error.to_string().contains("book not found"));
     }
 
+    #[test]
+    fn open_txt_book_decodes_supported_encodings() {
+        let cases = [
+            (UTF_8, "utf8", "第一章 初见\n这是 UTF-8 文本。"),
+            (GBK, "gbk", "第一章 初见\n这是 GBK 文本。"),
+            (GB18030, "gb18030", "第一章 吉字\n这里包含 𠮷 字。"),
+            (BIG5, "big5", "第一章 初見\n這是繁體 Big5 文本。"),
+        ];
+
+        for (encoding, label, text) in cases {
+            let temp_dir = tempdir().expect("temp dir");
+            let database_path = temp_dir.path().join(DB_FILE_NAME);
+            let library_dir = temp_dir.path().join("library");
+            let source_path = temp_dir.path().join(format!("sample-{label}.txt"));
+            fs::write(&source_path, encode_text(encoding, text)).expect("write encoded txt");
+
+            let imported =
+                import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+            let document =
+                open_txt_book_at(&database_path, &imported.book.id).expect("open txt document");
+
+            assert_eq!(document.book.id, imported.book.id);
+            assert!(document.byte_length > 0);
+            assert_eq!(document.char_count, text.chars().count());
+            assert_eq!(document.chapters.len(), 1);
+            assert_eq!(document.chapters[0].id, "full-text");
+            assert_eq!(document.chapters[0].text, text);
+        }
+    }
+
+    #[test]
+    fn open_txt_book_rejects_invalid_text_bytes() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("binary.txt");
+        fs::write(&source_path, [0_u8, 1, 2, 3, 4, 5, 6, 7]).expect("write invalid txt");
+
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+        let error = open_txt_book_at(&database_path, &imported.book.id)
+            .expect_err("invalid text should fail");
+
+        assert!(error.to_string().contains("failed to decode TXT file"));
+    }
+
+    #[test]
+    fn open_txt_book_rejects_non_txt_books() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("sample.epub");
+        fs::write(&source_path, "epub placeholder").expect("write epub source");
+
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import epub");
+        let error =
+            open_txt_book_at(&database_path, &imported.book.id).expect_err("epub should fail");
+
+        assert!(error.to_string().contains("TXT reader only supports txt"));
+    }
+
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {
         conn.execute(
             "INSERT INTO books (
@@ -752,5 +974,11 @@ mod tests {
             ],
         )
         .expect("insert test book");
+    }
+
+    fn encode_text(encoding: &'static Encoding, text: &str) -> Vec<u8> {
+        let (encoded, _, had_errors) = encoding.encode(text);
+        assert!(!had_errors);
+        encoded.into_owned()
     }
 }
