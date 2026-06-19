@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 0：项目骨架与工程基线已完成；下一步进入阶段 1：本地书库与导入链路。
+阶段 1：本地书库与导入链路已完成；下一步进入阶段 2：TXT 阅读器优先打磨。
 
 ## 分支策略
 
@@ -63,6 +63,20 @@
 | 1.3 书架 UI | `codex/stage1-bookshelf-ui` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`；`pnpm.cmd --filter @reader/desktop build`；Browser QA |
 | 1.4 导入交互 | `codex/stage1-bookshelf-ui` | complete | Vitest 覆盖取消、成功、重复、失败反馈；Playwright smoke 验证书架首屏 |
 | 1.5 持久化恢复 | `codex/stage1-bookshelf-ui` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`；前端 mount 调用 `list_books` 并按最近阅读排序 |
+
+### 阶段 1 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，6 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，8 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，1 Chromium smoke |
+| Browser QA | passed，桌面和窄屏书架首屏无 overlay、无 console warning/error |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 2：TXT 阅读器优先打磨
 
