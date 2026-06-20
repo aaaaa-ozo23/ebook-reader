@@ -43,6 +43,38 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 2.x：TXT 阅读器性能与主题修复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 `ReaderShell` 中为虚拟块建立章节索引、全局 charOffset 索引和按章节分组的 charOffset 索引。
+  - 进度恢复改为优先按 `charOffset` 定位到章节内接近段落；目录跳转改为使用章节索引。
+  - 程序化恢复和目录跳转使用 instant scroll，并短暂抑制由程序化滚动触发的保存。
+  - 滚动时只记录 pending progress，滚动 idle 后再保存，避免滚动过程中频繁 setState 和写数据库。
+  - 使用 `requestAnimationFrame` 同步当前 active chapter，目录按钮增加 `aria-current="location"` 和 active 样式。
+  - 移除 `.reader-viewport` 的 smooth scrolling。
+  - 将阅读器 topbar、书名、章节名、meta、主题面板等颜色改为主题 CSS 变量，修复 dark 主题可读性。
+  - 扩展 Playwright smoke：右键移除、长 TXT 多章节、目录跳转、dark 主题 heading 变量、滚动后 active TOC。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/` 桌面和 375x760 窄屏 DOM/console/style metrics。
+  - Browser 截图命令超时后，使用 Playwright CLI 在仓库外生成并查看桌面/窄屏截图。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，14 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，3 tests。
+  - Browser QA metrics 通过：桌面和窄屏首屏存在书架 main、空状态、导入按钮，无 Vite overlay，无 console warning/error，导入 icon 垂直中心偏移为 0。
+  - Playwright 截图：`D:\tl-temp\ebook-reader-stage2-shelf-desktop.png`、`D:\tl-temp\ebook-reader-stage2-shelf-narrow.png` 已人工查看。
+
 ## 会话：2026-06-19
 
 ### 产品大阶段 2：TXT 阅读器优先打磨启动
@@ -554,6 +586,9 @@
 | 2026-06-19 | `chardetng` 1.0.0 的 API 需要 `Iso2022JpDetection` 和 `Utf8Detection` 枚举参数 | 1 | 按本地 crate 源码修正 `EncodingDetector::new` 和 `guess` 调用 |
 | 2026-06-19 | 阶段 2.1 编码测试断言单章 `full-text`，阶段 2.2 识别章节后失败 | 1 | 改为断言章节文本拼接等于原始文本 |
 | 2026-06-19 | 阶段 2.6 Playwright 长文本 smoke 首次发现虚拟列表渲染全部 240 段 | 1 | 约束 `reader-shell` 与 `reader-main` 为 `100vh`，让 `reader-viewport` 作为内部滚动容器 |
+| 2026-06-20 | 阶段 2.x Vitest 发现 jsdom 中 `scrollIntoView` 不存在，ReaderSidebar effect 抛错 | 1 | 对 `activeItemRef.current.scrollIntoView` 增加函数存在性检查 |
+| 2026-06-20 | 阶段 2.x ESLint 报 `react-hooks/set-state-in-effect`，指向 active chapter 初始化 effect | 1 | 删除该 effect，改在 TXT 文档加载完成时设置初始 active chapter |
+| 2026-06-20 | Browser 插件对本地页截图调用超时 | 1 | 继续使用 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成截图 |
 
 ## 五问重启检查
 
