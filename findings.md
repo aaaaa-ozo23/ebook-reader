@@ -86,6 +86,8 @@
 - 阶段 4.5 PDF 标注预研结论：当前 PDF 阅读器只渲染 canvas，浏览器无法基于 canvas 文本做可靠选择；阶段 5 实现 PDF 标注前应先叠加 PDF.js `TextLayer`。
 - 阶段 4.5 PDF 高亮 locator 建议保存 `page` + PDF 坐标系 rects + `selectedText/contextBefore/contextAfter`；重放时用 `PageViewport.convertToViewportRectangle()` 转回当前缩放下的 overlay 矩形。
 - 阶段 4.5 PDF 风险：扫描版/图片型 PDF 没有文本层，旋转或裁剪页面需要坐标转换测试；跨页选择应拆成多页 rects，MVP 可先交付单页选择和跨页只读回放。
+- 阶段 4 E2E PDF fixture 使用 Playwright 页面上下文运行时生成最小 PDF Blob，不提交二进制样本；测试覆盖 canvas 非空、页码跳转、双页、适合宽度和返回书架。
+- 阶段 4 E2E 发现 PDF reader 卸载时 ResizeObserver 可能在 adapter close 后触发；修正为先清空 adapter ref 再 close，并对 resize callback 加错误保护。
 
 ## 技术决策
 
