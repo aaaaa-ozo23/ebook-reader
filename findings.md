@@ -51,6 +51,9 @@
 - 阶段 3.1 已新增桌面端 `EpubReaderAdapter`，通过动态 import 加载 `epubjs`，封装 open、close、TOC、goTo、currentLocator、setTheme、CFI selection capture 和 highlight/remove spike API。
 - 阶段 3.1 已启用 Tauri v2 asset protocol，scope 限定为 `$APPDATA/library/**`；Rust `tauri` 依赖需要同步开启 `protocol-asset` feature，否则 `cargo test` 会在 build script 阶段失败。
 - 阶段 3.1 前端 EPUB source 规则：Tauri runtime 下用 `convertFileSrc(book.libraryPath)`，浏览器/e2e fallback 只读取显式 localStorage fixture，不新增前端 fs 插件。
+- 阶段 3.2 已将 `ReaderShell` 拆为通用阅读壳、TXT 内容层和 EPUB 内容层；EPUB 与 TXT 共享顶部栏、主题面板、目录侧栏和专注模式。
+- 阶段 3.2 EPUB 从书架直接进入阅读器，PDF 仍保留后续阶段提示；EPUB 内容层提供固定渲染 host、上一页/下一页、目录跳转、加载态和错误态。
+- 阶段 3.2 EPUB adapter 的 `relocated` 回调不能依赖 React state 里的 TOC 数组 identity，否则 adapter 打开后更新 TOC 会触发 open effect 重跑；当前使用 ref 读取最新 TOC。
 
 ## 技术决策
 
@@ -83,6 +86,7 @@
 | 程序化 TXT 跳转使用 instant scroll | 避免目录跳转和恢复进度时 smooth scroll 放大等待时间，并避免中途滚动事件覆盖保存位置 |
 | EPUB adapter 放在 `apps/desktop/src/epub` | epub.js 依赖 DOM/WebView，不进入 `packages/core`，保持 core 纯类型 |
 | EPUB 文件由 Tauri asset protocol 暴露给 WebView | 阶段 1 已把导入文件复制到 app data library，限制 asset scope 到该目录能避免给前端广泛 fs 权限 |
+| EPUB 阅读 UI 复用阶段 2 阅读壳 | 顶部栏、目录、主题和专注模式保持一致，格式差异收敛到内容层和 adapter |
 
 ## 遇到的问题
 
@@ -101,6 +105,7 @@
 | Playwright 长文本测试首次发现 `.reader-virtual-row--paragraph` 数量为 240 | 修正阅读器布局高度约束后重跑 e2e 通过，段落 DOM 数量低于 80 |
 | `pnpm.cmd --filter @reader/desktop add epubjs@^0.3.93` 首次返回 `ERR_PNPM_IGNORED_BUILDS` | 运行 `pnpm.cmd approve-builds core-js es5-ext` 后重跑 `pnpm.cmd install` 通过 |
 | 启用 Tauri asset protocol 后 `cargo test` 提示 allowlist 与依赖 feature 不匹配 | 在 `apps/desktop/src-tauri/Cargo.toml` 为 `tauri` 添加 `protocol-asset` feature |
+| 阶段 3.2 EPUB 内容层测试触发 `Maximum update depth exceeded` | `relocated` 回调用 ref 读取 TOC，避免 TOC state 更新改变回调 identity 并重复打开 EPUB |
 
 ## 资源
 

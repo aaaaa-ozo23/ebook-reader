@@ -40,6 +40,29 @@
   - `pnpm.cmd --filter @reader/desktop build` 通过。
   - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
 
+### 阶段 3.2：EPUB 阅读 UI
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 `ReaderShell` 拆成通用阅读壳、TXT 内容层和 EPUB 内容层，保留主题面板、目录侧栏、顶部栏和专注模式。
+  - 修改书架打开逻辑：TXT 和 EPUB 进入阅读器，PDF 保留后续阶段提示。
+  - 新增 EPUB 内容层，提供固定 host、上一页/下一页、目录跳转、加载态和错误态。
+  - 为 EPUB adapter 增加 `previous()` / `next()` 方法，供 UI 翻页按钮调用。
+  - 修复 EPUB TOC state 更新导致 adapter 打开 effect 重复执行的问题。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，15 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20
@@ -647,6 +670,7 @@
 | 2026-06-20 | 阶段 2.x ESLint 报 `react-hooks/set-state-in-effect`，指向 active chapter 初始化 effect | 1 | 删除该 effect，改在 TXT 文档加载完成时设置初始 active chapter |
 | 2026-06-20 | Browser 插件对本地页截图调用超时 | 1 | 继续使用 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成截图 |
 | 2026-06-20 | PowerShell 不接受本次 `git add ... && git commit ...` 命令分隔符 | 1 | 改为分两条命令执行 |
+| 2026-06-20 | 阶段 3.2 EPUB 内容层测试触发 `Maximum update depth exceeded` | 1 | 将 relocated 回调对 TOC 的读取改为 ref，避免 TOC state 更新导致 EPUB open effect 重复执行 |
 
 ## 五问重启检查
 

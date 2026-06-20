@@ -6,12 +6,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
+  getEpubBookSource,
   getReaderTheme,
   getReadingProgress,
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
 } from "./tauri/reader";
+
+const epubAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterGetTocMock = vi.hoisted(() =>
+  vi.fn(async () => [
+    {
+      id: "chapter-one",
+      title: "Chapter One",
+      href: "OPS/chapter-one.xhtml",
+      locator: {
+        kind: "epub" as const,
+        href: "OPS/chapter-one.xhtml",
+      },
+    },
+  ]),
+);
+const epubAdapterGoToMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -22,6 +43,7 @@ vi.mock("./tauri/library", () => ({
 }));
 
 vi.mock("./tauri/reader", () => ({
+  getEpubBookSource: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
   openTxtBook: vi.fn(),
@@ -29,6 +51,21 @@ vi.mock("./tauri/reader", () => ({
   saveReadingProgress: vi.fn(),
 }));
 
+vi.mock("./epub/EpubReaderAdapter", () => ({
+  EpubReaderAdapter: vi.fn(function MockEpubReaderAdapter() {
+    return {
+    close: epubAdapterCloseMock,
+    getToc: epubAdapterGetTocMock,
+    goTo: epubAdapterGoToMock,
+    next: epubAdapterNextMock,
+    open: epubAdapterOpenMock,
+    previous: epubAdapterPreviousMock,
+    setTheme: epubAdapterSetThemeMock,
+    };
+  }),
+}));
+
+const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const importBookMock = vi.mocked(importBook);
@@ -43,10 +80,18 @@ const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    epubAdapterCloseMock.mockClear();
+    epubAdapterGetTocMock.mockClear();
+    epubAdapterGoToMock.mockClear();
+    epubAdapterNextMock.mockClear();
+    epubAdapterOpenMock.mockClear();
+    epubAdapterPreviousMock.mockClear();
+    epubAdapterSetThemeMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
     );
+    getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
@@ -244,18 +289,41 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
   });
 
-  it("shows a later-stage reader message for EPUB and PDF books", async () => {
+  it("opens an EPUB book in the reader shell", async () => {
     const user = userEvent.setup();
     const epubBook = createBook({ id: "epub-book", title: "Layout Notes", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
     listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Layout Notes" })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
+    expect(markBookOpenedMock).toHaveBeenCalledWith("epub-book");
+    expect(openTxtBookMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("main", { name: "EPUB reader" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
+    expect(epubAdapterOpenMock).toHaveBeenCalledWith("epub-book");
+    expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
+  });
+
+  it("shows a later-stage reader message for PDF books", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "pdf-book", title: "Layout Notes PDF", format: "pdf" });
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Layout Notes PDF" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
     expect(await screen.findByText("Reader support coming later")).toBeVisible();
-    expect(screen.getByText("EPUB reading will be added in a later stage.")).toBeInTheDocument();
+    expect(screen.getByText("PDF reading will be added in a later stage.")).toBeInTheDocument();
     expect(markBookOpenedMock).not.toHaveBeenCalled();
     expect(openTxtBookMock).not.toHaveBeenCalled();
   });
