@@ -52,6 +52,26 @@
   - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，28 tests。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 4.3：PDF outline
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-outline`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-outline`。
+  - 扩展 `PdfReaderAdapter.getToc()`，优先读取 PDF.js `getOutline()`。
+  - 支持命名 destination 经 `getDestination()` 解析，页引用经 `getPageIndex()` 转换为 1-based `PdfLocator.page`。
+  - 无 outline 或 outline 不可定位时，降级为 `Page 1...Page N` 页码目录。
+  - 扩展 adapter Vitest 覆盖嵌套 outline、命名 destination、显式 destination 和页码 fallback。
+- 创建/修改的文件：
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.test.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts` 通过，30 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

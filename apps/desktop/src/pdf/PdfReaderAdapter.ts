@@ -43,6 +43,17 @@ interface PdfReaderAdapterOptions {
 }
 
 type PdfjsModule = typeof import("pdfjs-dist");
+type PdfDestination = unknown[];
+interface PdfRefProxy {
+  num: number;
+  gen: number;
+}
+
+interface PdfOutlineNode {
+  title: string;
+  dest: string | PdfDestination | null;
+  items?: PdfOutlineNode[];
+}
 
 const PDF_MIN_SCALE = 0.5;
 const PDF_MAX_SCALE = 3;
@@ -112,6 +123,15 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
   async getToc(): Promise<TocItem[]> {
     const document = this.requireDocument();
+    const outline = await document.getOutline();
+
+    if (outline !== null && outline.length > 0) {
+      const outlineItems = await pdfOutlineToTocItems(outline, document, document.numPages);
+
+      if (outlineItems.length > 0) {
+        return outlineItems;
+      }
+    }
 
     return Array.from({ length: document.numPages }, (_, index) =>
       pdfPageToTocItem(index + 1, document.numPages),
@@ -330,6 +350,117 @@ export function pageToProgress(page: number, totalPages: number): number {
   }
 
   return (normalizePdfPage(page, totalPages) - 1) / (totalPages - 1);
+}
+
+async function pdfOutlineToTocItems(
+  outline: PdfOutlineNode[],
+  document: PDFDocumentProxy,
+  totalPages: number,
+  parentId = "pdf-outline",
+): Promise<TocItem[]> {
+  const tocItems: TocItem[] = [];
+
+  for (const [index, item] of outline.entries()) {
+    const page = await resolvePdfOutlinePage(item, document, totalPages);
+    const children = await pdfOutlineToTocItems(
+      item.items ?? [],
+      document,
+      totalPages,
+      `${parentId}-${index + 1}`,
+    );
+
+    if (page === null && children.length === 0) {
+      continue;
+    }
+
+    const title = item.title.trim() || `Page ${page ?? 1}`;
+    const tocItem: TocItem = {
+      id: `${parentId}-${index + 1}`,
+      title,
+    };
+
+    if (page !== null) {
+      tocItem.locator = {
+        kind: "pdf",
+        page,
+      };
+    }
+
+    if (children.length > 0) {
+      tocItem.children = children;
+    }
+
+    tocItems.push(tocItem);
+  }
+
+  return tocItems;
+}
+
+async function resolvePdfOutlinePage(
+  item: PdfOutlineNode,
+  document: PDFDocumentProxy,
+  totalPages: number,
+): Promise<number | null> {
+  try {
+    const destination = await resolvePdfDestination(item.dest, document);
+
+    if (destination === null) {
+      return null;
+    }
+
+    const pageIndex = await resolvePdfDestinationPageIndex(destination, document);
+
+    if (pageIndex === null) {
+      return null;
+    }
+
+    return normalizePdfPage(pageIndex + 1, totalPages);
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePdfDestination(
+  destination: string | PdfDestination | null,
+  document: PDFDocumentProxy,
+): Promise<PdfDestination | null> {
+  if (typeof destination === "string") {
+    return document.getDestination(destination);
+  }
+
+  if (Array.isArray(destination)) {
+    return destination;
+  }
+
+  return null;
+}
+
+async function resolvePdfDestinationPageIndex(
+  destination: PdfDestination,
+  document: PDFDocumentProxy,
+): Promise<number | null> {
+  const pageReference = destination[0];
+
+  if (typeof pageReference === "number") {
+    return Math.max(0, Math.floor(pageReference));
+  }
+
+  if (isRefProxy(pageReference)) {
+    return document.getPageIndex(pageReference);
+  }
+
+  return null;
+}
+
+function isRefProxy(value: unknown): value is PdfRefProxy {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "num" in value &&
+    "gen" in value &&
+    typeof value.num === "number" &&
+    typeof value.gen === "number"
+  );
 }
 
 function pdfPageToTocItem(page: number, totalPages: number): TocItem {

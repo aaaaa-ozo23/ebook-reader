@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 4：PDF 阅读器正在进行；4.1 PDF.js 接入、4.2 页面导航和缩放已完成，下一步进入 4.3 PDF outline。
+大阶段 4：PDF 阅读器正在进行；4.1 PDF.js 接入、4.2 页面导航和缩放、4.3 PDF outline 已完成，下一步进入 4.4 PDF 进度恢复。
 
 ## 分支策略
 
@@ -193,6 +193,7 @@
 |--------|------|------|------|
 | 4.1 PDF.js 接入 | `codex/stage4-pdf-adapter` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts`，26 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；确认 `dist/pdfjs/pdf.worker.mjs` 和 `dist/pdfjs/cmaps/*` 生成 |
 | 4.2 页面导航和缩放 | `codex/stage4-pdf-navigation` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，28 tests；`pnpm.cmd --filter @reader/desktop build` |
+| 4.3 PDF outline | `codex/stage4-pdf-outline` | complete | `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts`，30 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 
 ## 大阶段 5：书签、高亮、想法与检索
 
