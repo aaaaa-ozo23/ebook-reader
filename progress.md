@@ -96,6 +96,21 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，30 tests。
 
+### 阶段 4.5：PDF 标注策略
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-annotation-spike`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-annotation-spike`。
+  - 检查本地 PDF.js 类型，确认 `getTextContent()`、`TextLayer` 和 `PageViewport` 坐标转换接口可用于后续文本层和高亮 overlay。
+  - 在 `findings.md` 记录 PDF 标注策略：阶段 4 不交付用户可见 CRUD；阶段 5 先补文本层，再做 PDF 坐标系 rect 保存和重放。
+  - 记录风险：canvas-only 无法可靠选择文本、扫描版 PDF 无文本层、旋转/裁剪页面需要坐标测试、跨页选择需要拆分为多页 rects。
+- 创建/修改的文件：
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+- 验证：
+  - 文档策略阶段，无用户可见代码变更；提交前执行 `git diff --check`。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

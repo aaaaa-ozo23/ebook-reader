@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 4：PDF 阅读器正在进行；4.1 PDF.js 接入、4.2 页面导航和缩放、4.3 PDF outline、4.4 PDF 进度恢复已完成，下一步进入 4.5 PDF 标注策略。
+大阶段 4：PDF 阅读器正在进行；4.1-4.5 已完成，下一步进入阶段 4 全量验收、合回 `main` 并推送。
 
 ## 分支策略
 
@@ -195,6 +195,7 @@
 | 4.2 页面导航和缩放 | `codex/stage4-pdf-navigation` | complete | `pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，28 tests；`pnpm.cmd --filter @reader/desktop build` |
 | 4.3 PDF outline | `codex/stage4-pdf-outline` | complete | `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts`，30 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 4.4 PDF 进度恢复 | `codex/stage4-pdf-progress` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，22 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，30 tests |
+| 4.5 PDF 标注策略 | `codex/stage4-pdf-annotation-spike` | complete | 更新 `findings.md` 记录文本层、PDF 坐标 rect、高亮重放、跨页选择和扫描版 PDF 风险 |
 
 ## 大阶段 5：书签、高亮、想法与检索
 

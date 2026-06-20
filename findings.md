@@ -83,6 +83,9 @@
 - 阶段 4.3 对没有 outline 或 outline 节点不可定位的 PDF 降级为 `Page 1...Page N` 页码目录，避免目录侧栏空置。
 - 阶段 4.4 Rust 后端 `Locator` 已新增 `pdf`，`PdfLocator` 支持 `page`、`zoomMode`、`scale` 和 `rects`，继续复用 `reading_progress.locator_json`，不新增 migration。
 - 阶段 4.4 PDF 进度保存会将 `page` 至少归一为 1、`scale` 限制到 `0.5..3.0`、非法 rect 过滤、非有限 progress 置空；PDF 书籍只接受 `pdf` locator。
+- 阶段 4.5 PDF 标注预研结论：当前 PDF 阅读器只渲染 canvas，浏览器无法基于 canvas 文本做可靠选择；阶段 5 实现 PDF 标注前应先叠加 PDF.js `TextLayer`。
+- 阶段 4.5 PDF 高亮 locator 建议保存 `page` + PDF 坐标系 rects + `selectedText/contextBefore/contextAfter`；重放时用 `PageViewport.convertToViewportRectangle()` 转回当前缩放下的 overlay 矩形。
+- 阶段 4.5 PDF 风险：扫描版/图片型 PDF 没有文本层，旋转或裁剪页面需要坐标转换测试；跨页选择应拆成多页 rects，MVP 可先交付单页选择和跨页只读回放。
 
 ## 技术决策
 
@@ -128,6 +131,7 @@
 | PDF 双页偏好与实际渲染分离 | 用户可保持 `Double` 偏好；窄屏或可用宽度不足时 adapter 返回 single rendered mode，窗口变宽后恢复双页 |
 | PDF outline 解析失败不阻断打开 | outline 常含外部 URL 或不可解析 destination；节点不可定位时跳过或保留可定位子项，整本书最终仍可用页码目录 |
 | PDF 进度继续走 JSON locator 扩展 | 现有 `reading_progress.locator_json` 已能承载格式区分，不需要为 page/scale/rects 新增 SQLite migration |
+| PDF 标注阶段不在阶段 4 交付 CRUD | 稳定阅读优先；标注需要文本层、矩形坐标转换、跨页选择和统一 annotations 表协同，放到阶段 5 更可控 |
 
 ## 遇到的问题
 
