@@ -120,6 +120,24 @@
 - 验证：
   - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
 
+### 阶段 3：EPUB E2E smoke 补齐
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 EPUB adapter 打开参数中显式设置 `openAs: "epub"`，让 Blob URL 和 Tauri asset URL 都按归档 EPUB 处理。
+  - 在 Playwright smoke 中运行时生成无版权最小 EPUB ZIP Blob，不提交二进制书籍文件。
+  - 覆盖从书架打开 EPUB、目录跳转、主题切换、返回书架，以及 console warning/error 收集。
+- 创建/修改的文件：
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20

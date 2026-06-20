@@ -62,6 +62,7 @@
 - 阶段 3.5 EPUB 高亮预研结论：epub.js `selected` 事件可以提供 `cfiRange`，`book.getRange(cfiRange)` 可用于提取选中文本和同一 DOM 上下文，`rendition.annotations.highlight/remove` 可按 CFI 添加和移除高亮。
 - 阶段 3.5 EPUB 高亮限制：CFI 依赖书籍内容结构，导入副本变化或书籍重新打包可能导致旧 CFI 无法定位；上下文提取应作为辅助恢复信息，不能替代 CFI。
 - 阶段 3.5 阶段 5 建议：标注保存 `locator.kind = "epub"`、`cfi`、`href`、`selectedText`、`contextBefore`、`contextAfter`、颜色和用户笔记；打开 EPUB 后按书籍标注列表重放 `annotations.highlight`，删除时调用 `annotations.remove(cfiRange, "highlight")`。
+- 阶段 3 E2E 使用 Playwright 页面上下文生成无压缩最小 EPUB ZIP Blob，避免提交版权不明或二进制书籍样本；adapter 显式设置 `openAs: "epub"`，让 Blob URL 和 Tauri asset URL 都按 EPUB 归档打开。
 
 ## 技术决策
 
@@ -98,6 +99,7 @@
 | EPUB 主题映射使用 adapter 内纯函数测试 | iframe CSS 注入不易在 jsdom 中完整渲染，先用纯映射测试锁定 CSS 输出，再用 App 测试锁定即时调用路径 |
 | EPUB 进度复用 `reading_progress.locator_json` | 现有表已经存 JSON；用 `kind` tag 扩展 locator 可兼容旧 TXT 进度并避免阶段 3.4 迁移风险 |
 | EPUB 高亮能力先停留在 adapter spike API | CFI selection/highlight 已有可用入口，但完整 CRUD 涉及统一标注表、颜色、列表和重放时机，留到阶段 5 更清晰 |
+| EPUB E2E fixture 运行时生成 | 既满足无版权样本要求，也避免仓库里长期维护二进制 fixture；测试仍走真实 epub.js 渲染 |
 
 ## 遇到的问题
 
