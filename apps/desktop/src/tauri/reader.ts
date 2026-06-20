@@ -124,7 +124,7 @@ export async function saveReadingProgress(
     return savedProgress;
   }
 
-  return invokeCommand<ReaderProgress<TxtLocator | EpubLocator>>("save_reading_progress", {
+  return invokeCommand<ReaderProgress<Locator>>("save_reading_progress", {
     bookId,
     locator,
     progress,

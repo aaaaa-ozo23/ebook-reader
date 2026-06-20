@@ -207,11 +207,40 @@ pub struct EpubLocator {
     pub progression: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PdfZoomMode {
+    FitWidth,
+    Custom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfLocator {
+    pub page: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zoom_mode: Option<PdfZoomMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rects: Option<Vec<PdfRect>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Locator {
     Txt(TxtLocator),
     Epub(EpubLocator),
+    Pdf(PdfLocator),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -583,7 +612,7 @@ pub fn save_reading_progress_at(
         find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
     normalize_locator_for_book(book.format, &mut locator)?;
 
-    let normalized_progress = progress.map(|value| value.clamp(0.0, 1.0));
+    let normalized_progress = normalize_progress(progress);
     let locator_json =
         serde_json::to_string(&locator).context("failed to serialize reading locator")?;
     let now = current_timestamp(&conn)?;
@@ -960,13 +989,48 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
 
             epub_locator.progression = epub_locator
                 .progression
-                .filter(|value| !value.is_nan())
+                .filter(|value| value.is_finite())
                 .map(|value| value.clamp(0.0, 1.0));
             Ok(())
         }
         (BookFormat::Epub, _) => bail!("EPUB books can only save epub reading progress"),
-        (BookFormat::Pdf, _) => bail!("PDF progress is not supported yet"),
+        (BookFormat::Pdf, Locator::Pdf(pdf_locator)) => {
+            pdf_locator.page = pdf_locator.page.max(1);
+            pdf_locator.scale = normalize_pdf_scale(pdf_locator.scale);
+
+            if let Some(rects) = &mut pdf_locator.rects {
+                rects.retain(is_valid_pdf_rect);
+
+                if rects.is_empty() {
+                    pdf_locator.rects = None;
+                }
+            }
+
+            Ok(())
+        }
+        (BookFormat::Pdf, _) => bail!("PDF books can only save pdf reading progress"),
     }
+}
+
+fn normalize_progress(progress: Option<f64>) -> Option<f64> {
+    progress
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.0, 1.0))
+}
+
+fn normalize_pdf_scale(scale: Option<f64>) -> Option<f64> {
+    scale
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(0.5, 3.0))
+}
+
+fn is_valid_pdf_rect(rect: &PdfRect) -> bool {
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.width >= 0.0
+        && rect.height >= 0.0
 }
 
 fn row_to_reader_progress(row: &Row<'_>) -> rusqlite::Result<ReaderProgress> {
@@ -1137,7 +1201,8 @@ mod tests {
         get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
         list_books_at, mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_theme_at,
         save_reading_progress_at, schema_version, BookFormat, EpubLocator, ImportBookStatus,
-        Locator, ReaderTheme, ReaderThemeMode, TxtLocator, DB_FILE_NAME,
+        Locator, PdfLocator, PdfRect, PdfZoomMode, ReaderTheme, ReaderThemeMode, TxtLocator,
+        DB_FILE_NAME,
     };
 
     #[test]
@@ -1607,18 +1672,81 @@ mod tests {
     }
 
     #[test]
+    fn reading_progress_persists_for_pdf_books() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let pdf_path = temp_dir.path().join("book.pdf");
+        fs::write(&pdf_path, "%PDF-1.4\n% placeholder").expect("write pdf");
+        let imported = import_book_at(&database_path, &library_dir, &pdf_path).expect("import pdf");
+        let locator = Locator::Pdf(PdfLocator {
+            page: 0,
+            zoom_mode: Some(PdfZoomMode::FitWidth),
+            rects: Some(vec![
+                PdfRect {
+                    x: 10.0,
+                    y: 12.0,
+                    width: 100.0,
+                    height: 28.0,
+                },
+                PdfRect {
+                    x: f64::NAN,
+                    y: 0.0,
+                    width: 10.0,
+                    height: 10.0,
+                },
+            ]),
+            scale: Some(6.0),
+        });
+
+        let saved = save_reading_progress_at(
+            &database_path,
+            &imported.book.id,
+            locator,
+            Some(f64::INFINITY),
+        )
+        .expect("save pdf progress");
+        init_database_at(&database_path).expect("reopen database");
+        let restored = get_reading_progress_at(&database_path, &imported.book.id)
+            .expect("get pdf progress")
+            .expect("progress exists");
+
+        let expected_locator = Locator::Pdf(PdfLocator {
+            page: 1,
+            zoom_mode: Some(PdfZoomMode::FitWidth),
+            rects: Some(vec![PdfRect {
+                x: 10.0,
+                y: 12.0,
+                width: 100.0,
+                height: 28.0,
+            }]),
+            scale: Some(3.0),
+        });
+
+        assert_eq!(saved.book_id, imported.book.id);
+        assert_eq!(saved.progress, None);
+        assert_eq!(saved.locator, expected_locator);
+        assert_eq!(restored.locator, expected_locator);
+        assert_eq!(restored.progress, None);
+    }
+
+    #[test]
     fn reading_progress_rejects_format_mismatched_locators() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
         let library_dir = temp_dir.path().join("library");
         let txt_path = temp_dir.path().join("book.txt");
         let epub_path = temp_dir.path().join("book.epub");
+        let pdf_path = temp_dir.path().join("book.pdf");
         fs::write(&txt_path, "第一章 初见\n正文").expect("write txt");
         fs::write(&epub_path, "epub placeholder").expect("write epub");
+        fs::write(&pdf_path, "%PDF-1.4\n% placeholder").expect("write pdf");
         let imported_txt =
             import_book_at(&database_path, &library_dir, &txt_path).expect("import txt");
         let imported_epub =
             import_book_at(&database_path, &library_dir, &epub_path).expect("import epub");
+        let imported_pdf =
+            import_book_at(&database_path, &library_dir, &pdf_path).expect("import pdf");
 
         let txt_book_error = save_reading_progress_at(
             &database_path,
@@ -1652,6 +1780,16 @@ mod tests {
             None,
         )
         .expect_err("empty epub locator should fail");
+        let pdf_book_error = save_reading_progress_at(
+            &database_path,
+            &imported_pdf.book.id,
+            Locator::Txt(TxtLocator {
+                chapter_id: None,
+                char_offset: 0,
+            }),
+            Some(0.2),
+        )
+        .expect_err("pdf book should reject txt locator");
 
         assert!(txt_book_error
             .to_string()
@@ -1662,6 +1800,9 @@ mod tests {
         assert!(invalid_epub_error
             .to_string()
             .contains("requires an href or cfi"));
+        assert!(pdf_book_error
+            .to_string()
+            .contains("PDF books can only save pdf"));
     }
 
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {
