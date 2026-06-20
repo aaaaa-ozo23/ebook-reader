@@ -2,6 +2,44 @@
 
 ## 会话：2026-06-20
 
+### 产品大阶段 3：EPUB 阅读器启动
+- **状态：** in_progress
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 读取 Build Web Apps React 性能实践、前端测试调试说明和现有 `task_plan.md` / `findings.md` / `progress.md`。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 设置本地 Git 身份为 `aaaaa-ozo23` / `aaaaa-ozo23@users.noreply.github.com`。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage3-epub-adapter` 分支。
+
+### 阶段 3.1：EPUB 适配器
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 安装 `epubjs@0.3.93` 到 `@reader/desktop`。
+  - 新增 `EpubReaderAdapter`，通过动态 import 封装 epub.js open/close/TOC/goTo/currentLocator/theme/selection/highlight 能力。
+  - 在 `tauri/reader.ts` 新增 `getEpubBookSource`，Tauri runtime 使用 `convertFileSrc(book.libraryPath)`，浏览器 fallback 使用显式 localStorage source fixture。
+  - 启用 Tauri asset protocol，scope 限定为 `$APPDATA/library/**`，并为 Rust `tauri` 依赖开启 `protocol-asset` feature。
+  - 更新 `pnpm-workspace.yaml` 的 allowBuilds，记录 `core-js`、`es5-ext` 和既有 `esbuild`。
+- 创建/修改的文件：
+  - `apps/desktop/package.json`
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/tauri.conf.json`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20
