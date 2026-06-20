@@ -76,6 +76,9 @@
 - 阶段 4.1 PDF.js worker 使用 `pdfjs-dist/build/pdf.worker.mjs?url` 交给 Vite 构建；CMap 和 standard fonts 通过本地 Vite 插件在 dev 时从 `node_modules/pdfjs-dist` 服务，build 后复制到 `dist/pdfjs/`。
 - 阶段 4.1 PDF source 规则与 EPUB 对齐：Tauri runtime 下用 `convertFileSrc(book.libraryPath)`，浏览器/e2e fallback 只读取显式 localStorage `reader:fallback:pdfSources`，不新增前端 fs 权限。
 - 阶段 4.1 `PdfReaderAdapter` 放在 `apps/desktop/src/pdf`，PDF.js 依赖 DOM/canvas，不进入 `packages/core`；`packages/core` 仅扩展纯类型 `PdfLocator.zoomMode`。
+- 阶段 4.2 已移除 PDF 打开拦截，PDF 书籍从书架进入 `ReaderShell`，通过 `PdfReaderContent` 渲染 canvas 页面。
+- 阶段 4.2 PDF 控件沿用 EPUB 底部控制区风格，支持 `Previous`、`Next`、`Single`、`Double`、页码输入、缩放加减和 `Fit width`。
+- 阶段 4.2 在 Vitest 中用 mock adapter 覆盖 PDF 打开、单/双页切换、页码跳转、缩放、适合宽度、进度恢复和保存链路。
 
 ## 技术决策
 
@@ -117,6 +120,8 @@
 | EPUB 快速跳转使用 locations 预览模型 | 拖动期间不调用 `rendition.display`，只在释放后跳转一次，能让页码、百分比和目录即时跟随，同时避免 iframe 重排造成卡顿 |
 | PDF.js 资源由 Vite 插件服务和复制 | worker 用 Vite URL import；CMap 和 standard fonts 需要稳定 URL，避免 Tauri/WebView 环境下依赖 node_modules 路径 |
 | PDF adapter 放在 `apps/desktop/src/pdf` | PDF.js 依赖 DOM/canvas 和 worker，不进入纯 TypeScript core 包 |
+| PDF 阅读 UI 复用 EPUB 控制条模型 | PDF 单页/双页、页码、缩放和适合宽度放在正文下方，目录侧栏与主题/专注模式继续由 ReaderShell 管理 |
+| PDF 双页偏好与实际渲染分离 | 用户可保持 `Double` 偏好；窄屏或可用宽度不足时 adapter 返回 single rendered mode，窗口变宽后恢复双页 |
 
 ## 遇到的问题
 
