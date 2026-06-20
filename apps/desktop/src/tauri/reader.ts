@@ -3,6 +3,7 @@ import {
   defaultReaderTheme,
   type EpubLocator,
   type Locator,
+  type PdfLocator,
   type ReaderProgress,
   type ReaderTheme,
   type TxtDocument,
@@ -11,6 +12,7 @@ import {
 
 const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
 const FALLBACK_EPUB_SOURCES_KEY = "reader:fallback:epubSources";
+const FALLBACK_PDF_SOURCES_KEY = "reader:fallback:pdfSources";
 const FALLBACK_TXT_DOCUMENTS_KEY = "reader:fallback:txtDocuments";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
@@ -59,6 +61,26 @@ export async function getEpubBookSource(book: Book): Promise<string> {
   return convertFileSrc(book.libraryPath);
 }
 
+export async function getPdfBookSource(book: Book): Promise<string> {
+  if (book.format !== "pdf") {
+    throw new Error("PDF source can only be created for pdf books.");
+  }
+
+  if (!hasTauriRuntime()) {
+    const fallbackSource = getFallbackPdfSource(book.id);
+
+    if (fallbackSource !== null) {
+      return fallbackSource;
+    }
+
+    return book.libraryPath;
+  }
+
+  const { convertFileSrc } = await import("@tauri-apps/api/core");
+
+  return convertFileSrc(book.libraryPath);
+}
+
 export async function getReaderTheme(): Promise<ReaderTheme> {
   if (!hasTauriRuntime()) {
     return getFallbackReaderTheme();
@@ -88,9 +110,9 @@ export async function getReadingProgress<TLocator extends Locator = Locator>(
 
 export async function saveReadingProgress(
   bookId: string,
-  locator: TxtLocator | EpubLocator,
+  locator: Locator,
   progress?: number,
-): Promise<ReaderProgress<TxtLocator | EpubLocator>> {
+): Promise<ReaderProgress<Locator>> {
   if (!hasTauriRuntime()) {
     const savedProgress = {
       bookId,
@@ -107,6 +129,25 @@ export async function saveReadingProgress(
     locator,
     progress,
   });
+}
+
+function getFallbackPdfSource(bookId: string): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const rawSources = window.localStorage.getItem(FALLBACK_PDF_SOURCES_KEY);
+
+  if (rawSources === null) {
+    return null;
+  }
+
+  try {
+    const sources = JSON.parse(rawSources) as Record<string, string>;
+    return sources[bookId] ?? null;
+  } catch {
+    return null;
+  }
 }
 
 function getFallbackEpubSource(bookId: string): string | null {
@@ -199,18 +240,21 @@ function getFallbackReadingProgress<TLocator extends Locator>(
 
 function setFallbackReadingProgress(
   bookId: string,
-  progress: ReaderProgress<TxtLocator | EpubLocator>,
+  progress: ReaderProgress<TxtLocator | EpubLocator | PdfLocator>,
 ): void {
   if (typeof window === "undefined") {
     return;
   }
 
   const rawProgress = window.localStorage.getItem(FALLBACK_READING_PROGRESS_KEY);
-  let progressByBook: Record<string, ReaderProgress<TxtLocator | EpubLocator>> = {};
+  let progressByBook: Record<string, ReaderProgress<TxtLocator | EpubLocator | PdfLocator>> = {};
 
   if (rawProgress !== null) {
     try {
-      progressByBook = JSON.parse(rawProgress) as Record<string, ReaderProgress<TxtLocator | EpubLocator>>;
+      progressByBook = JSON.parse(rawProgress) as Record<
+        string,
+        ReaderProgress<TxtLocator | EpubLocator | PdfLocator>
+      >;
     } catch {
       progressByBook = {};
     }

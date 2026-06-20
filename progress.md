@@ -1,5 +1,34 @@
 # 进度日志
 
+## 2026-06-20 大阶段 4：PDF 阅读器
+
+### 阶段 4.1：PDF.js 接入
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-adapter`
+- 执行的操作：
+  - 从 `main` 快进 `codex/v0.1.0-mvp-integration`，创建 `codex/stage4-pdf-adapter`。
+  - 安装 `pdfjs-dist@6.0.227` 到 `@reader/desktop`。
+  - 新增 `PdfReaderAdapter`，通过动态 import 加载 PDF.js，配置 `GlobalWorkerOptions.workerSrc`，封装 open/close/goTo/currentLocator/page render/previous/next/zoom/fitWidth/viewMode。
+  - 在 Vite 配置中新增本地 PDF.js 资源插件，dev 服务 `cmaps`、`standard_fonts`，build 复制资源和 worker 到 `dist/pdfjs/`。
+  - 在 `tauri/reader.ts` 新增 `getPdfBookSource`，Tauri 使用 `convertFileSrc(book.libraryPath)`，浏览器 fallback 使用显式 localStorage source fixture。
+  - 在 `@reader/core` 为 `PdfLocator` 增加 `zoomMode?: "fit-width" | "custom"`。
+- 创建/修改的文件：
+  - `apps/desktop/package.json`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.test.ts`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `apps/desktop/vite.config.ts`
+  - `packages/core/src/index.ts`
+  - `pnpm-lock.yaml`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts` 通过，26 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过，并确认 `dist/pdfjs/pdf.worker.mjs`、`dist/pdfjs/cmaps/*` 生成。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

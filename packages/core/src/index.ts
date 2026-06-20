@@ -88,6 +88,7 @@ export interface EpubLocator extends LocatorContext {
 export interface PdfLocator extends LocatorContext {
   kind: "pdf";
   page: number;
+  zoomMode?: "fit-width" | "custom";
   rects?: Array<{
     x: number;
     y: number;

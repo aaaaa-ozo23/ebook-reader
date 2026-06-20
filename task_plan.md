@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 1/2 修复优化已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
+大阶段 4：PDF 阅读器正在进行；4.1 PDF.js 接入已完成，下一步进入 4.2 页面导航和缩放。
 
 ## 分支策略
 
@@ -186,6 +186,12 @@
 | 4.3 PDF outline | `codex/stage4-pdf-outline` | 解析 PDF outline 到 `TocItem[]`；无 outline 时降级为页码列表 | 有目录样本可跳转；无目录样本可使用 |
 | 4.4 PDF 进度恢复 | `codex/stage4-pdf-progress` | 实现 `PdfLocator`，保存 page、scale、可选 rects | 重启恢复页码和缩放 |
 | 4.5 PDF 标注策略 | `codex/stage4-pdf-annotation-spike` | 评估文本选择高亮与矩形区域高亮；决定 MVP 范围 | 更新 `findings.md`，避免阻塞首版 |
+
+### 阶段 4 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 4.1 PDF.js 接入 | `codex/stage4-pdf-adapter` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts`，26 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；确认 `dist/pdfjs/pdf.worker.mjs` 和 `dist/pdfjs/cmaps/*` 生成 |
 
 ## 大阶段 5：书签、高亮、想法与检索
 
