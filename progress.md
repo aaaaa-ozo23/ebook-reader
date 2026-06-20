@@ -111,6 +111,22 @@
 - 验证：
   - 文档策略阶段，无用户可见代码变更；提交前执行 `git diff --check`。
 
+### 阶段 4 验收测试补齐：PDF smoke
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-e2e-smoke`
+- 执行的操作：
+  - 新增 Playwright PDF smoke，运行时生成最小 3 页 PDF Blob，不提交二进制 fixture。
+  - 验证书架打开 PDF、PDF canvas 非空、页码跳转、`Double` 双页、`Fit width` 缩放和返回书架。
+  - 修复 PDF reader 卸载/ResizeObserver 竞态：卸载时先清空 adapter ref 再 close，并保护 resize callback。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 tests。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

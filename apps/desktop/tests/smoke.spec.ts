@@ -461,3 +461,162 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
   expect(consoleIssues).toEqual([]);
 });
+
+test("opens a generated PDF reader and uses page and zoom controls", async ({ page }) => {
+  const consoleIssues = collectConsoleIssues(page);
+
+  await page.setViewportSize({
+    width: 1440,
+    height: 900,
+  });
+  await page.addInitScript(() => {
+    const book = {
+      id: "e2e-generated-pdf",
+      title: "Generated PDF",
+      format: "pdf",
+      sourcePath: "D:\\books\\generated.pdf",
+      libraryPath: "D:\\library\\generated.pdf",
+      fileHash: "generated-pdf-hash",
+      createdAt: "2026-06-20T08:00:00.000Z",
+      updatedAt: "2026-06-20T08:00:00.000Z",
+    };
+
+    function padOffset(offset: number): string {
+      return String(offset).padStart(10, "0");
+    }
+
+    function createPageStream(pageNumber: number): string {
+      return [
+        "BT",
+        "/F1 28 Tf",
+        "72 720 Td",
+        `(PDF Page ${pageNumber}) Tj`,
+        "0 -46 Td",
+        "(Generated Playwright fixture) Tj",
+        "ET",
+      ].join("\n");
+    }
+
+    function createStreamObject(stream: string): string {
+      return `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+    }
+
+    function createGeneratedPdfUrl(): string {
+      const pageOneStream = createPageStream(1);
+      const pageTwoStream = createPageStream(2);
+      const pageThreeStream = createPageStream(3);
+      const objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+        createStreamObject(pageOneStream),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>",
+        createStreamObject(pageTwoStream),
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>",
+        createStreamObject(pageThreeStream),
+      ];
+      const offsets: number[] = [0];
+      let pdf = "%PDF-1.4\n% Generated test fixture\n";
+
+      for (const [index, object] of objects.entries()) {
+        offsets[index + 1] = pdf.length;
+        pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+      }
+
+      const xrefOffset = pdf.length;
+      pdf += `xref\n0 ${objects.length + 1}\n`;
+      pdf += "0000000000 65535 f \n";
+
+      for (let index = 1; index <= objects.length; index += 1) {
+        pdf += `${padOffset(offsets[index])} 00000 n \n`;
+      }
+
+      pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+      pdf += `startxref\n${xrefOffset}\n%%EOF`;
+
+      return URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+    }
+
+    window.localStorage.setItem("reader:fallback:books", JSON.stringify([book]));
+    window.localStorage.setItem(
+      "reader:fallback:pdfSources",
+      JSON.stringify({
+        "e2e-generated-pdf": createGeneratedPdfUrl(),
+      }),
+    );
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Generated PDF" })).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  const reader = page.getByRole("main", { name: "PDF reader" });
+  await expect(reader).toBeVisible();
+  await expect(page.getByRole("button", { name: "Page 1" })).toBeVisible();
+  await expect(page.locator(".reader-pdf-canvas").first()).toBeVisible();
+  await expect(page.getByText("Page 1 / 3")).toBeVisible();
+  await expect.poll(() => firstPdfCanvasHasInk(page), { timeout: 20_000 }).toBe(true);
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByText("Page 2 / 3")).toBeVisible();
+
+  const pageInput = page.getByRole("spinbutton", { name: "PDF page number" });
+  await pageInput.fill("3");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Page 3 / 3")).toBeVisible();
+
+  await pageInput.fill("1");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Page 1 / 3")).toBeVisible();
+
+  await page.getByRole("button", { name: "Hide contents" }).click();
+  await page.getByRole("button", { name: "Double" }).click();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByText("Pages 1-2 / 3")).toBeVisible();
+
+  await page.getByRole("button", { name: "Fit width" }).click();
+  await expect(page.locator(".reader-pdf-zoom-group strong")).not.toHaveText("100%");
+  await expect.poll(() => firstPdfCanvasHasInk(page), { timeout: 20_000 }).toBe(true);
+
+  await page.getByRole("button", { name: "Shelf", exact: true }).click();
+  await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+  expect(
+    consoleIssues.filter(
+      (issue) => !issue.includes("Canvas2D: Multiple readback operations using getImageData"),
+    ),
+  ).toEqual([]);
+});
+
+async function firstPdfCanvasHasInk(page: Page): Promise<boolean> {
+  return page.locator(".reader-pdf-canvas").first().evaluate((canvasElement) => {
+    const canvas = canvasElement as HTMLCanvasElement;
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      return false;
+    }
+
+    const context = canvas.getContext("2d");
+
+    if (context === null) {
+      return false;
+    }
+
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (
+        pixels[index + 3] !== 0 &&
+        (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}

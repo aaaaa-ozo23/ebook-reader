@@ -1422,10 +1422,10 @@ function PdfReaderContent({
     return () => {
       isCurrent = false;
       renderSequenceRef.current += 1;
-      void openedAdapter?.close();
       if (adapterRef.current === openedAdapter) {
         adapterRef.current = null;
       }
+      void openedAdapter?.close();
     };
   }, [book, handlePositionChange, onActiveTocItemChange, onTocChange, renderVisiblePages]);
 
@@ -1447,10 +1447,16 @@ function PdfReaderContent({
         return;
       }
 
-      const nextPosition = adapter.setViewMode(requestedViewModeRef.current, frame.clientWidth);
-      positionRef.current = nextPosition;
-      setPosition(nextPosition);
-      void renderVisiblePages();
+      try {
+        const nextPosition = adapter.setViewMode(requestedViewModeRef.current, frame.clientWidth);
+        positionRef.current = nextPosition;
+        setPosition(nextPosition);
+        void renderVisiblePages();
+      } catch (resizeError) {
+        if (adapterRef.current === adapter) {
+          setError(getErrorMessage(resizeError));
+        }
+      }
     });
 
     resizeObserver.observe(frame);
