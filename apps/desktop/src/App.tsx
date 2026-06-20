@@ -121,15 +121,6 @@ function App() {
     setBookActionMenu(null);
     setFeedback(null);
 
-    if (book.format === "pdf") {
-      setFeedback({
-        kind: "info",
-        title: "Reader support coming later",
-        message: `${formatBookFormat(book.format)} reading will be added in a later stage.`,
-      });
-      return;
-    }
-
     setOpeningBookId(book.id);
 
     try {

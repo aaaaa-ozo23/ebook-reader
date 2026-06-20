@@ -29,6 +29,29 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过，并确认 `dist/pdfjs/pdf.worker.mjs`、`dist/pdfjs/cmaps/*` 生成。
 
+### 阶段 4.2：页面导航和缩放
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-navigation`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-navigation`。
+  - 移除 `App.tsx` 中 PDF 打开拦截，PDF 书籍可进入阅读页。
+  - 在 `ReaderShell` 新增 `PdfReaderContent`，接入 `PdfReaderAdapter`、PDF source、进度恢复、目录跳转和 canvas 渲染。
+  - 增加 PDF 底部控制条：`Previous`、`Next`、`Single`、`Double`、页码输入、缩放加减和 `Fit width`。
+  - 增加窄屏和专注模式 CSS，双页偏好在窄屏下实际回退单页但保留用户选择。
+  - 扩展 App Vitest mock 和覆盖 PDF 打开、单/双页切换、页码跳转、缩放、适合宽度、进度恢复与保存。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，28 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化
