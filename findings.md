@@ -72,6 +72,10 @@
 - 阶段 3.x epub.js `rendition.resize()` 不能在 `display()` 完成前调用，否则可能出现 `Cannot read properties of undefined (reading 'resize')`；spread resize 需要等待 rendition manager 可用，初始位置报告也要等 currentLocation 存在。
 - 阶段 3.x Focus 模式 EPUB 底部空白偏大的原因是隐藏顶部栏后仍沿用普通阅读视口的底部 padding 和控制条间距；本轮用 Focus 专属 padding、页面高度计算和更紧凑的 EPUB 控制条扩大正文高度。
 - 阶段 3.x EPUB 倒数第二页点击 Next 无法进入最后一页的原因是 epub.js 原生 `rendition.next()` 在最后合成页边界可能 no-op；本轮只在倒数第二页及之后用 `book.locations.cfiFromLocation(totalPages - 1)` 补偿跳转，普通翻页仍保留原生路径。
+- 阶段 4.1 已安装 `pdfjs-dist` 6.0.227 到 `@reader/desktop`，包许可证为 Apache-2.0，现代构建包含 `build/pdf.worker.mjs`、`cmaps/` 和 `standard_fonts/`。
+- 阶段 4.1 PDF.js worker 使用 `pdfjs-dist/build/pdf.worker.mjs?url` 交给 Vite 构建；CMap 和 standard fonts 通过本地 Vite 插件在 dev 时从 `node_modules/pdfjs-dist` 服务，build 后复制到 `dist/pdfjs/`。
+- 阶段 4.1 PDF source 规则与 EPUB 对齐：Tauri runtime 下用 `convertFileSrc(book.libraryPath)`，浏览器/e2e fallback 只读取显式 localStorage `reader:fallback:pdfSources`，不新增前端 fs 权限。
+- 阶段 4.1 `PdfReaderAdapter` 放在 `apps/desktop/src/pdf`，PDF.js 依赖 DOM/canvas，不进入 `packages/core`；`packages/core` 仅扩展纯类型 `PdfLocator.zoomMode`。
 
 ## 技术决策
 
@@ -111,6 +115,8 @@
 | EPUB E2E fixture 运行时生成 | 既满足无版权样本要求，也避免仓库里长期维护二进制 fixture；测试仍走真实 epub.js 渲染 |
 | 主题面板打开时进入布局状态 | 通过 `reader-shell--theme-open` 控制桌面预留空间和移动端静态排布，避免浮层挡住 EPUB/TXT 内容 |
 | EPUB 快速跳转使用 locations 预览模型 | 拖动期间不调用 `rendition.display`，只在释放后跳转一次，能让页码、百分比和目录即时跟随，同时避免 iframe 重排造成卡顿 |
+| PDF.js 资源由 Vite 插件服务和复制 | worker 用 Vite URL import；CMap 和 standard fonts 需要稳定 URL，避免 Tauri/WebView 环境下依赖 node_modules 路径 |
+| PDF adapter 放在 `apps/desktop/src/pdf` | PDF.js 依赖 DOM/canvas 和 worker，不进入纯 TypeScript core 包 |
 
 ## 遇到的问题
 
