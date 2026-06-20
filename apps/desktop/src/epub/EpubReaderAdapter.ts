@@ -244,16 +244,20 @@ function clampProgress(value: number | undefined): number | undefined {
   return Math.min(1, Math.max(0, value));
 }
 
-function buildEpubThemeRules(theme: ReaderTheme): Record<string, Record<string, string>> {
+export function buildEpubThemeRules(theme: ReaderTheme): Record<string, Record<string, string>> {
   return {
+    html: {
+      background: `${theme.backgroundColor} !important`,
+      color: `${theme.textColor} !important`,
+    },
     body: {
       background: `${theme.backgroundColor} !important`,
       color: `${theme.textColor} !important`,
       "font-family": `${theme.fontFamily} !important`,
       "font-size": `${theme.fontSize}px !important`,
       "line-height": `${theme.lineHeight} !important`,
-      margin: `0 ${theme.pageMargin}px !important`,
-      padding: "0 !important",
+      margin: "0 !important",
+      padding: `0 ${theme.pageMargin}px !important`,
     },
     "body, p, div, section, article": {
       color: `${theme.textColor} !important`,
@@ -261,6 +265,7 @@ function buildEpubThemeRules(theme: ReaderTheme): Record<string, Record<string, 
       "line-height": `${theme.lineHeight} !important`,
     },
     p: {
+      "margin-top": "0 !important",
       "margin-bottom": `${theme.paragraphSpacing}px !important`,
     },
     "a, a:visited": {
