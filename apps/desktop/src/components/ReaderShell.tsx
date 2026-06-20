@@ -159,7 +159,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
         const [openedDocument, savedTheme, savedProgress] = await Promise.all([
           openTxtBook(bookId),
           getReaderTheme(),
-          getReadingProgress(bookId),
+          getReadingProgress<TxtLocator>(bookId),
         ]);
 
         if (isCurrent) {
