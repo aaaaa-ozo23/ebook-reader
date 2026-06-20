@@ -9,22 +9,27 @@ import {
 } from "react";
 import {
   defaultReaderTheme,
+  type Book,
+  type EpubLocator,
   type ReaderProgress,
   type ReaderTheme,
   type ReaderThemeMode,
+  type TocItem,
   type TxtChapter,
   type TxtDocument,
   type TxtLocator,
 } from "@reader/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
+  getEpubBookSource,
   getReaderTheme,
   getReadingProgress,
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
 } from "../tauri/reader";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { EpubReaderAdapter } from "../epub/EpubReaderAdapter";
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -84,7 +89,7 @@ function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
 }
 
 interface ReaderShellProps {
-  bookId: string;
+  book: Book;
   onBackToLibrary: () => void;
 }
 
@@ -112,6 +117,11 @@ interface ChapterJumpRequest {
   requestId: number;
 }
 
+interface EpubJumpRequest {
+  locator: EpubLocator;
+  requestId: number;
+}
+
 interface RenderedVirtualItem {
   index: number;
   start: number;
@@ -129,49 +139,88 @@ interface ReaderVirtualIndexEntry {
   index: number;
 }
 
-interface PendingProgress {
+interface PendingTxtProgress {
   locator: TxtLocator;
   progress?: number;
 }
 
-export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
+interface PendingEpubProgress {
+  locator: EpubLocator;
+  progress?: number;
+}
+
+export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(book.format === "txt");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
-  const [readingProgress, setReadingProgress] = useState<ReaderProgress<TxtLocator> | null>(null);
-  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+  const [readingProgress, setReadingProgress] =
+    useState<ReaderProgress<TxtLocator> | null>(null);
+  const [tocItems, setTocItems] = useState<TocItem[]>([]);
+  const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [chapterJumpRequest, setChapterJumpRequest] = useState<ChapterJumpRequest | null>(null);
+  const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
 
-    async function loadDocument() {
+    async function loadTheme() {
+      try {
+        const savedTheme = await getReaderTheme();
+
+        if (isCurrent) {
+          setTheme(savedTheme);
+        }
+      } catch (themeLoadError) {
+        if (isCurrent) {
+          setThemeError(getErrorMessage(themeLoadError));
+        }
+      }
+    }
+
+    void loadTheme();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book.id]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    if (book.format !== "txt") {
+      return () => {
+        isCurrent = false;
+      };
+    }
+
+    async function loadTxtDocument() {
       setIsLoading(true);
       setError(null);
-      setActiveChapterId(null);
+      setActiveTocItemId(null);
+      setTocItems([]);
 
       try {
-        const [openedDocument, savedTheme, savedProgress] = await Promise.all([
-          openTxtBook(bookId),
-          getReaderTheme(),
-          getReadingProgress<TxtLocator>(bookId),
+        const [openedDocument, savedProgress] = await Promise.all([
+          openTxtBook(book.id),
+          getReadingProgress<TxtLocator>(book.id),
         ]);
 
         if (isCurrent) {
+          const nextTocItems = openedDocument.chapters.map(mapTxtChapterToTocItem);
           setDocument(openedDocument);
-          setTheme(savedTheme);
           setReadingProgress(savedProgress);
-          setActiveChapterId(openedDocument.chapters[0]?.id ?? null);
+          setTocItems(nextTocItems);
+          setActiveTocItemId(openedDocument.chapters[0]?.id ?? null);
         }
       } catch (openError) {
         if (isCurrent) {
           setError(getErrorMessage(openError));
-          setActiveChapterId(null);
+          setActiveTocItemId(null);
         }
       } finally {
         if (isCurrent) {
@@ -180,12 +229,12 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       }
     }
 
-    void loadDocument();
+    void loadTxtDocument();
 
     return () => {
       isCurrent = false;
     };
-  }, [bookId]);
+  }, [book.format, book.id]);
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -230,41 +279,64 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
     });
   }, []);
 
-  const handleProgressChange = useCallback(
+  const handleTxtProgressChange = useCallback(
     (locator: TxtLocator, progressValue?: number) => {
       setReadingProgress({
-        bookId,
+        bookId: book.id,
         locator,
         progress: progressValue,
         updatedAt: new Date().toISOString(),
       });
 
-      void saveReadingProgress(bookId, locator, progressValue);
+      void saveReadingProgress(book.id, locator, progressValue);
     },
-    [bookId],
+    [book.id],
   );
 
-  const handleJumpToChapter = useCallback(
-    (chapterId: string) => {
-      const chapter = chapterById.get(chapterId);
-      if (chapter !== undefined && document !== null) {
-        setChapterJumpRequest((currentRequest) => ({
-          chapterId,
+  const handleJumpToTocItem = useCallback(
+    (tocItemId: string) => {
+      const tocItem = findTocItemById(tocItems, tocItemId);
+
+      if (tocItem === null) {
+        return;
+      }
+
+      if (book.format === "txt") {
+        const chapter = chapterById.get(tocItem.id);
+
+        if (chapter !== undefined && document !== null) {
+          setChapterJumpRequest((currentRequest) => ({
+            chapterId: chapter.id,
+            requestId: (currentRequest?.requestId ?? 0) + 1,
+          }));
+          setActiveTocItemId(chapter.id);
+          handleTxtProgressChange(
+            {
+              kind: "txt",
+              chapterId: chapter.id,
+              charOffset: chapter.startChar,
+            },
+            chapter.startChar / Math.max(document.charCount, 1),
+          );
+        }
+        return;
+      }
+
+      if (book.format === "epub" && tocItem.locator?.kind === "epub") {
+        setEpubJumpRequest((currentRequest) => ({
+          locator: tocItem.locator as EpubLocator,
           requestId: (currentRequest?.requestId ?? 0) + 1,
         }));
-        setActiveChapterId(chapter.id);
-        handleProgressChange(
-          {
-            kind: "txt",
-            chapterId: chapter.id,
-            charOffset: chapter.startChar,
-          },
-          chapter.startChar / Math.max(document.charCount, 1),
-        );
+        setActiveTocItemId(tocItem.id);
       }
     },
-    [chapterById, document, handleProgressChange],
+    [book.format, chapterById, document, handleTxtProgressChange, tocItems],
   );
+
+  const handleEpubTocChange = useCallback((nextTocItems: TocItem[]) => {
+    setTocItems(nextTocItems);
+    setActiveTocItemId((currentId) => currentId ?? nextTocItems[0]?.id ?? null);
+  }, []);
 
   const readerStyle = useMemo(
     () =>
@@ -288,14 +360,15 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       }`}
       style={readerStyle}
       data-reader-theme={theme.mode}
-      aria-label="TXT reader"
+      aria-label={`${formatBookFormat(book.format)} reader`}
     >
       <ReaderSidebar
-        activeChapterId={activeChapterId}
-        chapters={document?.chapters ?? []}
+        activeTocItemId={activeTocItemId}
+        items={tocItems}
         isOpen={isSidebarOpen}
+        label={`${formatBookFormat(book.format)} contents`}
         onBackToLibrary={onBackToLibrary}
-        onJumpToChapter={handleJumpToChapter}
+        onJumpToItem={handleJumpToTocItem}
       />
       <section className="reader-main">
         <header className="reader-topbar">
@@ -304,8 +377,8 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
               Shelf
             </button>
             <div>
-              <p className="reader-kicker">TXT reading</p>
-              <h1>{document?.book.title ?? "Opening book"}</h1>
+              <p className="reader-kicker">{formatBookFormat(book.format)} reading</p>
+              <h1>{book.title}</h1>
             </div>
           </div>
           <div className="reader-toolbar" aria-label="Reader tools">
@@ -325,17 +398,30 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
             Exit focus
           </button>
         ) : null}
-        <ReaderContent
-          blocks={blocks}
-          document={document}
-          error={error}
-          initialProgress={readingProgress}
-          isLoading={isLoading}
-          jumpRequest={chapterJumpRequest}
-          onActiveChapterChange={setActiveChapterId}
-          onProgressChange={handleProgressChange}
-          onBackToLibrary={onBackToLibrary}
-        />
+        {book.format === "txt" ? (
+          <TxtReaderContent
+            blocks={blocks}
+            document={document}
+            error={error}
+            initialProgress={readingProgress}
+            isLoading={isLoading}
+            jumpRequest={chapterJumpRequest}
+            onActiveChapterChange={setActiveTocItemId}
+            onProgressChange={handleTxtProgressChange}
+            onBackToLibrary={onBackToLibrary}
+          />
+        ) : null}
+        {book.format === "epub" ? (
+          <EpubReaderContent
+            book={book}
+            jumpRequest={epubJumpRequest}
+            theme={theme}
+            tocItems={tocItems}
+            onActiveTocItemChange={setActiveTocItemId}
+            onBackToLibrary={onBackToLibrary}
+            onTocChange={handleEpubTocChange}
+          />
+        ) : null}
         <ThemePanel
           isOpen={isThemePanelOpen}
           theme={theme}
@@ -348,27 +434,30 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
 }
 
 interface ReaderSidebarProps {
-  activeChapterId: string | null;
-  chapters: TxtChapter[];
+  activeTocItemId: string | null;
+  items: TocItem[];
   isOpen: boolean;
+  label: string;
   onBackToLibrary: () => void;
-  onJumpToChapter: (chapterId: string) => void;
+  onJumpToItem: (itemId: string) => void;
 }
 
 function ReaderSidebar({
-  activeChapterId,
-  chapters,
+  activeTocItemId,
+  items,
   isOpen,
+  label,
   onBackToLibrary,
-  onJumpToChapter,
+  onJumpToItem,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
+  const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
 
   const handleJump = useCallback(
-    (chapterId: string) => {
-      onJumpToChapter(chapterId);
+    (itemId: string) => {
+      onJumpToItem(itemId);
     },
-    [onJumpToChapter],
+    [onJumpToItem],
   );
 
   useEffect(() => {
@@ -377,7 +466,7 @@ function ReaderSidebar({
         block: "nearest",
       });
     }
-  }, [activeChapterId]);
+  }, [activeTocItemId]);
 
   return (
     <aside className="reader-sidebar" aria-label="Table of contents" aria-hidden={!isOpen}>
@@ -385,23 +474,24 @@ function ReaderSidebar({
         Back to shelf
       </button>
       <h2>Contents</h2>
-      <nav className="reader-toc" aria-label="TXT chapters">
-        {chapters.length === 0 ? (
+      <nav className="reader-toc" aria-label={label}>
+        {flattenedItems.length === 0 ? (
           <p className="reader-sidebar__empty">Loading chapters...</p>
         ) : (
-          chapters.map((chapter) => {
-            const isActive = chapter.id === activeChapterId;
+          flattenedItems.map((item) => {
+            const isActive = item.id === activeTocItemId;
 
             return (
               <button
-                key={chapter.id}
+                key={item.id}
                 ref={isActive ? activeItemRef : undefined}
                 type="button"
                 className={`reader-toc__item ${isActive ? "reader-toc__item--active" : ""}`}
+                style={{ paddingLeft: `${12 + item.depth * 14}px` }}
                 aria-current={isActive ? "location" : undefined}
-                onClick={() => handleJump(chapter.id)}
+                onClick={() => handleJump(item.id)}
               >
-                {chapter.title}
+                {item.title}
               </button>
             );
           })
@@ -411,7 +501,7 @@ function ReaderSidebar({
   );
 }
 
-interface ReaderContentProps {
+interface TxtReaderContentProps {
   blocks: ReaderBlock[];
   document: TxtDocument | null;
   error: string | null;
@@ -423,7 +513,7 @@ interface ReaderContentProps {
   onBackToLibrary: () => void;
 }
 
-function ReaderContent({
+function TxtReaderContent({
   blocks,
   document,
   error,
@@ -433,13 +523,13 @@ function ReaderContent({
   onActiveChapterChange,
   onProgressChange,
   onBackToLibrary,
-}: ReaderContentProps) {
+}: TxtReaderContentProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const hasRestoredProgressRef = useRef(false);
   const ignoreScrollSaveUntilRef = useRef(0);
   const lastActiveChapterIdRef = useRef<string | null>(null);
   const pendingActiveChapterIdRef = useRef<string | null>(null);
-  const pendingProgressRef = useRef<PendingProgress | null>(null);
+  const pendingProgressRef = useRef<PendingTxtProgress | null>(null);
   const rafHandleRef = useRef<number | null>(null);
   const scrollIdleTimerRef = useRef<number | null>(null);
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
@@ -681,14 +771,214 @@ function ReaderContent({
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
               >
-                {block.kind === "heading" ? (
-                  <h2>{block.text}</h2>
-                ) : (
-                  <p>{block.text}</p>
-                )}
+                {block.kind === "heading" ? <h2>{block.text}</h2> : <p>{block.text}</p>}
               </div>
             );
           })}
+        </div>
+      </article>
+    </section>
+  );
+}
+
+interface EpubReaderContentProps {
+  book: Book;
+  jumpRequest: EpubJumpRequest | null;
+  theme: ReaderTheme;
+  tocItems: TocItem[];
+  onActiveTocItemChange: (tocItemId: string) => void;
+  onBackToLibrary: () => void;
+  onTocChange: (items: TocItem[]) => void;
+}
+
+function EpubReaderContent({
+  book,
+  jumpRequest,
+  theme,
+  tocItems,
+  onActiveTocItemChange,
+  onBackToLibrary,
+  onTocChange,
+}: EpubReaderContentProps) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const adapterRef = useRef<EpubReaderAdapter | null>(null);
+  const pendingProgressRef = useRef<PendingEpubProgress | null>(null);
+  const progressIdleTimerRef = useRef<number | null>(null);
+  const themeRef = useRef(theme);
+  const tocItemsRef = useRef(tocItems);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [visibleProgression, setVisibleProgression] = useState<number | null>(null);
+
+  useEffect(() => {
+    tocItemsRef.current = tocItems;
+  }, [tocItems]);
+
+  useEffect(() => {
+    themeRef.current = theme;
+    void adapterRef.current?.setTheme(theme);
+  }, [theme]);
+
+  const flushPendingProgress = useCallback(() => {
+    const pendingProgress = pendingProgressRef.current;
+
+    if (pendingProgress === null) {
+      return;
+    }
+
+    pendingProgressRef.current = null;
+    void saveReadingProgress(book.id, pendingProgress.locator, pendingProgress.progress).catch(
+      () => undefined,
+    );
+  }, [book.id]);
+
+  useEffect(
+    () => () => {
+      if (progressIdleTimerRef.current !== null) {
+        window.clearTimeout(progressIdleTimerRef.current);
+      }
+
+      flushPendingProgress();
+    },
+    [flushPendingProgress],
+  );
+
+  const handleRelocated = useCallback(
+    (locator: EpubLocator, progress?: number) => {
+      const activeTocItemId = findTocItemIdByHref(tocItemsRef.current, locator.href);
+
+      if (activeTocItemId !== null) {
+        onActiveTocItemChange(activeTocItemId);
+      }
+
+      setVisibleProgression(progress ?? locator.progression ?? null);
+      pendingProgressRef.current = {
+        locator,
+        progress,
+      };
+
+      if (progressIdleTimerRef.current !== null) {
+        window.clearTimeout(progressIdleTimerRef.current);
+      }
+
+      progressIdleTimerRef.current = window.setTimeout(() => {
+        progressIdleTimerRef.current = null;
+        flushPendingProgress();
+      }, 750);
+    },
+    [flushPendingProgress, onActiveTocItemChange],
+  );
+
+  useEffect(() => {
+    let isCurrent = true;
+    let openedAdapter: EpubReaderAdapter | null = null;
+
+    async function openEpub() {
+      setIsLoading(true);
+      setError(null);
+      onTocChange([]);
+
+      try {
+        if (hostRef.current === null) {
+          throw new Error("EPUB reader viewport is unavailable.");
+        }
+
+        const [sourceUrl, savedProgress] = await Promise.all([
+          getEpubBookSource(book),
+          getReadingProgress<EpubLocator>(book.id),
+        ]);
+
+        if (!isCurrent || hostRef.current === null) {
+          return;
+        }
+
+        const adapter = new EpubReaderAdapter({
+          bookId: book.id,
+          sourceUrl,
+          container: hostRef.current,
+          initialLocator: savedProgress?.locator,
+          theme: themeRef.current,
+          onRelocated: handleRelocated,
+        });
+        openedAdapter = adapter;
+        adapterRef.current = adapter;
+
+        await adapter.open(book.id);
+        const nextTocItems = await adapter.getToc();
+
+        if (isCurrent) {
+          onTocChange(nextTocItems);
+        }
+      } catch (openError) {
+        if (isCurrent) {
+          setError(getErrorMessage(openError));
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void openEpub();
+
+    return () => {
+      isCurrent = false;
+      void openedAdapter?.close();
+      if (adapterRef.current === openedAdapter) {
+        adapterRef.current = null;
+      }
+    };
+  }, [book, handleRelocated, onTocChange]);
+
+  useEffect(() => {
+    if (jumpRequest === null) {
+      return;
+    }
+
+    void adapterRef.current?.goTo(jumpRequest.locator);
+  }, [jumpRequest]);
+
+  const handlePrevious = useCallback(() => {
+    void adapterRef.current?.previous();
+  }, []);
+
+  const handleNext = useCallback(() => {
+    void adapterRef.current?.next();
+  }, []);
+
+  const progressLabel =
+    visibleProgression === null ? "Progress unavailable" : `${Math.round(visibleProgression * 100)}%`;
+
+  return (
+    <section className="reader-viewport reader-viewport--epub" aria-label={`${book.title} content`}>
+      <article className="reader-page reader-page--epub">
+        <div className="reader-epub-toolbar" aria-label="EPUB navigation">
+          <button type="button" className="reader-tool-button" onClick={handlePrevious}>
+            Previous
+          </button>
+          <span>{progressLabel}</span>
+          <button type="button" className="reader-tool-button" onClick={handleNext}>
+            Next
+          </button>
+        </div>
+        <div className="reader-epub-frame">
+          {isLoading ? (
+            <section className="reader-state reader-state--overlay" aria-label="Loading EPUB book">
+              <div className="loading-line" aria-hidden="true" />
+              <p>Opening EPUB book...</p>
+            </section>
+          ) : null}
+          {error !== null ? (
+            <section className="reader-state reader-state--error reader-state--overlay" role="alert">
+              <h2>Book could not be opened</h2>
+              <p>{error}</p>
+              <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
+                Back to shelf
+              </button>
+            </section>
+          ) : null}
+          <div ref={hostRef} className="reader-epub-host" aria-hidden={error !== null} />
         </div>
       </article>
     </section>
@@ -855,6 +1145,66 @@ function ThemeSlider({ label, max, min, step, value, onChange }: ThemeSliderProp
   );
 }
 
+function mapTxtChapterToTocItem(chapter: TxtChapter): TocItem {
+  return {
+    id: chapter.id,
+    title: chapter.title,
+    locator: {
+      kind: "txt",
+      chapterId: chapter.id,
+      charOffset: chapter.startChar,
+    },
+  };
+}
+
+function flattenTocItems(items: TocItem[], depth = 0): Array<TocItem & { depth: number }> {
+  return items.flatMap((item) => [
+    {
+      ...item,
+      depth,
+    },
+    ...flattenTocItems(item.children ?? [], depth + 1),
+  ]);
+}
+
+function findTocItemById(items: TocItem[], itemId: string): TocItem | null {
+  for (const item of items) {
+    if (item.id === itemId) {
+      return item;
+    }
+
+    const childItem = findTocItemById(item.children ?? [], itemId);
+
+    if (childItem !== null) {
+      return childItem;
+    }
+  }
+
+  return null;
+}
+
+function findTocItemIdByHref(items: TocItem[], href: string): string | null {
+  const normalizedHref = normalizeEpubHref(href);
+
+  for (const item of items) {
+    if (item.href !== undefined && normalizeEpubHref(item.href) === normalizedHref) {
+      return item.id;
+    }
+
+    const childItemId = findTocItemIdByHref(item.children ?? [], href);
+
+    if (childItemId !== null) {
+      return childItemId;
+    }
+  }
+
+  return null;
+}
+
+function normalizeEpubHref(href: string): string {
+  return href.split("#")[0] ?? href;
+}
+
 function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {
   const paragraphs: ReaderParagraph[] = [];
   let localCharOffset = 0;
@@ -928,10 +1278,7 @@ function findProgressTargetIndex(index: ReaderVirtualIndex, locator: TxtLocator)
 
   if (locator.chapterId !== undefined) {
     const chapterEntries = index.charOffsetEntriesByChapterId.get(locator.chapterId) ?? [];
-    const sameChapterIndex = findIndexAtOrBeforeCharOffset(
-      chapterEntries,
-      locator.charOffset,
-    );
+    const sameChapterIndex = findIndexAtOrBeforeCharOffset(chapterEntries, locator.charOffset);
 
     if (sameChapterIndex !== -1) {
       return sameChapterIndex;
@@ -1018,6 +1365,10 @@ function estimateVirtualBlockSize(block: ReaderVirtualBlock | undefined): number
   }
 
   return Math.max(68, Math.ceil(block.text.length / 34) * 34);
+}
+
+function formatBookFormat(format: Book["format"]): string {
+  return format.toUpperCase();
 }
 
 function getErrorMessage(error: unknown): string {

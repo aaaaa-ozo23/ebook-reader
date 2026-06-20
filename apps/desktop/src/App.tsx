@@ -48,7 +48,7 @@ function App() {
   const [openingBookId, setOpeningBookId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [readerBookId, setReaderBookId] = useState<string | null>(null);
+  const [readerBook, setReaderBook] = useState<Book | null>(null);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(null);
   const [bookPendingRemoval, setBookPendingRemoval] = useState<Book | null>(null);
   const [removingBookId, setRemovingBookId] = useState<string | null>(null);
@@ -121,7 +121,7 @@ function App() {
     setBookActionMenu(null);
     setFeedback(null);
 
-    if (book.format !== "txt") {
+    if (book.format === "pdf") {
       setFeedback({
         kind: "info",
         title: "Reader support coming later",
@@ -135,7 +135,7 @@ function App() {
     try {
       const openedBook = await markBookOpened(book.id);
       setBooks((currentBooks) => upsertBook(currentBooks, openedBook));
-      setReaderBookId(openedBook.id);
+      setReaderBook(openedBook);
     } catch (error) {
       setFeedback({
         kind: "error",
@@ -199,7 +199,7 @@ function App() {
   }, [bookPendingRemoval]);
 
   const handleBackToLibrary = useCallback(() => {
-    setReaderBookId(null);
+    setReaderBook(null);
   }, []);
 
   const showGridView = useCallback(() => {
@@ -210,8 +210,8 @@ function App() {
     setViewMode("list");
   }, []);
 
-  if (readerBookId !== null) {
-    return <ReaderShell bookId={readerBookId} onBackToLibrary={handleBackToLibrary} />;
+  if (readerBook !== null) {
+    return <ReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />;
   }
 
   return (

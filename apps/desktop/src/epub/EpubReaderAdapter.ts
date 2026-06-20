@@ -108,6 +108,14 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await rendition.display(locator.cfi ?? locator.href);
   }
 
+  async next(): Promise<void> {
+    await this.requireRendition().next();
+  }
+
+  async previous(): Promise<void> {
+    await this.requireRendition().prev();
+  }
+
   async getCurrentLocator(): Promise<EpubLocator> {
     const rendition = this.requireRendition();
     const location = await Promise.resolve(rendition.currentLocation());

@@ -154,6 +154,7 @@
 | 小阶段 | 分支 | 状态 | 验证 |
 |--------|------|------|------|
 | 3.1 EPUB 适配器 | `codex/stage3-epub-adapter` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests |
+| 3.2 EPUB 阅读 UI | `codex/stage3-epub-reader-ui` | complete | `pnpm.cmd --filter @reader/desktop test`，15 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 
 ## 大阶段 4：PDF 阅读器
 
@@ -262,6 +263,7 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 阶段 2.x Browser 插件截图命令超时 | 1 | 保留 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成桌面和窄屏截图 |
 | 阶段 3.1 `epubjs` 安装触发 pnpm build-script 审批 | 1 | 批准 `core-js` 和 `es5-ext`，并在 `pnpm-workspace.yaml` 记录 allowBuilds |
 | 阶段 3.1 Tauri asset protocol 编译失败 | 1 | 为 Rust `tauri` 依赖开启 `protocol-asset` feature |
+| 阶段 3.2 EPUB 内容层打开后触发 React maximum update depth | 1 | 将 EPUB TOC 读取改为 ref，避免 TOC 更新改变 relocated 回调 identity 后重复 open/close |
 
 ## 备注
 
