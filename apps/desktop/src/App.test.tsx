@@ -300,6 +300,8 @@ describe("App", () => {
       }),
     );
     expect(reader).toHaveStyle("--txt-reader-background: #171a1d");
+    expect(reader).toHaveStyle("--txt-reader-heading: #f0e8d7");
+    expect(reader).toHaveAttribute("data-reader-theme", "dark");
   });
 
   it("restores saved TXT progress and saves table-of-contents jumps", async () => {
@@ -329,6 +331,10 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "第二章 风起" }));
 
+    expect(screen.getByRole("button", { name: "第二章 风起" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
     await waitFor(() =>
       expect(saveReadingProgressMock).toHaveBeenCalledWith(
         "progress-txt",
@@ -339,6 +345,46 @@ describe("App", () => {
         },
         expect.any(Number),
       ),
+    );
+  });
+
+  it("saves scroll progress after scroll idle instead of during every scroll event", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({ id: "scroll-txt", title: "Scroll TXT", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createLongTxtDocument(txtBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Scroll TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const viewport = await screen.findByLabelText("Scroll TXT content");
+    Object.defineProperty(viewport, "clientHeight", {
+      configurable: true,
+      value: 720,
+    });
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      value: 1800,
+    });
+
+    vi.useFakeTimers();
+    fireEvent.scroll(viewport);
+
+    expect(saveReadingProgressMock).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(760);
+    vi.useRealTimers();
+
+    expect(saveReadingProgressMock).toHaveBeenCalledWith(
+      "scroll-txt",
+      expect.objectContaining({
+        kind: "txt",
+        chapterId: expect.any(String) as string,
+        charOffset: expect.any(Number) as number,
+      }),
+      expect.any(Number),
     );
   });
 });
@@ -387,6 +433,39 @@ function createTxtDocument(book: Book): TxtDocument {
         startChar: 13,
         endChar: text.length,
         text: "第二章 风起\n灯火亮了。",
+      },
+    ],
+  };
+}
+
+function createLongTxtDocument(book: Book): TxtDocument {
+  const firstParagraphs = Array.from({ length: 80 }, (_, index) => `第一章第 ${index + 1} 段。`);
+  const secondParagraphs = Array.from({ length: 80 }, (_, index) => `第二章第 ${index + 1} 段。`);
+  const firstText = ["第一章 初见", ...firstParagraphs].join("\n");
+  const secondText = ["第二章 风起", ...secondParagraphs].join("\n");
+  const text = `${firstText}\n${secondText}`;
+  const secondStart = firstText.length + 1;
+
+  return {
+    book,
+    encoding: "UTF-8",
+    byteLength: text.length * 2,
+    charCount: text.length,
+    lineCount: firstParagraphs.length + secondParagraphs.length + 2,
+    chapters: [
+      {
+        id: "chapter-1-0",
+        title: "第一章 初见",
+        startChar: 0,
+        endChar: secondStart - 1,
+        text: firstText,
+      },
+      {
+        id: `chapter-2-${secondStart}`,
+        title: "第二章 风起",
+        startChar: secondStart,
+        endChar: text.length,
+        text: secondText,
       },
     ],
   };
