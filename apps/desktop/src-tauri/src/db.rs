@@ -141,6 +141,13 @@ pub struct ImportBookResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoveBookResult {
+    pub book: Book,
+    pub removed_library_path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TxtChapter {
     pub id: String,
     pub title: String,
@@ -246,6 +253,15 @@ pub fn import_book<P: AsRef<Path>>(app: &AppHandle, path: P) -> anyhow::Result<I
 pub fn mark_book_opened(app: &AppHandle, book_id: &str) -> anyhow::Result<Book> {
     let database_path = init_app_database(app)?;
     mark_book_opened_at(&database_path, book_id)
+}
+
+pub fn remove_book(app: &AppHandle, book_id: &str) -> anyhow::Result<RemoveBookResult> {
+    let storage_paths = init_app_storage(app)?;
+    remove_book_at(
+        &storage_paths.database_path,
+        &storage_paths.library_dir,
+        book_id,
+    )
 }
 
 pub fn open_txt_book(app: &AppHandle, book_id: &str) -> anyhow::Result<TxtDocument> {
@@ -406,6 +422,47 @@ pub fn mark_book_opened_at(database_path: &Path, book_id: &str) -> anyhow::Resul
 
     find_book_by_id(&conn, book_id)?
         .with_context(|| format!("book not found after update: {}", book_id))
+}
+
+pub fn remove_book_at(
+    database_path: &Path,
+    library_dir: &Path,
+    book_id: &str,
+) -> anyhow::Result<RemoveBookResult> {
+    init_database_at(database_path)?;
+    fs::create_dir_all(library_dir).with_context(|| {
+        format!(
+            "failed to create library directory {}",
+            library_dir.display()
+        )
+    })?;
+
+    let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let library_path = PathBuf::from(&book.library_path);
+    let removed_library_path = path_to_string(&library_path);
+
+    if library_path.exists() {
+        assert_library_file_is_within_dir(&library_path, library_dir)?;
+        fs::remove_file(&library_path).with_context(|| {
+            format!(
+                "failed to delete library copy at {}",
+                library_path.display()
+            )
+        })?;
+    }
+
+    let deleted_count = conn.execute("DELETE FROM books WHERE id = ?1", params![book_id])?;
+
+    if deleted_count == 0 {
+        bail!("book not found: {}", book_id);
+    }
+
+    Ok(RemoveBookResult {
+        book,
+        removed_library_path,
+    })
 }
 
 pub fn open_txt_book_at(database_path: &Path, book_id: &str) -> anyhow::Result<TxtDocument> {
@@ -617,6 +674,33 @@ fn copy_file_to_library(source_path: &Path, library_path: &Path) -> anyhow::Resu
             library_path.display()
         )
     })?;
+
+    Ok(())
+}
+
+fn assert_library_file_is_within_dir(
+    library_path: &Path,
+    library_dir: &Path,
+) -> anyhow::Result<()> {
+    let canonical_library_path = library_path.canonicalize().with_context(|| {
+        format!(
+            "failed to canonicalize library copy {}",
+            library_path.display()
+        )
+    })?;
+    let canonical_library_dir = library_dir.canonicalize().with_context(|| {
+        format!(
+            "failed to canonicalize library directory {}",
+            library_dir.display()
+        )
+    })?;
+
+    if !canonical_library_path.starts_with(&canonical_library_dir) {
+        bail!(
+            "refusing to delete library copy outside application library: {}",
+            library_path.display()
+        );
+    }
 
     Ok(())
 }
@@ -1021,7 +1105,7 @@ mod tests {
 
     use super::{
         get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
-        list_books_at, mark_book_opened_at, open_txt_book_at, save_reader_theme_at,
+        list_books_at, mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_theme_at,
         save_reading_progress_at, schema_version, BookFormat, ImportBookStatus, ReaderTheme,
         ReaderThemeMode, TxtLocator, DB_FILE_NAME,
     };
@@ -1219,6 +1303,58 @@ mod tests {
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
         let error = mark_book_opened_at(&database_path, "missing-book")
+            .expect_err("missing book should fail");
+
+        assert!(error.to_string().contains("book not found"));
+    }
+
+    #[test]
+    fn remove_book_deletes_shelf_record_progress_and_library_copy_only() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("remove-me.txt");
+        fs::write(&source_path, "第一章 初见\n正文").expect("write source file");
+
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import book");
+        let library_path = PathBuf::from(&imported.book.library_path);
+        save_reading_progress_at(
+            &database_path,
+            &imported.book.id,
+            TxtLocator {
+                kind: "txt".to_string(),
+                chapter_id: None,
+                char_offset: 3,
+            },
+            Some(0.5),
+        )
+        .expect("save progress");
+
+        assert!(source_path.exists());
+        assert!(library_path.exists());
+
+        let removed =
+            remove_book_at(&database_path, &library_dir, &imported.book.id).expect("remove book");
+        let books = list_books_at(&database_path).expect("list books after removal");
+        let restored_progress = get_reading_progress_at(&database_path, &imported.book.id)
+            .expect("query progress after removal");
+
+        assert_eq!(removed.book.id, imported.book.id);
+        assert_eq!(removed.removed_library_path, imported.book.library_path);
+        assert!(source_path.exists());
+        assert!(!library_path.exists());
+        assert!(books.is_empty());
+        assert!(restored_progress.is_none());
+    }
+
+    #[test]
+    fn remove_book_errors_for_missing_book() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+
+        let error = remove_book_at(&database_path, &library_dir, "missing-book")
             .expect_err("missing book should fail");
 
         assert!(error.to_string().contains("book not found"));

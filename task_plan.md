@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 2：TXT 阅读器优先打磨已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
+阶段 1/2 修复优化进行中：书架移除入口、导入按钮图标、TXT 大文件阅读性能和 dark 主题可读性。
 
 ## 分支策略
 
@@ -77,6 +77,13 @@
 | `pnpm.cmd --filter @reader/desktop test:e2e` | passed，1 Chromium smoke |
 | Browser QA | passed，桌面和窄屏书架首屏无 overlay、无 console warning/error |
 | `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
+
+### 阶段 1/2 修复优化执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 1.x 书架更多操作与移除 | `codex/stage1-book-actions-remove` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test`，13 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 2.x TXT 阅读器性能与主题修复 | `codex/stage2-txt-reader-polish` | pending | 待实施 |
 
 ## 大阶段 2：TXT 阅读器优先打磨
 

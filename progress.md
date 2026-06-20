@@ -1,5 +1,48 @@
 # 进度日志
 
+## 会话：2026-06-20
+
+### 阶段 1/2 修复优化启动
+- **状态：** in_progress
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 读取 `planning-with-files-zh`、Build Web Apps 前端测试调试、React 性能实践说明。
+  - 读取 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 1/2 基线已完成。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage1-book-actions-remove` 分支。
+  - 启动 TXT 阅读器性能审查 subagent，获取 ReaderShell 索引、滚动 idle、TOC 同步和 dark 主题修复清单。
+
+### 阶段 1.x：书架更多操作与移除
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 `@reader/core` 新增 `RemoveBookResult` 类型。
+  - 在 Rust 后端新增 `remove_book` / `remove_book_at`，删除 SQLite 书籍记录并删除应用书库副本，保留原始导入文件。
+  - 注册 Tauri `remove_book(book_id)` 命令。
+  - 在 `tauri/library.ts` 新增 `removeBook`，浏览器 fallback 同步删除 localStorage 书籍。
+  - 书架卡片新增右键菜单和可见 More 按钮；菜单当前只提供 `Remove from shelf`。
+  - 新增确认移除弹窗，明确原始导入文件不会被删除。
+  - 将 `Import book` 加号改为 CSS 绘制的稳定 icon，修正字体基线偏移。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/tauri/library.ts`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，13 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ## 会话：2026-06-19
 
 ### 产品大阶段 2：TXT 阅读器优先打磨启动
