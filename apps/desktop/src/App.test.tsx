@@ -5,15 +5,18 @@ import {
   type Book,
   type EpubLocator,
   type ImportBookResult,
+  type PdfLocator,
   type TxtDocument,
 } from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { EpubReaderAdapter, type EpubPosition } from "./epub/EpubReaderAdapter";
+import { PdfReaderAdapter, type PdfPosition } from "./pdf/PdfReaderAdapter";
 import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
   getEpubBookSource,
+  getPdfBookSource,
   getReaderTheme,
   getReadingProgress,
   openTxtBook,
@@ -76,6 +79,79 @@ const epubAdapterSetSpreadModeMock = vi.hoisted(() =>
 );
 const epubAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 
+const pdfAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterFitWidthMock = vi.hoisted(() =>
+  vi.fn(async (width: number) => {
+    void width;
+  }),
+);
+const pdfAdapterGetTocMock = vi.hoisted(() =>
+  vi.fn(async () => [
+    {
+      id: "pdf-page-1",
+      title: "Page 1",
+      locator: {
+        kind: "pdf" as const,
+        page: 1,
+      },
+    },
+    {
+      id: "pdf-page-2",
+      title: "Page 2",
+      locator: {
+        kind: "pdf" as const,
+        page: 2,
+      },
+    },
+    {
+      id: "pdf-page-3",
+      title: "Page 3",
+      locator: {
+        kind: "pdf" as const,
+        page: 3,
+      },
+    },
+  ]),
+);
+const pdfAdapterGoToMock = vi.hoisted(() =>
+  vi.fn(async (locator: PdfLocator) => {
+    void locator;
+  }),
+);
+const pdfAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterOpenMock = vi.hoisted(() =>
+  vi.fn(async (bookId: string) => {
+    void bookId;
+  }),
+);
+const pdfAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterRenderPageMock = vi.hoisted(() =>
+  vi.fn(async (canvas: HTMLCanvasElement, pageNumber: number) => {
+    canvas.width = 600;
+    canvas.height = 800;
+
+    return {
+      pageNumber,
+      width: 600,
+      height: 800,
+      scale: 1,
+    };
+  }),
+);
+const pdfAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterSetViewModeMock = vi.hoisted(() =>
+  vi.fn((mode: "single" | "double" | "continuous", availableWidth?: number) => {
+    void mode;
+    void availableWidth;
+  }),
+);
+const pdfAdapterSetZoomMock = vi.hoisted(() =>
+  vi.fn((scale: number) => {
+    void scale;
+  }),
+);
+const pdfAdapterVisiblePagesMock = vi.hoisted(() => vi.fn(() => [1]));
+
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
   listBooks: vi.fn(),
@@ -86,6 +162,7 @@ vi.mock("./tauri/library", () => ({
 
 vi.mock("./tauri/reader", () => ({
   getEpubBookSource: vi.fn(),
+  getPdfBookSource: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
   openTxtBook: vi.fn(),
@@ -110,7 +187,101 @@ vi.mock("./epub/EpubReaderAdapter", () => ({
   }),
 }));
 
+vi.mock("./pdf/PdfReaderAdapter", () => ({
+  PdfReaderAdapter: vi.fn(function MockPdfReaderAdapter(options: {
+    initialLocator?: PdfLocator;
+    onPositionChange?: (position: PdfPosition) => void;
+  }) {
+    let page = options.initialLocator?.page ?? 1;
+    let scale = options.initialLocator?.scale ?? 1;
+    let viewMode: "single" | "double" | "continuous" = "single";
+    let renderedMode: "single" | "double" = "single";
+    let zoomMode: "fit-width" | "custom" = options.initialLocator?.zoomMode ?? "custom";
+    const totalPages = 3;
+    const createPosition = (): PdfPosition => ({
+      locator: {
+        kind: "pdf",
+        page,
+        scale,
+        zoomMode,
+      },
+      page,
+      totalPages,
+      scale,
+      zoomMode,
+      progression: (page - 1) / (totalPages - 1),
+      viewMode,
+      renderedMode,
+    });
+    const reportPosition = () => {
+      options.onPositionChange?.(createPosition());
+    };
+
+    return {
+      close: pdfAdapterCloseMock,
+      fitWidth: async (width: number) => {
+        await pdfAdapterFitWidthMock(width);
+        scale = 1.2;
+        zoomMode = "fit-width";
+        reportPosition();
+        return createPosition();
+      },
+      getPosition: createPosition,
+      getToc: pdfAdapterGetTocMock,
+      getVisiblePages: () => {
+        const visiblePages =
+          renderedMode === "double" && page < totalPages ? [page, page + 1] : [page];
+        pdfAdapterVisiblePagesMock();
+
+        return visiblePages;
+      },
+      goTo: async (locator: PdfLocator) => {
+        await pdfAdapterGoToMock(locator);
+        page = Math.min(Math.max(locator.page, 1), totalPages);
+        scale = locator.scale ?? scale;
+        zoomMode = locator.zoomMode ?? "custom";
+        reportPosition();
+      },
+      next: async () => {
+        await pdfAdapterNextMock();
+        page = Math.min(page + (renderedMode === "double" ? 2 : 1), totalPages);
+        zoomMode = "custom";
+        reportPosition();
+      },
+      open: async (bookId: string) => {
+        await pdfAdapterOpenMock(bookId);
+        reportPosition();
+      },
+      previous: async () => {
+        await pdfAdapterPreviousMock();
+        page = Math.max(page - (renderedMode === "double" ? 2 : 1), 1);
+        zoomMode = "custom";
+        reportPosition();
+      },
+      renderPage: pdfAdapterRenderPageMock,
+      setTheme: pdfAdapterSetThemeMock,
+      setViewMode: (mode: "single" | "double" | "continuous", availableWidth?: number) => {
+        pdfAdapterSetViewModeMock(mode, availableWidth);
+        viewMode = mode;
+        renderedMode = mode === "double" && (availableWidth ?? 1000) >= 920 ? "double" : "single";
+        reportPosition();
+
+        return createPosition();
+      },
+      setZoom: (nextScale: number) => {
+        pdfAdapterSetZoomMock(nextScale);
+        scale = Math.min(3, Math.max(0.5, nextScale));
+        zoomMode = "custom";
+        reportPosition();
+
+        return createPosition();
+      },
+    };
+  }),
+}));
+
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
+const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const importBookMock = vi.mocked(importBook);
@@ -122,6 +293,7 @@ const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
+const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
 
 describe("App", () => {
   beforeEach(() => {
@@ -136,11 +308,24 @@ describe("App", () => {
     epubAdapterPreviewProgressMock.mockClear();
     epubAdapterSetSpreadModeMock.mockClear();
     epubAdapterSetThemeMock.mockClear();
+    pdfAdapterCloseMock.mockClear();
+    pdfAdapterFitWidthMock.mockClear();
+    pdfAdapterGetTocMock.mockClear();
+    pdfAdapterGoToMock.mockClear();
+    pdfAdapterNextMock.mockClear();
+    pdfAdapterOpenMock.mockClear();
+    pdfAdapterPreviousMock.mockClear();
+    pdfAdapterRenderPageMock.mockClear();
+    pdfAdapterSetThemeMock.mockClear();
+    pdfAdapterSetViewModeMock.mockClear();
+    pdfAdapterSetZoomMock.mockClear();
+    pdfAdapterVisiblePagesMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
     );
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
+    getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
@@ -490,20 +675,129 @@ describe("App", () => {
     );
   });
 
-  it("shows a later-stage reader message for PDF books", async () => {
+  it("opens a PDF book in the reader shell", async () => {
     const user = userEvent.setup();
     const pdfBook = createBook({ id: "pdf-book", title: "Layout Notes PDF", format: "pdf" });
+    const openedBook = {
+      ...pdfBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
     listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Layout Notes PDF" })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
-    expect(await screen.findByText("Reader support coming later")).toBeVisible();
-    expect(screen.getByText("PDF reading will be added in a later stage.")).toBeInTheDocument();
-    expect(markBookOpenedMock).not.toHaveBeenCalled();
+    expect(markBookOpenedMock).toHaveBeenCalledWith("pdf-book");
     expect(openTxtBookMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("main", { name: "PDF reader" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Page 1" })).toBeVisible();
+    expect(pdfAdapterOpenMock).toHaveBeenCalledWith("pdf-book");
+    expect(getPdfBookSourceMock).toHaveBeenCalledWith(openedBook);
+  });
+
+  it("drives PDF page, spread, and zoom controls through the adapter", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "pdf-controls", title: "Controls PDF", format: "pdf" });
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(pdfBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Controls PDF" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "PDF reader" });
+    const frame = reader.querySelector(".reader-pdf-frame");
+    expect(frame).not.toBeNull();
+    Object.defineProperty(frame, "clientWidth", {
+      configurable: true,
+      value: 1100,
+    });
+
+    expect(await screen.findByText("Page 1 / 3")).toBeVisible();
+
+    await user.click(within(reader).getByRole("button", { name: "Double" }));
+    expect(pdfAdapterSetViewModeMock).toHaveBeenCalledWith("double", 1100);
+    await waitFor(() => expect(screen.getByText("Pages 1-2 / 3")).toBeVisible());
+
+    await user.click(within(reader).getByRole("button", { name: "Next" }));
+    expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.getByText("Page 3 / 3")).toBeVisible());
+
+    const pageInput = within(reader).getByRole("spinbutton", { name: "PDF page number" });
+    fireEvent.change(pageInput, {
+      target: {
+        value: "2",
+      },
+    });
+    fireEvent.keyDown(pageInput, {
+      key: "Enter",
+    });
+    await waitFor(() =>
+      expect(pdfAdapterGoToMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: "pdf",
+          page: 2,
+        }),
+      ),
+    );
+
+    await user.click(within(reader).getByRole("button", { name: "+" }));
+    expect(pdfAdapterSetZoomMock.mock.calls.at(-1)?.[0]).toBeCloseTo(1.1, 3);
+
+    await user.click(within(reader).getByRole("button", { name: "Fit width" }));
+    expect(pdfAdapterFitWidthMock).toHaveBeenCalledWith(expect.any(Number));
+    await waitFor(() => expect(screen.getByText("120%")).toBeVisible());
+  });
+
+  it("restores saved PDF progress and saves current PDF locators", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "progress-pdf", title: "Progress PDF", format: "pdf" });
+    const savedLocator: PdfLocator = {
+      kind: "pdf",
+      page: 2,
+      scale: 1.25,
+      zoomMode: "custom",
+    };
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(pdfBook);
+    getReadingProgressMock.mockResolvedValueOnce({
+      bookId: "progress-pdf",
+      locator: savedLocator,
+      progress: 0.5,
+      updatedAt: "2026-06-20T12:00:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Progress PDF" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "PDF reader" });
+    await waitFor(() => expect(pdfAdapterOpenMock).toHaveBeenCalledWith("progress-pdf"));
+
+    const adapterOptions = PdfReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          initialLocator?: PdfLocator;
+        }
+      | undefined;
+    expect(adapterOptions?.initialLocator).toEqual(savedLocator);
+    expect(await screen.findByText("Page 2 / 3")).toBeVisible();
+
+    await user.click(within(reader).getByRole("button", { name: "Shelf" }));
+
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "progress-pdf",
+        expect.objectContaining({
+          kind: "pdf",
+          page: 2,
+          scale: 1.25,
+        }),
+        0.5,
+      ),
+    );
   });
 
   it("shows TXT reader errors inside the reader shell", async () => {

@@ -1,5 +1,148 @@
 # 进度日志
 
+## 2026-06-20 大阶段 4：PDF 阅读器
+
+### 阶段 4.1：PDF.js 接入
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-adapter`
+- 执行的操作：
+  - 从 `main` 快进 `codex/v0.1.0-mvp-integration`，创建 `codex/stage4-pdf-adapter`。
+  - 安装 `pdfjs-dist@6.0.227` 到 `@reader/desktop`。
+  - 新增 `PdfReaderAdapter`，通过动态 import 加载 PDF.js，配置 `GlobalWorkerOptions.workerSrc`，封装 open/close/goTo/currentLocator/page render/previous/next/zoom/fitWidth/viewMode。
+  - 在 Vite 配置中新增本地 PDF.js 资源插件，dev 服务 `cmaps`、`standard_fonts`，build 复制资源和 worker 到 `dist/pdfjs/`。
+  - 在 `tauri/reader.ts` 新增 `getPdfBookSource`，Tauri 使用 `convertFileSrc(book.libraryPath)`，浏览器 fallback 使用显式 localStorage source fixture。
+  - 在 `@reader/core` 为 `PdfLocator` 增加 `zoomMode?: "fit-width" | "custom"`。
+- 创建/修改的文件：
+  - `apps/desktop/package.json`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.test.ts`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `apps/desktop/vite.config.ts`
+  - `packages/core/src/index.ts`
+  - `pnpm-lock.yaml`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts` 通过，26 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过，并确认 `dist/pdfjs/pdf.worker.mjs`、`dist/pdfjs/cmaps/*` 生成。
+
+### 阶段 4.2：页面导航和缩放
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-navigation`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-navigation`。
+  - 移除 `App.tsx` 中 PDF 打开拦截，PDF 书籍可进入阅读页。
+  - 在 `ReaderShell` 新增 `PdfReaderContent`，接入 `PdfReaderAdapter`、PDF source、进度恢复、目录跳转和 canvas 渲染。
+  - 增加 PDF 底部控制条：`Previous`、`Next`、`Single`、`Double`、页码输入、缩放加减和 `Fit width`。
+  - 增加窄屏和专注模式 CSS，双页偏好在窄屏下实际回退单页但保留用户选择。
+  - 扩展 App Vitest mock 和覆盖 PDF 打开、单/双页切换、页码跳转、缩放、适合宽度、进度恢复与保存。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，28 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 4.3：PDF outline
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-outline`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-outline`。
+  - 扩展 `PdfReaderAdapter.getToc()`，优先读取 PDF.js `getOutline()`。
+  - 支持命名 destination 经 `getDestination()` 解析，页引用经 `getPageIndex()` 转换为 1-based `PdfLocator.page`。
+  - 无 outline 或 outline 不可定位时，降级为 `Page 1...Page N` 页码目录。
+  - 扩展 adapter Vitest 覆盖嵌套 outline、命名 destination、显式 destination 和页码 fallback。
+- 创建/修改的文件：
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.test.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts` 通过，30 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 4.4：PDF 进度恢复
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-progress`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-progress`。
+  - 在 Rust `Locator` enum 新增 `Pdf(PdfLocator)`，补齐 `PdfLocator`、`PdfZoomMode` 和 `PdfRect` 的 serde 模型。
+  - 放开 PDF 书籍保存进度，按格式拒绝 TXT/EPUB/PDF locator 混用。
+  - 归一化 PDF `page >= 1`、`scale` 到 `0.5..3.0`、过滤非法 rect；非有限 `progress` 置空。
+  - 将前端 `saveReadingProgress` Tauri invoke 返回类型改为通用 `ReaderProgress<Locator>`。
+  - 新增 Rust 单测覆盖 PDF 进度持久化、格式不匹配拒绝和归一化。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，22 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，30 tests。
+
+### 阶段 4.5：PDF 标注策略
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-annotation-spike`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-annotation-spike`。
+  - 检查本地 PDF.js 类型，确认 `getTextContent()`、`TextLayer` 和 `PageViewport` 坐标转换接口可用于后续文本层和高亮 overlay。
+  - 在 `findings.md` 记录 PDF 标注策略：阶段 4 不交付用户可见 CRUD；阶段 5 先补文本层，再做 PDF 坐标系 rect 保存和重放。
+  - 记录风险：canvas-only 无法可靠选择文本、扫描版 PDF 无文本层、旋转/裁剪页面需要坐标测试、跨页选择需要拆分为多页 rects。
+- 创建/修改的文件：
+  - `findings.md`
+  - `task_plan.md`
+  - `progress.md`
+- 验证：
+  - 文档策略阶段，无用户可见代码变更；提交前执行 `git diff --check`。
+
+### 阶段 4 验收测试补齐：PDF smoke
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-e2e-smoke`
+- 执行的操作：
+  - 新增 Playwright PDF smoke，运行时生成最小 3 页 PDF Blob，不提交二进制 fixture。
+  - 验证书架打开 PDF、PDF canvas 非空、页码跳转、`Double` 双页、`Fit width` 缩放和返回书架。
+  - 修复 PDF reader 卸载/ResizeObserver 竞态：卸载时先清空 adapter ref 再 close，并保护 resize callback。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 tests。
+
+### 阶段 4 最终验收
+- **状态：** complete
+- **分支：** `codex/v0.1.0-mvp-integration`
+- 验证：
+  - `pnpm.cmd install` 通过，lockfile up to date。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，30 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，22 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 Chromium smoke tests。
+  - Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage4-pdf-desktop.png`、`D:\tl-temp\ebook-reader-stage4-pdf-mobile-375x760.png`；desktop 双页 `Pages 1-2 / 3`、mobile 375x760 回退单页 `Page 1 / 3`，canvas 像素非空，console 无 warning/error。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+- 说明：
+  - 本轮未使用 in-app Browser 工具；当前会话只暴露了 node_repl/Playwright 能力，因此视觉检查使用 Playwright fallback。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

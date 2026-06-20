@@ -6,11 +6,13 @@ import {
   useState,
   type CSSProperties,
   type ChangeEvent,
+  type KeyboardEvent,
 } from "react";
 import {
   defaultReaderTheme,
   type Book,
   type EpubLocator,
+  type PdfLocator,
   type ReaderProgress,
   type ReaderTheme,
   type ReaderThemeMode,
@@ -23,6 +25,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
   getEpubBookSource,
+  getPdfBookSource,
   getReaderTheme,
   getReadingProgress,
   openTxtBook,
@@ -36,6 +39,11 @@ import {
   type EpubSpreadMode,
   type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
+import {
+  PdfReaderAdapter,
+  type PdfPosition,
+  type PdfViewMode,
+} from "../pdf/PdfReaderAdapter";
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -128,6 +136,11 @@ interface EpubJumpRequest {
   requestId: number;
 }
 
+interface PdfJumpRequest {
+  locator: PdfLocator;
+  requestId: number;
+}
+
 interface RenderedVirtualItem {
   index: number;
   start: number;
@@ -155,6 +168,11 @@ interface PendingEpubProgress {
   progress?: number;
 }
 
+interface PendingPdfProgress {
+  locator: PdfLocator;
+  progress?: number;
+}
+
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +188,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [chapterJumpRequest, setChapterJumpRequest] = useState<ChapterJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
+  const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -334,12 +353,21 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           requestId: (currentRequest?.requestId ?? 0) + 1,
         }));
         setActiveTocItemId(tocItem.id);
+        return;
+      }
+
+      if (book.format === "pdf" && tocItem.locator?.kind === "pdf") {
+        setPdfJumpRequest((currentRequest) => ({
+          locator: tocItem.locator as PdfLocator,
+          requestId: (currentRequest?.requestId ?? 0) + 1,
+        }));
+        setActiveTocItemId(tocItem.id);
       }
     },
     [book.format, chapterById, document, handleTxtProgressChange, tocItems],
   );
 
-  const handleEpubTocChange = useCallback((nextTocItems: TocItem[]) => {
+  const handleDocumentTocChange = useCallback((nextTocItems: TocItem[]) => {
     setTocItems(nextTocItems);
     setActiveTocItemId((currentId) => currentId ?? nextTocItems[0]?.id ?? null);
   }, []);
@@ -425,7 +453,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
-            onTocChange={handleEpubTocChange}
+            onTocChange={handleDocumentTocChange}
+          />
+        ) : null}
+        {book.format === "pdf" ? (
+          <PdfReaderContent
+            book={book}
+            jumpRequest={pdfJumpRequest}
+            theme={theme}
+            tocItems={tocItems}
+            onActiveTocItemChange={setActiveTocItemId}
+            onBackToLibrary={onBackToLibrary}
+            onTocChange={handleDocumentTocChange}
           />
         ) : null}
         <ThemePanel
@@ -1176,6 +1215,475 @@ function EpubReaderContent({
   );
 }
 
+interface PdfReaderContentProps {
+  book: Book;
+  jumpRequest: PdfJumpRequest | null;
+  theme: ReaderTheme;
+  tocItems: TocItem[];
+  onActiveTocItemChange: (tocItemId: string | null) => void;
+  onBackToLibrary: () => void;
+  onTocChange: (items: TocItem[]) => void;
+}
+
+function PdfReaderContent({
+  book,
+  jumpRequest,
+  theme,
+  tocItems,
+  onActiveTocItemChange,
+  onBackToLibrary,
+  onTocChange,
+}: PdfReaderContentProps) {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const adapterRef = useRef<PdfReaderAdapter | null>(null);
+  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
+  const pendingProgressRef = useRef<PendingPdfProgress | null>(null);
+  const positionRef = useRef<PdfPosition | null>(null);
+  const progressIdleTimerRef = useRef<number | null>(null);
+  const renderSequenceRef = useRef(0);
+  const requestedViewModeRef = useRef<PdfViewMode>("single");
+  const themeRef = useRef(theme);
+  const tocItemsRef = useRef(tocItems);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageInput, setPageInput] = useState("1");
+  const [position, setPosition] = useState<PdfPosition | null>(null);
+  const [requestedViewMode, setRequestedViewMode] = useState<PdfViewMode>("single");
+
+  useEffect(() => {
+    tocItemsRef.current = tocItems;
+  }, [tocItems]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  const flushPendingProgress = useCallback(() => {
+    const pendingProgress = pendingProgressRef.current;
+
+    if (pendingProgress === null) {
+      return;
+    }
+
+    pendingProgressRef.current = null;
+    void saveReadingProgress(book.id, pendingProgress.locator, pendingProgress.progress).catch(
+      () => undefined,
+    );
+  }, [book.id]);
+
+  useEffect(
+    () => () => {
+      if (progressIdleTimerRef.current !== null) {
+        window.clearTimeout(progressIdleTimerRef.current);
+      }
+
+      flushPendingProgress();
+    },
+    [flushPendingProgress],
+  );
+
+  const renderVisiblePages = useCallback(async () => {
+    const adapter = adapterRef.current;
+
+    if (adapter === null) {
+      return;
+    }
+
+    const renderSequence = renderSequenceRef.current + 1;
+    renderSequenceRef.current = renderSequence;
+
+    try {
+      const visiblePages = adapter.getVisiblePages();
+
+      for (const [index, pageNumber] of visiblePages.entries()) {
+        const canvas = canvasRefs.current[index];
+
+        if (canvas === undefined || canvas === null) {
+          continue;
+        }
+
+        canvas.hidden = false;
+        canvas.dataset.pageNumber = String(pageNumber);
+        await adapter.renderPage(canvas, pageNumber);
+
+        if (renderSequenceRef.current !== renderSequence) {
+          return;
+        }
+      }
+
+      for (let index = visiblePages.length; index < canvasRefs.current.length; index += 1) {
+        const canvas = canvasRefs.current[index];
+
+        if (canvas !== undefined && canvas !== null) {
+          canvas.hidden = true;
+          canvas.removeAttribute("data-page-number");
+        }
+      }
+    } catch (renderError) {
+      if (renderSequenceRef.current === renderSequence) {
+        setError(getErrorMessage(renderError));
+      }
+    }
+  }, []);
+
+  const handlePositionChange = useCallback(
+    (nextPosition: PdfPosition) => {
+      positionRef.current = nextPosition;
+      setPosition(nextPosition);
+      setPageInput(String(nextPosition.page));
+
+      const activeTocItemId = findTocItemIdByPdfPage(tocItemsRef.current, nextPosition.page);
+      onActiveTocItemChange(activeTocItemId);
+
+      pendingProgressRef.current = {
+        locator: nextPosition.locator,
+        progress: nextPosition.progression,
+      };
+
+      if (progressIdleTimerRef.current !== null) {
+        window.clearTimeout(progressIdleTimerRef.current);
+      }
+
+      progressIdleTimerRef.current = window.setTimeout(() => {
+        progressIdleTimerRef.current = null;
+        flushPendingProgress();
+      }, 750);
+    },
+    [flushPendingProgress, onActiveTocItemChange],
+  );
+
+  useEffect(() => {
+    themeRef.current = theme;
+    void adapterRef.current?.setTheme(theme).then(renderVisiblePages);
+  }, [renderVisiblePages, theme]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    let openedAdapter: PdfReaderAdapter | null = null;
+
+    async function openPdf() {
+      setIsLoading(true);
+      setError(null);
+      setPosition(null);
+      setPageInput("1");
+      setRequestedViewMode("single");
+      requestedViewModeRef.current = "single";
+      onTocChange([]);
+
+      try {
+        const [sourceUrl, savedProgress] = await Promise.all([
+          getPdfBookSource(book),
+          getReadingProgress<PdfLocator>(book.id),
+        ]);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        const adapter = new PdfReaderAdapter({
+          bookId: book.id,
+          sourceUrl,
+          initialLocator: savedProgress?.locator,
+          theme: themeRef.current,
+          viewMode: requestedViewModeRef.current,
+          onPositionChange: handlePositionChange,
+        });
+        openedAdapter = adapter;
+
+        await adapter.open(book.id);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        adapterRef.current = adapter;
+        await adapter.setTheme(themeRef.current);
+        const nextTocItems = await adapter.getToc();
+
+        if (!isCurrent) {
+          return;
+        }
+
+        onTocChange(nextTocItems);
+        onActiveTocItemChange(findTocItemIdByPdfPage(nextTocItems, adapter.getPosition().page));
+        await renderVisiblePages();
+      } catch (openError) {
+        if (isCurrent) {
+          setError(getErrorMessage(openError));
+        }
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void openPdf();
+
+    return () => {
+      isCurrent = false;
+      renderSequenceRef.current += 1;
+      if (adapterRef.current === openedAdapter) {
+        adapterRef.current = null;
+      }
+      void openedAdapter?.close();
+    };
+  }, [book, handlePositionChange, onActiveTocItemChange, onTocChange, renderVisiblePages]);
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const frame = frameRef.current;
+
+    if (frame === null) {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      const adapter = adapterRef.current;
+
+      if (adapter === null) {
+        return;
+      }
+
+      try {
+        const nextPosition = adapter.setViewMode(requestedViewModeRef.current, frame.clientWidth);
+        positionRef.current = nextPosition;
+        setPosition(nextPosition);
+        void renderVisiblePages();
+      } catch (resizeError) {
+        if (adapterRef.current === adapter) {
+          setError(getErrorMessage(resizeError));
+        }
+      }
+    });
+
+    resizeObserver.observe(frame);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [renderVisiblePages]);
+
+  useEffect(() => {
+    if (jumpRequest === null) {
+      return;
+    }
+
+    const adapter = adapterRef.current;
+
+    if (adapter === null) {
+      return;
+    }
+
+    void adapter
+      .goTo(jumpRequest.locator)
+      .then(renderVisiblePages)
+      .catch((jumpError: unknown) => {
+        setError(getErrorMessage(jumpError));
+      });
+  }, [jumpRequest, renderVisiblePages]);
+
+  const runPdfAction = useCallback(
+    (action: (adapter: PdfReaderAdapter) => Promise<unknown> | unknown) => {
+      const adapter = adapterRef.current;
+
+      if (adapter === null) {
+        return;
+      }
+
+      void Promise.resolve(action(adapter))
+        .then(renderVisiblePages)
+        .catch((actionError: unknown) => {
+          setError(getErrorMessage(actionError));
+        });
+    },
+    [renderVisiblePages],
+  );
+
+  const handlePrevious = useCallback(() => {
+    runPdfAction((adapter) => adapter.previous());
+  }, [runPdfAction]);
+
+  const handleNext = useCallback(() => {
+    runPdfAction((adapter) => adapter.next());
+  }, [runPdfAction]);
+
+  const handleViewModeChange = useCallback(
+    (mode: PdfViewMode) => {
+      setRequestedViewMode(mode);
+      requestedViewModeRef.current = mode;
+      runPdfAction((adapter) => adapter.setViewMode(mode, frameRef.current?.clientWidth));
+    },
+    [runPdfAction],
+  );
+
+  const handleZoomOut = useCallback(() => {
+    runPdfAction((adapter) => adapter.setZoom((positionRef.current?.scale ?? 1) - 0.1));
+  }, [runPdfAction]);
+
+  const handleZoomIn = useCallback(() => {
+    runPdfAction((adapter) => adapter.setZoom((positionRef.current?.scale ?? 1) + 0.1));
+  }, [runPdfAction]);
+
+  const handleFitWidth = useCallback(() => {
+    runPdfAction((adapter) => adapter.fitWidth(getPdfPageSlotWidth(frameRef.current, positionRef.current)));
+  }, [runPdfAction]);
+
+  const commitPageInput = useCallback(() => {
+    const page = Number.parseInt(pageInput, 10);
+
+    if (!Number.isFinite(page)) {
+      setPageInput(String(positionRef.current?.page ?? 1));
+      return;
+    }
+
+    runPdfAction((adapter) =>
+      adapter.goTo({
+        kind: "pdf",
+        page,
+        scale: positionRef.current?.scale,
+        zoomMode: positionRef.current?.zoomMode,
+      }),
+    );
+  }, [pageInput, runPdfAction]);
+
+  const handlePageInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        commitPageInput();
+      }
+    },
+    [commitPageInput],
+  );
+
+  const visiblePageNumbers = position === null ? [] : getPdfVisiblePageNumbers(position);
+  const pageLabel = position === null ? "Pages loading" : getPdfPageLabel(position);
+  const zoomLabel = position === null ? "100%" : `${Math.round(position.scale * 100)}%`;
+  const progressLabel =
+    position === null ? "0%" : `${Math.round(Math.min(Math.max(position.progression, 0), 1) * 100)}%`;
+  const activeSectionTitle =
+    position === null ? book.title : (findTocItemByPdfPage(tocItems, position.page)?.title ?? book.title);
+  const renderedModeDescription =
+    requestedViewMode === "double" && position?.renderedMode === "single"
+      ? "Double view will resume when the window is wide enough."
+      : undefined;
+
+  return (
+    <section className="reader-viewport reader-viewport--pdf" aria-label={`${book.title} content`}>
+      <article className="reader-page reader-page--pdf">
+        <div ref={frameRef} className="reader-pdf-frame">
+          {isLoading ? (
+            <section className="reader-state reader-state--overlay" aria-label="Loading PDF book">
+              <div className="loading-line" aria-hidden="true" />
+              <p>Opening PDF book...</p>
+            </section>
+          ) : null}
+          {error !== null ? (
+            <section className="reader-state reader-state--error reader-state--overlay" role="alert">
+              <h2>Book could not be opened</h2>
+              <p>{error}</p>
+              <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
+                Back to shelf
+              </button>
+            </section>
+          ) : null}
+          <div
+            className={`reader-pdf-stage reader-pdf-stage--${position?.renderedMode ?? "single"}`}
+            aria-hidden={error !== null}
+          >
+            {[0, 1].map((index) => (
+              <div
+                key={index}
+                className="reader-pdf-sheet"
+                hidden={visiblePageNumbers[index] === undefined}
+              >
+                <canvas
+                  ref={(canvas) => {
+                    canvasRefs.current[index] = canvas;
+                  }}
+                  className="reader-pdf-canvas"
+                  aria-label={
+                    visiblePageNumbers[index] === undefined
+                      ? undefined
+                      : `PDF page ${visiblePageNumbers[index]}`
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="reader-epub-controls reader-pdf-controls" aria-label="PDF navigation">
+          <div className="reader-epub-control-row reader-pdf-control-row">
+            <button type="button" className="reader-tool-button" onClick={handlePrevious}>
+              Previous
+            </button>
+            <div className="reader-epub-status reader-pdf-status" aria-live="polite">
+              <span>{activeSectionTitle}</span>
+              <strong>{pageLabel}</strong>
+              <span>{progressLabel}</span>
+            </div>
+            <button type="button" className="reader-tool-button" onClick={handleNext}>
+              Next
+            </button>
+            <div
+              className="reader-epub-mode-toggle reader-pdf-mode-toggle"
+              role="group"
+              aria-label="PDF page view"
+              title={renderedModeDescription}
+            >
+              <button
+                type="button"
+                aria-pressed={requestedViewMode === "single"}
+                onClick={() => handleViewModeChange("single")}
+              >
+                Single
+              </button>
+              <button
+                type="button"
+                aria-pressed={requestedViewMode === "double"}
+                onClick={() => handleViewModeChange("double")}
+              >
+                Double
+              </button>
+            </div>
+          </div>
+          <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
+            <label className="reader-pdf-page-field">
+              <span>Page</span>
+              <input
+                aria-label="PDF page number"
+                min={1}
+                max={position?.totalPages ?? 1}
+                type="number"
+                value={pageInput}
+                onBlur={commitPageInput}
+                onChange={(event) => setPageInput(event.currentTarget.value)}
+                onKeyDown={handlePageInputKeyDown}
+              />
+              <span>/ {position?.totalPages ?? "-"}</span>
+            </label>
+            <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">
+              <button type="button" className="reader-tool-button" onClick={handleZoomOut}>
+                -
+              </button>
+              <strong>{zoomLabel}</strong>
+              <button type="button" className="reader-tool-button" onClick={handleZoomIn}>
+                +
+              </button>
+              <button type="button" className="reader-tool-button" onClick={handleFitWidth}>
+                Fit width
+              </button>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  );
+}
+
 interface ReaderMetaProps {
   document: TxtDocument;
 }
@@ -1394,6 +1902,34 @@ function findTocItemByHref(items: TocItem[], href: string): TocItem | null {
   return null;
 }
 
+function findTocItemIdByPdfPage(items: TocItem[], page: number): string | null {
+  return findTocItemByPdfPage(items, page)?.id ?? null;
+}
+
+function findTocItemByPdfPage(items: TocItem[], page: number): TocItem | null {
+  let closestItem: TocItem | null = null;
+  let closestPage = 0;
+
+  for (const item of flattenTocItems(items)) {
+    const locator = item.locator;
+
+    if (locator?.kind !== "pdf") {
+      continue;
+    }
+
+    if (locator.page === page) {
+      return item;
+    }
+
+    if (locator.page < page && locator.page > closestPage) {
+      closestItem = item;
+      closestPage = locator.page;
+    }
+  }
+
+  return closestItem;
+}
+
 function epubHrefsMatch(firstHref: string, secondHref: string): boolean {
   const first = normalizeEpubHref(firstHref);
   const second = normalizeEpubHref(secondHref);
@@ -1407,6 +1943,33 @@ function epubHrefsMatch(firstHref: string, secondHref: string): boolean {
 
 function normalizeEpubHref(href: string): string {
   return (href.split("#")[0] ?? href).replaceAll("\\", "/").replace(/^\/+/, "");
+}
+
+function getPdfVisiblePageNumbers(position: PdfPosition): number[] {
+  if (position.renderedMode === "single") {
+    return [position.page];
+  }
+
+  return [position.page, position.page + 1].filter((page) => page <= position.totalPages);
+}
+
+function getPdfPageLabel(position: PdfPosition): string {
+  const visiblePages = getPdfVisiblePageNumbers(position);
+
+  if (visiblePages.length === 2) {
+    return `Pages ${visiblePages[0]}-${visiblePages[1]} / ${position.totalPages}`;
+  }
+
+  return `Page ${position.page} / ${position.totalPages}`;
+}
+
+function getPdfPageSlotWidth(frame: HTMLDivElement | null, position: PdfPosition | null): number {
+  const frameWidth = frame?.clientWidth ?? 760;
+  const renderedPages = position?.renderedMode === "double" ? 2 : 1;
+  const totalGap = renderedPages === 2 ? 18 : 0;
+  const horizontalPadding = 32;
+
+  return Math.max(260, (frameWidth - horizontalPadding - totalGap) / renderedPages);
 }
 
 function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {
