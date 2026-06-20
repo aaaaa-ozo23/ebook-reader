@@ -21,6 +21,11 @@ fn mark_book_opened(app: tauri::AppHandle, book_id: String) -> Result<db::Book, 
 }
 
 #[tauri::command]
+fn remove_book(app: tauri::AppHandle, book_id: String) -> Result<db::RemoveBookResult, String> {
+    db::remove_book(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn open_txt_book(app: tauri::AppHandle, book_id: String) -> Result<db::TxtDocument, String> {
     db::open_txt_book(&app, &book_id).map_err(|error| error.to_string())
 }
@@ -70,6 +75,7 @@ pub fn run() {
             list_books,
             import_book,
             mark_book_opened,
+            remove_book,
             open_txt_book,
             get_reader_theme,
             save_reader_theme,

@@ -1,5 +1,99 @@
 # 进度日志
 
+## 会话：2026-06-20
+
+### 阶段 1/2 修复优化启动
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 读取 `planning-with-files-zh`、Build Web Apps 前端测试调试、React 性能实践说明。
+  - 读取 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 1/2 基线已完成。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage1-book-actions-remove` 分支。
+  - 启动 TXT 阅读器性能审查 subagent，获取 ReaderShell 索引、滚动 idle、TOC 同步和 dark 主题修复清单。
+
+### 阶段 1.x：书架更多操作与移除
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 `@reader/core` 新增 `RemoveBookResult` 类型。
+  - 在 Rust 后端新增 `remove_book` / `remove_book_at`，删除 SQLite 书籍记录并删除应用书库副本，保留原始导入文件。
+  - 注册 Tauri `remove_book(book_id)` 命令。
+  - 在 `tauri/library.ts` 新增 `removeBook`，浏览器 fallback 同步删除 localStorage 书籍。
+  - 书架卡片新增右键菜单和可见 More 按钮；菜单当前只提供 `Remove from shelf`。
+  - 新增确认移除弹窗，明确原始导入文件不会被删除。
+  - 将 `Import book` 加号改为 CSS 绘制的稳定 icon，修正字体基线偏移。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/tauri/library.ts`
+  - `packages/core/src/index.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，13 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 2.x：TXT 阅读器性能与主题修复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 `ReaderShell` 中为虚拟块建立章节索引、全局 charOffset 索引和按章节分组的 charOffset 索引。
+  - 进度恢复改为优先按 `charOffset` 定位到章节内接近段落；目录跳转改为使用章节索引。
+  - 程序化恢复和目录跳转使用 instant scroll，并短暂抑制由程序化滚动触发的保存。
+  - 滚动时只记录 pending progress，滚动 idle 后再保存，避免滚动过程中频繁 setState 和写数据库。
+  - 使用 `requestAnimationFrame` 同步当前 active chapter，目录按钮增加 `aria-current="location"` 和 active 样式。
+  - 移除 `.reader-viewport` 的 smooth scrolling。
+  - 将阅读器 topbar、书名、章节名、meta、主题面板等颜色改为主题 CSS 变量，修复 dark 主题可读性。
+  - 扩展 Playwright smoke：右键移除、长 TXT 多章节、目录跳转、dark 主题 heading 变量、滚动后 active TOC。
+  - 使用 Browser 插件检查 `http://127.0.0.1:1420/` 桌面和 375x760 窄屏 DOM/console/style metrics。
+  - Browser 截图命令超时后，使用 Playwright CLI 在仓库外生成并查看桌面/窄屏截图。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，14 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，3 tests。
+  - Browser QA metrics 通过：桌面和窄屏首屏存在书架 main、空状态、导入按钮，无 Vite overlay，无 console warning/error，导入 icon 垂直中心偏移为 0。
+  - Playwright 截图：`D:\tl-temp\ebook-reader-stage2-shelf-desktop.png`、`D:\tl-temp\ebook-reader-stage2-shelf-narrow.png` 已人工查看。
+
+### 阶段 1/2 修复优化最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 `codex/stage1-book-actions-remove` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 将 `codex/stage2-txt-reader-polish` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 在集成分支运行阶段 1/2 修复优化全量验收。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，14 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，3 Chromium smoke tests。
+  - Browser QA metrics 通过。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过。
+
 ## 会话：2026-06-19
 
 ### 产品大阶段 2：TXT 阅读器优先打磨启动
@@ -511,6 +605,10 @@
 | 2026-06-19 | `chardetng` 1.0.0 的 API 需要 `Iso2022JpDetection` 和 `Utf8Detection` 枚举参数 | 1 | 按本地 crate 源码修正 `EncodingDetector::new` 和 `guess` 调用 |
 | 2026-06-19 | 阶段 2.1 编码测试断言单章 `full-text`，阶段 2.2 识别章节后失败 | 1 | 改为断言章节文本拼接等于原始文本 |
 | 2026-06-19 | 阶段 2.6 Playwright 长文本 smoke 首次发现虚拟列表渲染全部 240 段 | 1 | 约束 `reader-shell` 与 `reader-main` 为 `100vh`，让 `reader-viewport` 作为内部滚动容器 |
+| 2026-06-20 | 阶段 2.x Vitest 发现 jsdom 中 `scrollIntoView` 不存在，ReaderSidebar effect 抛错 | 1 | 对 `activeItemRef.current.scrollIntoView` 增加函数存在性检查 |
+| 2026-06-20 | 阶段 2.x ESLint 报 `react-hooks/set-state-in-effect`，指向 active chapter 初始化 effect | 1 | 删除该 effect，改在 TXT 文档加载完成时设置初始 active chapter |
+| 2026-06-20 | Browser 插件对本地页截图调用超时 | 1 | 继续使用 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成截图 |
+| 2026-06-20 | PowerShell 不接受本次 `git add ... && git commit ...` 命令分隔符 | 1 | 改为分两条命令执行 |
 
 ## 五问重启检查
 

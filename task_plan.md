@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 2：TXT 阅读器优先打磨已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
+阶段 1/2 修复优化已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
 
 ## 分支策略
 
@@ -76,6 +76,27 @@
 | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，8 tests |
 | `pnpm.cmd --filter @reader/desktop test:e2e` | passed，1 Chromium smoke |
 | Browser QA | passed，桌面和窄屏书架首屏无 overlay、无 console warning/error |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
+
+### 阶段 1/2 修复优化执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 1.x 书架更多操作与移除 | `codex/stage1-book-actions-remove` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test`，13 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 2.x TXT 阅读器性能与主题修复 | `codex/stage2-txt-reader-polish` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test`，14 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，3 tests；Browser QA metrics；Playwright screenshots |
+
+### 阶段 1/2 修复优化最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，14 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，20 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，3 Chromium smoke tests |
+| Browser QA | passed，桌面和 375x760 窄屏 DOM/console/style metrics 通过；Browser 截图超时后用 Playwright CLI 生成截图 |
 | `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 2：TXT 阅读器优先打磨
@@ -230,6 +251,9 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | `chardetng` 1.0.0 的 `EncodingDetector::new` 和 `guess` 需要枚举参数 | 1 | 改用 `Iso2022JpDetection::Deny` 和 `Utf8Detection::Allow` |
 | 阶段 2.1 解码测试仍断言 `full-text`，与 2.2 章节识别冲突 | 1 | 将该测试收窄为校验拼接后的解码文本，章节 ID 交给章节测试覆盖 |
 | 阶段 2.6 首次 Playwright 长文本测试发现虚拟列表渲染全部 240 段 | 1 | 将 `reader-shell` 和 `reader-main` 约束为 `100vh`，让 `reader-viewport` 成为内部滚动容器 |
+| 阶段 2.x Vitest 发现 jsdom 缺少 `scrollIntoView` | 1 | 对 active TOC 自动滚动增加运行时函数存在性检查 |
+| 阶段 2.x ESLint `react-hooks/set-state-in-effect` 指出 active 章节初始化 effect | 1 | 改为在 TXT 文档加载完成时同步设置初始 active chapter |
+| 阶段 2.x Browser 插件截图命令超时 | 1 | 保留 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成桌面和窄屏截图 |
 
 ## 备注
 

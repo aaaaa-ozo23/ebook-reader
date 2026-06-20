@@ -25,6 +25,11 @@ export interface ImportBookResult {
   book: Book;
 }
 
+export interface RemoveBookResult {
+  book: Book;
+  removedLibraryPath: string;
+}
+
 export interface TxtChapter {
   id: string;
   title: string;

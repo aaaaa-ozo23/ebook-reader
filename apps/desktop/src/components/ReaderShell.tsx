@@ -64,6 +64,25 @@ const FONT_OPTIONS = [
   },
 ];
 
+function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
+  const isDark = theme.mode === "dark";
+
+  return {
+    "--txt-reader-heading": theme.textColor,
+    "--txt-reader-muted": isDark ? "rgba(240, 232, 215, 0.72)" : "#5f6870",
+    "--txt-reader-chrome-background": isDark
+      ? "rgba(24, 28, 31, 0.96)"
+      : "rgba(249, 246, 239, 0.96)",
+    "--txt-reader-chrome-border": isDark ? "rgba(240, 232, 215, 0.16)" : "#d9cfbd",
+    "--txt-reader-link": isDark ? "#f3bc55" : "#2f5d62",
+    "--txt-reader-meta-background": isDark ? "rgba(240, 232, 215, 0.08)" : "rgba(255, 255, 255, 0.54)",
+    "--txt-reader-meta-border": isDark ? "rgba(240, 232, 215, 0.18)" : "#d8cebc",
+    "--txt-reader-panel-background": isDark ? "#222a2e" : "#fbfaf7",
+    "--txt-reader-panel-text": isDark ? "#f7f2e8" : "#243038",
+    "--txt-reader-control-background": isDark ? "#151a1d" : "#ffffff",
+  };
+}
+
 interface ReaderShellProps {
   bookId: string;
   onBackToLibrary: () => void;
@@ -98,6 +117,23 @@ interface RenderedVirtualItem {
   start: number;
 }
 
+interface ReaderVirtualIndex {
+  chapterHeadingIndexById: Map<string, number>;
+  charOffsetEntriesByChapterId: Map<string, ReaderVirtualIndexEntry[]>;
+  charOffsetEntries: ReaderVirtualIndexEntry[];
+}
+
+interface ReaderVirtualIndexEntry {
+  charOffset: number;
+  chapterId: string;
+  index: number;
+}
+
+interface PendingProgress {
+  locator: TxtLocator;
+  progress?: number;
+}
+
 export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,8 +144,8 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] = useState<ReaderProgress<TxtLocator> | null>(null);
+  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [chapterJumpRequest, setChapterJumpRequest] = useState<ChapterJumpRequest | null>(null);
-  const progressSaveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -117,6 +153,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
     async function loadDocument() {
       setIsLoading(true);
       setError(null);
+      setActiveChapterId(null);
 
       try {
         const [openedDocument, savedTheme, savedProgress] = await Promise.all([
@@ -129,10 +166,12 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
           setDocument(openedDocument);
           setTheme(savedTheme);
           setReadingProgress(savedProgress);
+          setActiveChapterId(openedDocument.chapters[0]?.id ?? null);
         }
       } catch (openError) {
         if (isCurrent) {
           setError(getErrorMessage(openError));
+          setActiveChapterId(null);
         }
       } finally {
         if (isCurrent) {
@@ -148,15 +187,6 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
     };
   }, [bookId]);
 
-  useEffect(
-    () => () => {
-      if (progressSaveTimerRef.current !== null) {
-        window.clearTimeout(progressSaveTimerRef.current);
-      }
-    },
-    [],
-  );
-
   const blocks = useMemo(() => {
     if (document === null) {
       return [];
@@ -166,6 +196,11 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
       chapter,
       paragraphs: splitChapterParagraphs(chapter),
     }));
+  }, [document]);
+
+  const chapterById = useMemo(() => {
+    const chapters = document?.chapters ?? [];
+    return new Map(chapters.map((chapter) => [chapter.id, chapter]));
   }, [document]);
 
   const toggleSidebar = useCallback(() => {
@@ -204,25 +239,20 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
         updatedAt: new Date().toISOString(),
       });
 
-      if (progressSaveTimerRef.current !== null) {
-        window.clearTimeout(progressSaveTimerRef.current);
-      }
-
-      progressSaveTimerRef.current = window.setTimeout(() => {
-        void saveReadingProgress(bookId, locator, progressValue);
-      }, 450);
+      void saveReadingProgress(bookId, locator, progressValue);
     },
     [bookId],
   );
 
   const handleJumpToChapter = useCallback(
     (chapterId: string) => {
-      const chapter = document?.chapters.find((currentChapter) => currentChapter.id === chapterId);
+      const chapter = chapterById.get(chapterId);
       if (chapter !== undefined && document !== null) {
         setChapterJumpRequest((currentRequest) => ({
           chapterId,
           requestId: (currentRequest?.requestId ?? 0) + 1,
         }));
+        setActiveChapterId(chapter.id);
         handleProgressChange(
           {
             kind: "txt",
@@ -233,7 +263,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
         );
       }
     },
-    [document, handleProgressChange],
+    [chapterById, document, handleProgressChange],
   );
 
   const readerStyle = useMemo(
@@ -246,6 +276,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
         "--txt-reader-line-height": theme.lineHeight,
         "--txt-reader-paragraph-spacing": `${theme.paragraphSpacing}px`,
         "--txt-reader-page-margin": `${theme.pageMargin}px`,
+        ...getReaderThemeTokens(theme),
       }) as CSSProperties,
     [theme],
   );
@@ -256,9 +287,11 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
         isChromeHidden ? "reader-shell--chrome-hidden" : ""
       }`}
       style={readerStyle}
+      data-reader-theme={theme.mode}
       aria-label="TXT reader"
     >
       <ReaderSidebar
+        activeChapterId={activeChapterId}
         chapters={document?.chapters ?? []}
         isOpen={isSidebarOpen}
         onBackToLibrary={onBackToLibrary}
@@ -299,6 +332,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
           initialProgress={readingProgress}
           isLoading={isLoading}
           jumpRequest={chapterJumpRequest}
+          onActiveChapterChange={setActiveChapterId}
           onProgressChange={handleProgressChange}
           onBackToLibrary={onBackToLibrary}
         />
@@ -314,6 +348,7 @@ export function ReaderShell({ bookId, onBackToLibrary }: ReaderShellProps) {
 }
 
 interface ReaderSidebarProps {
+  activeChapterId: string | null;
   chapters: TxtChapter[];
   isOpen: boolean;
   onBackToLibrary: () => void;
@@ -321,17 +356,28 @@ interface ReaderSidebarProps {
 }
 
 function ReaderSidebar({
+  activeChapterId,
   chapters,
   isOpen,
   onBackToLibrary,
   onJumpToChapter,
 }: ReaderSidebarProps) {
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+
   const handleJump = useCallback(
     (chapterId: string) => {
       onJumpToChapter(chapterId);
     },
     [onJumpToChapter],
   );
+
+  useEffect(() => {
+    if (typeof activeItemRef.current?.scrollIntoView === "function") {
+      activeItemRef.current.scrollIntoView({
+        block: "nearest",
+      });
+    }
+  }, [activeChapterId]);
 
   return (
     <aside className="reader-sidebar" aria-label="Table of contents" aria-hidden={!isOpen}>
@@ -343,16 +389,22 @@ function ReaderSidebar({
         {chapters.length === 0 ? (
           <p className="reader-sidebar__empty">Loading chapters...</p>
         ) : (
-          chapters.map((chapter) => (
-            <button
-              key={chapter.id}
-              type="button"
-              className="reader-toc__item"
-              onClick={() => handleJump(chapter.id)}
-            >
-              {chapter.title}
-            </button>
-          ))
+          chapters.map((chapter) => {
+            const isActive = chapter.id === activeChapterId;
+
+            return (
+              <button
+                key={chapter.id}
+                ref={isActive ? activeItemRef : undefined}
+                type="button"
+                className={`reader-toc__item ${isActive ? "reader-toc__item--active" : ""}`}
+                aria-current={isActive ? "location" : undefined}
+                onClick={() => handleJump(chapter.id)}
+              >
+                {chapter.title}
+              </button>
+            );
+          })
         )}
       </nav>
     </aside>
@@ -366,6 +418,7 @@ interface ReaderContentProps {
   initialProgress: ReaderProgress<TxtLocator> | null;
   isLoading: boolean;
   jumpRequest: ChapterJumpRequest | null;
+  onActiveChapterChange: (chapterId: string) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onBackToLibrary: () => void;
 }
@@ -377,12 +430,20 @@ function ReaderContent({
   initialProgress,
   isLoading,
   jumpRequest,
+  onActiveChapterChange,
   onProgressChange,
   onBackToLibrary,
 }: ReaderContentProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
   const hasRestoredProgressRef = useRef(false);
+  const ignoreScrollSaveUntilRef = useRef(0);
+  const lastActiveChapterIdRef = useRef<string | null>(null);
+  const pendingActiveChapterIdRef = useRef<string | null>(null);
+  const pendingProgressRef = useRef<PendingProgress | null>(null);
+  const rafHandleRef = useRef<number | null>(null);
+  const scrollIdleTimerRef = useRef<number | null>(null);
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
+  const virtualIndex = useMemo(() => buildVirtualBlockIndex(virtualBlocks), [virtualBlocks]);
   // TanStack Virtual owns imperative scroll state for this reader surface.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -406,6 +467,51 @@ function ReaderContent({
   const totalVirtualSize = Math.max(virtualizer.getTotalSize(), estimateTotalSize(virtualBlocks));
 
   useEffect(() => {
+    hasRestoredProgressRef.current = false;
+    ignoreScrollSaveUntilRef.current = 0;
+    lastActiveChapterIdRef.current = null;
+    pendingActiveChapterIdRef.current = null;
+    pendingProgressRef.current = null;
+  }, [document?.book.id]);
+
+  const flushPendingProgress = useCallback(() => {
+    const pendingProgress = pendingProgressRef.current;
+
+    if (pendingProgress === null) {
+      return;
+    }
+
+    pendingProgressRef.current = null;
+    onProgressChange(pendingProgress.locator, pendingProgress.progress);
+  }, [onProgressChange]);
+
+  useEffect(
+    () => () => {
+      if (rafHandleRef.current !== null) {
+        window.cancelAnimationFrame(rafHandleRef.current);
+      }
+
+      if (scrollIdleTimerRef.current !== null) {
+        window.clearTimeout(scrollIdleTimerRef.current);
+      }
+
+      flushPendingProgress();
+    },
+    [flushPendingProgress],
+  );
+
+  const scrollToVirtualIndex = useCallback(
+    (targetIndex: number) => {
+      ignoreScrollSaveUntilRef.current = performance.now() + 350;
+      virtualizer.scrollToIndex(targetIndex, {
+        align: "start",
+        behavior: "auto",
+      });
+    },
+    [virtualizer],
+  );
+
+  useEffect(() => {
     if (
       hasRestoredProgressRef.current ||
       isLoading ||
@@ -416,54 +522,107 @@ function ReaderContent({
       return;
     }
 
-    const targetIndex = findProgressTargetIndex(virtualBlocks, initialProgress.locator);
+    const targetIndex = findProgressTargetIndex(virtualIndex, initialProgress.locator);
 
     if (targetIndex !== -1) {
-      virtualizer.scrollToIndex(targetIndex, { align: "start" });
+      scrollToVirtualIndex(targetIndex);
     }
     hasRestoredProgressRef.current = true;
-  }, [document, initialProgress, isLoading, virtualBlocks, virtualizer]);
+  }, [document, initialProgress, isLoading, scrollToVirtualIndex, virtualBlocks, virtualIndex]);
 
   useEffect(() => {
     if (jumpRequest === null || virtualBlocks.length === 0) {
       return;
     }
 
-    const targetIndex = virtualBlocks.findIndex(
-      (block) => block.kind === "heading" && block.chapterId === jumpRequest.chapterId,
-    );
+    const targetIndex = virtualIndex.chapterHeadingIndexById.get(jumpRequest.chapterId) ?? -1;
 
     if (targetIndex !== -1) {
-      virtualizer.scrollToIndex(targetIndex, { align: "start" });
+      scrollToVirtualIndex(targetIndex);
     }
-  }, [jumpRequest, virtualBlocks, virtualizer]);
+  }, [jumpRequest, scrollToVirtualIndex, virtualBlocks.length, virtualIndex]);
+
+  const getActiveVirtualBlock = useCallback(() => {
+    const viewport = viewportRef.current;
+
+    if (viewport === null || virtualBlocks.length === 0) {
+      return null;
+    }
+
+    const targetOffset = viewport.scrollTop + viewport.clientHeight * 0.42;
+    let activeIndex: number | null = null;
+
+    for (const virtualItem of virtualizer.getVirtualItems()) {
+      if (virtualItem.start <= targetOffset) {
+        activeIndex = virtualItem.index;
+      } else {
+        break;
+      }
+    }
+
+    if (activeIndex === null) {
+      activeIndex = findEstimatedIndexAtOffset(virtualBlocks, targetOffset);
+    }
+
+    return virtualBlocks[activeIndex] ?? null;
+  }, [virtualBlocks, virtualizer]);
+
+  const scheduleActiveChapterChange = useCallback(
+    (chapterId: string) => {
+      pendingActiveChapterIdRef.current = chapterId;
+
+      if (rafHandleRef.current !== null) {
+        return;
+      }
+
+      rafHandleRef.current = window.requestAnimationFrame(() => {
+        rafHandleRef.current = null;
+        const nextChapterId = pendingActiveChapterIdRef.current;
+
+        if (nextChapterId !== null && nextChapterId !== lastActiveChapterIdRef.current) {
+          lastActiveChapterIdRef.current = nextChapterId;
+          onActiveChapterChange(nextChapterId);
+        }
+      });
+    },
+    [onActiveChapterChange],
+  );
 
   const handleScroll = useCallback(() => {
-    if (document === null || viewportRef.current === null) {
+    if (document === null) {
       return;
     }
 
-    const activeBlock = renderedVirtualItems[0];
+    const block = getActiveVirtualBlock();
 
-    if (activeBlock === undefined) {
+    if (block === null) {
       return;
     }
 
-    const block = virtualBlocks[activeBlock.index];
+    scheduleActiveChapterChange(block.chapterId);
 
-    if (block === undefined) {
+    if (performance.now() < ignoreScrollSaveUntilRef.current) {
       return;
     }
 
-    onProgressChange(
-      {
+    pendingProgressRef.current = {
+      locator: {
         kind: "txt",
         chapterId: block.chapterId,
         charOffset: block.charOffset,
       },
-      block.charOffset / Math.max(document.charCount, 1),
-    );
-  }, [document, onProgressChange, renderedVirtualItems, virtualBlocks]);
+      progress: block.charOffset / Math.max(document.charCount, 1),
+    };
+
+    if (scrollIdleTimerRef.current !== null) {
+      window.clearTimeout(scrollIdleTimerRef.current);
+    }
+
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      scrollIdleTimerRef.current = null;
+      flushPendingProgress();
+    }, 750);
+  }, [document, flushPendingProgress, getActiveVirtualBlock, scheduleActiveChapterChange]);
 
   if (isLoading) {
     return (
@@ -737,24 +896,78 @@ function flattenReaderBlocks(blocks: ReaderBlock[]): ReaderVirtualBlock[] {
   ]);
 }
 
-function findProgressTargetIndex(blocks: ReaderVirtualBlock[], locator: TxtLocator): number {
+function buildVirtualBlockIndex(blocks: ReaderVirtualBlock[]): ReaderVirtualIndex {
+  const chapterHeadingIndexById = new Map<string, number>();
+  const charOffsetEntriesByChapterId = new Map<string, ReaderVirtualIndexEntry[]>();
+  const charOffsetEntries: ReaderVirtualIndexEntry[] = [];
+
+  for (const [index, block] of blocks.entries()) {
+    if (block.kind === "heading") {
+      chapterHeadingIndexById.set(block.chapterId, index);
+    }
+
+    charOffsetEntries.push({
+      charOffset: block.charOffset,
+      chapterId: block.chapterId,
+      index,
+    });
+    const chapterEntries = charOffsetEntriesByChapterId.get(block.chapterId) ?? [];
+    chapterEntries.push(charOffsetEntries[charOffsetEntries.length - 1]);
+    charOffsetEntriesByChapterId.set(block.chapterId, chapterEntries);
+  }
+
+  return {
+    chapterHeadingIndexById,
+    charOffsetEntriesByChapterId,
+    charOffsetEntries,
+  };
+}
+
+function findProgressTargetIndex(index: ReaderVirtualIndex, locator: TxtLocator): number {
+  let targetIndex = findIndexAtOrBeforeCharOffset(index.charOffsetEntries, locator.charOffset);
+
   if (locator.chapterId !== undefined) {
-    const chapterIndex = blocks.findIndex(
-      (block) => block.kind === "heading" && block.chapterId === locator.chapterId,
+    const chapterEntries = index.charOffsetEntriesByChapterId.get(locator.chapterId) ?? [];
+    const sameChapterIndex = findIndexAtOrBeforeCharOffset(
+      chapterEntries,
+      locator.charOffset,
     );
 
-    if (chapterIndex !== -1) {
-      return chapterIndex;
+    if (sameChapterIndex !== -1) {
+      return sameChapterIndex;
+    }
+
+    const chapterHeadingIndex = index.chapterHeadingIndexById.get(locator.chapterId);
+
+    if (chapterHeadingIndex !== undefined) {
+      targetIndex = chapterHeadingIndex;
     }
   }
 
-  let targetIndex = blocks.length > 0 ? 0 : -1;
+  return targetIndex;
+}
 
-  for (const [index, block] of blocks.entries()) {
-    if (block.charOffset <= locator.charOffset) {
-      targetIndex = index;
+function findIndexAtOrBeforeCharOffset(
+  entries: ReaderVirtualIndexEntry[],
+  charOffset: number,
+): number {
+  if (entries.length === 0) {
+    return -1;
+  }
+
+  let low = 0;
+  let high = entries.length - 1;
+  let targetIndex = entries[0].index;
+
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const entry = entries[middle];
+
+    if (entry.charOffset <= charOffset) {
+      targetIndex = entry.index;
+      low = middle + 1;
     } else {
-      break;
+      high = middle - 1;
     }
   }
 
@@ -775,6 +988,20 @@ function buildEstimatedVirtualItems(blocks: ReaderVirtualBlock[]): RenderedVirtu
   }
 
   return items;
+}
+
+function findEstimatedIndexAtOffset(blocks: ReaderVirtualBlock[], targetOffset: number): number {
+  let estimatedOffset = 0;
+
+  for (const [index, block] of blocks.entries()) {
+    if (estimatedOffset > targetOffset) {
+      return Math.max(0, index - 1);
+    }
+
+    estimatedOffset += estimateVirtualBlockSize(block);
+  }
+
+  return Math.max(0, blocks.length - 1);
 }
 
 function estimateTotalSize(blocks: ReaderVirtualBlock[]): number {

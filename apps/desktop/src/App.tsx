@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/core";
 
 import "./App.css";
 import { ReaderShell } from "./components/ReaderShell";
-import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
+import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
@@ -12,6 +20,12 @@ interface Feedback {
   kind: FeedbackKind;
   title: string;
   message: string;
+}
+
+interface BookActionMenuState {
+  book: Book;
+  x: number;
+  y: number;
 }
 
 const readerThemeStyle = {
@@ -35,6 +49,9 @@ function App() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [readerBookId, setReaderBookId] = useState<string | null>(null);
+  const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(null);
+  const [bookPendingRemoval, setBookPendingRemoval] = useState<Book | null>(null);
+  const [removingBookId, setRemovingBookId] = useState<string | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -101,6 +118,7 @@ function App() {
   }, []);
 
   const handleOpenBook = useCallback(async (book: Book) => {
+    setBookActionMenu(null);
     setFeedback(null);
 
     if (book.format !== "txt") {
@@ -128,6 +146,57 @@ function App() {
       setOpeningBookId(null);
     }
   }, []);
+
+  const closeBookActionMenu = useCallback(() => {
+    setBookActionMenu(null);
+  }, []);
+
+  const showBookActionMenu = useCallback((book: Book, x: number, y: number) => {
+    setBookActionMenu({
+      book,
+      x,
+      y,
+    });
+  }, []);
+
+  const requestBookRemoval = useCallback((book: Book) => {
+    setBookActionMenu(null);
+    setBookPendingRemoval(book);
+  }, []);
+
+  const cancelBookRemoval = useCallback(() => {
+    setBookPendingRemoval(null);
+  }, []);
+
+  const confirmBookRemoval = useCallback(async () => {
+    if (bookPendingRemoval === null) {
+      return;
+    }
+
+    setFeedback(null);
+    setRemovingBookId(bookPendingRemoval.id);
+
+    try {
+      await removeBook(bookPendingRemoval.id);
+      setBooks((currentBooks) =>
+        currentBooks.filter((currentBook) => currentBook.id !== bookPendingRemoval.id),
+      );
+      setFeedback({
+        kind: "success",
+        title: "Book removed",
+        message: `${bookPendingRemoval.title} was removed from this shelf.`,
+      });
+      setBookPendingRemoval(null);
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        title: "Remove failed",
+        message: getErrorMessage(error),
+      });
+    } finally {
+      setRemovingBookId(null);
+    }
+  }, [bookPendingRemoval]);
 
   const handleBackToLibrary = useCallback(() => {
     setReaderBookId(null);
@@ -162,8 +231,22 @@ function App() {
           books={sortedBooks}
           isLoading={isLoading}
           openingBookId={openingBookId}
+          activeMenuBookId={bookActionMenu?.book.id ?? null}
+          removingBookId={removingBookId}
           viewMode={viewMode}
           onOpenBook={handleOpenBook}
+          onShowBookMenu={showBookActionMenu}
+        />
+        <BookActionMenu
+          menu={bookActionMenu}
+          onClose={closeBookActionMenu}
+          onRemove={requestBookRemoval}
+        />
+        <RemoveBookDialog
+          book={bookPendingRemoval}
+          isRemoving={removingBookId === bookPendingRemoval?.id}
+          onCancel={cancelBookRemoval}
+          onConfirm={confirmBookRemoval}
         />
       </section>
     </main>
@@ -253,7 +336,7 @@ function LibraryHeader({
           disabled={isImporting}
           onClick={onImportBook}
         >
-          <span aria-hidden="true">+</span>
+          <span className="import-button__icon" aria-hidden="true" />
           {isImporting ? "Importing..." : "Import book"}
         </button>
       </div>
@@ -286,11 +369,23 @@ interface ShelfBodyProps {
   books: Book[];
   isLoading: boolean;
   openingBookId: string | null;
+  activeMenuBookId: string | null;
+  removingBookId: string | null;
   viewMode: ViewMode;
   onOpenBook: (book: Book) => void;
+  onShowBookMenu: (book: Book, x: number, y: number) => void;
 }
 
-function ShelfBody({ books, isLoading, openingBookId, viewMode, onOpenBook }: ShelfBodyProps) {
+function ShelfBody({
+  books,
+  isLoading,
+  openingBookId,
+  activeMenuBookId,
+  removingBookId,
+  viewMode,
+  onOpenBook,
+  onShowBookMenu,
+}: ShelfBodyProps) {
   if (isLoading) {
     return (
       <section className="shelf-state" aria-label="Loading library">
@@ -315,7 +410,10 @@ function ShelfBody({ books, isLoading, openingBookId, viewMode, onOpenBook }: Sh
           key={book.id}
           book={book}
           isOpening={openingBookId === book.id}
+          isMenuOpen={activeMenuBookId === book.id}
+          isRemoving={removingBookId === book.id}
           onOpenBook={onOpenBook}
+          onShowBookMenu={onShowBookMenu}
         />
       ))}
     </section>
@@ -336,36 +434,180 @@ function EmptyShelf() {
 
 interface BookCardProps {
   book: Book;
+  isMenuOpen: boolean;
   isOpening: boolean;
+  isRemoving: boolean;
   onOpenBook: (book: Book) => void;
+  onShowBookMenu: (book: Book, x: number, y: number) => void;
 }
 
-function BookCard({ book, isOpening, onOpenBook }: BookCardProps) {
+function BookCard({
+  book,
+  isMenuOpen,
+  isOpening,
+  isRemoving,
+  onOpenBook,
+  onShowBookMenu,
+}: BookCardProps) {
   const handleOpenBook = useCallback(() => {
     onOpenBook(book);
   }, [book, onOpenBook]);
 
+  const handleContextMenu = useCallback(
+    (event: MouseEvent<HTMLElement>) => {
+      event.preventDefault();
+      onShowBookMenu(book, event.clientX, event.clientY);
+    },
+    [book, onShowBookMenu],
+  );
+
+  const handleMenuButtonClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      onShowBookMenu(book, rect.left, rect.bottom + 8);
+    },
+    [book, onShowBookMenu],
+  );
+
   return (
-    <article className="book-card" aria-label={`${book.title} book`}>
+    <article className="book-card" aria-label={`${book.title} book`} onContextMenu={handleContextMenu}>
       <div className="book-card__cover" aria-hidden="true">
         <span>{formatBookFormat(book.format)}</span>
       </div>
       <div className="book-card__body">
-        <div className="book-card__copy">
-          <p className="book-card__activity">{getBookActivityLabel(book)}</p>
-          <h2>{book.title}</h2>
-          <p>{book.author ?? "Unknown author"}</p>
+        <div className="book-card__top">
+          <div className="book-card__copy">
+            <p className="book-card__activity">{getBookActivityLabel(book)}</p>
+            <h2>{book.title}</h2>
+            <p>{book.author ?? "Unknown author"}</p>
+          </div>
+          <button
+            type="button"
+            className="book-card__menu-button"
+            aria-expanded={isMenuOpen}
+            aria-haspopup="menu"
+            aria-label={`More actions for ${book.title}`}
+            onClick={handleMenuButtonClick}
+          >
+            <span aria-hidden="true">...</span>
+          </button>
         </div>
         <button
           type="button"
           className="book-card__action"
-          disabled={isOpening}
+          disabled={isOpening || isRemoving}
           onClick={handleOpenBook}
         >
-          {isOpening ? "Opening..." : "Continue"}
+          {isRemoving ? "Removing..." : isOpening ? "Opening..." : "Continue"}
         </button>
       </div>
     </article>
+  );
+}
+
+interface BookActionMenuProps {
+  menu: BookActionMenuState | null;
+  onClose: () => void;
+  onRemove: (book: Book) => void;
+}
+
+function BookActionMenu({ menu, onClose, onRemove }: BookActionMenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (menu === null) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        menuRef.current !== null &&
+        !menuRef.current.contains(event.target)
+      ) {
+        onClose();
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menu, onClose]);
+
+  if (menu === null) {
+    return null;
+  }
+
+  const menuStyle = {
+    left: `min(${menu.x}px, calc(100vw - 220px))`,
+    top: `min(${menu.y}px, calc(100vh - 80px))`,
+  } as CSSProperties;
+
+  return (
+    <div
+      ref={menuRef}
+      className="book-action-menu"
+      role="menu"
+      aria-label={`Actions for ${menu.book.title}`}
+      style={menuStyle}
+    >
+      <button type="button" role="menuitem" onClick={() => onRemove(menu.book)}>
+        Remove from shelf
+      </button>
+    </div>
+  );
+}
+
+interface RemoveBookDialogProps {
+  book: Book | null;
+  isRemoving: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookDialogProps) {
+  if (book === null) {
+    return null;
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <section
+        className="remove-book-dialog"
+        role="alertdialog"
+        aria-labelledby="remove-book-title"
+        aria-describedby="remove-book-description"
+      >
+        <h2 id="remove-book-title">Remove from shelf?</h2>
+        <p id="remove-book-description">
+          This removes {book.title} from this app and deletes its library copy. The original file
+          you imported will not be deleted.
+        </p>
+        <div className="remove-book-dialog__actions">
+          <button type="button" className="dialog-button dialog-button--secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="dialog-button dialog-button--danger"
+            disabled={isRemoving}
+            onClick={onConfirm}
+          >
+            {isRemoving ? "Removing..." : "Remove"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
