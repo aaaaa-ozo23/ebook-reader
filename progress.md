@@ -138,6 +138,25 @@
   - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 3：EPUB 响应式视觉修复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - Playwright 视觉检查发现主题面板打开时会覆盖 EPUB host。
+  - 新增 `reader-shell--theme-open` 布局状态，桌面为固定主题面板预留右侧空间。
+  - 窄屏下主题面板改为静态 grid 行，阅读视口排在主题面板之后，避免重叠和内容列变窄。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - Playwright 视觉截图：桌面和 375x760 窄屏 EPUB 阅读器无 Vite overlay、无 console warning/error，主题面板与 EPUB host 不重叠。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20

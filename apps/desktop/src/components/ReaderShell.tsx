@@ -357,7 +357,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     <main
       className={`reader-shell ${isSidebarOpen ? "reader-shell--toc-open" : ""} ${
         isChromeHidden ? "reader-shell--chrome-hidden" : ""
-      }`}
+      } ${isThemePanelOpen ? "reader-shell--theme-open" : ""}`}
       style={readerStyle}
       data-reader-theme={theme.mode}
       aria-label={`${formatBookFormat(book.format)} reader`}

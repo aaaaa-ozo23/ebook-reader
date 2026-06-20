@@ -663,6 +663,10 @@ button:disabled {
   overflow: hidden;
 }
 
+.reader-shell--theme-open .reader-main {
+  padding-right: min(356px, calc(100vw - 36px));
+}
+
 .reader-topbar {
   position: sticky;
   top: 0;
@@ -1085,6 +1089,10 @@ button:disabled {
     min-height: 100vh;
   }
 
+  .reader-shell--theme-open .reader-main {
+    padding-right: 0;
+  }
+
   .reader-toolbar,
   .reader-tool-button {
     width: 100%;
@@ -1117,11 +1125,15 @@ button:disabled {
   }
 
   .reader-theme-panel {
-    top: auto;
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
+    position: static;
+    grid-row: 2;
     width: auto;
-    max-height: 58vh;
+    max-height: none;
+    margin: 12px;
+    box-shadow: none;
+  }
+
+  .reader-viewport {
+    grid-row: 3;
   }
 }
