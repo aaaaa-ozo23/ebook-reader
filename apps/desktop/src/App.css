@@ -1063,6 +1063,51 @@ button:disabled {
   box-shadow: 0 4px 12px rgba(38, 50, 56, 0.22);
 }
 
+.reader-shell--chrome-hidden .reader-viewport--epub {
+  --epub-focus-padding-top: clamp(16px, 2.2vh, 28px);
+  --epub-focus-padding-bottom: clamp(14px, 2vh, 24px);
+
+  align-items: stretch;
+  padding: var(--epub-focus-padding-top) clamp(18px, 5vw, 64px)
+    var(--epub-focus-padding-bottom);
+}
+
+.reader-shell--chrome-hidden .reader-page--epub {
+  width: min(100%, 1120px);
+  height: calc(100vh - var(--epub-focus-padding-top) - var(--epub-focus-padding-bottom));
+  gap: 10px;
+}
+
+.reader-shell--chrome-hidden .reader-epub-host {
+  min-height: 0;
+}
+
+.reader-shell--chrome-hidden .reader-epub-controls {
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.reader-shell--chrome-hidden .reader-epub-control-row {
+  min-height: 40px;
+}
+
+.reader-shell--chrome-hidden .reader-epub-mode-toggle {
+  min-height: 36px;
+}
+
+.reader-shell--chrome-hidden .reader-epub-progress {
+  gap: 6px;
+}
+
+.reader-shell--chrome-hidden .reader-epub-progress__meta {
+  font-size: 0.74rem;
+}
+
+.reader-shell--chrome-hidden .reader-epub-progress__track {
+  min-height: 24px;
+  padding-top: 6px;
+}
+
 .reader-theme-panel {
   position: fixed;
   top: 76px;

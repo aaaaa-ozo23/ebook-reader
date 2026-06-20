@@ -70,6 +70,8 @@
 - 阶段 3.x 单页/双页视图通过 `rendition.spread("none" | "auto")` 实现；当 EPUB host 宽度小于约 860px 时保留用户双页偏好但实际渲染回退单页。
 - 阶段 3.x 文字复制失败的直接原因是 `selected` 事件捕获后调用了 `removeAllRanges()` 清空 iframe 选区；移除该调用并在 EPUB iframe 主题 CSS 中设置 `user-select: text` 后，浏览器原生复制不再被 adapter 主动破坏。
 - 阶段 3.x epub.js `rendition.resize()` 不能在 `display()` 完成前调用，否则可能出现 `Cannot read properties of undefined (reading 'resize')`；spread resize 需要等待 rendition manager 可用，初始位置报告也要等 currentLocation 存在。
+- 阶段 3.x Focus 模式 EPUB 底部空白偏大的原因是隐藏顶部栏后仍沿用普通阅读视口的底部 padding 和控制条间距；本轮用 Focus 专属 padding、页面高度计算和更紧凑的 EPUB 控制条扩大正文高度。
+- 阶段 3.x EPUB 倒数第二页点击 Next 无法进入最后一页的原因是 epub.js 原生 `rendition.next()` 在最后合成页边界可能 no-op；本轮只在倒数第二页及之后用 `book.locations.cfiFromLocation(totalPages - 1)` 补偿跳转，普通翻页仍保留原生路径。
 
 ## 技术决策
 

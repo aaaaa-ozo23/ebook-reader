@@ -175,6 +175,22 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   }
 
   async next(): Promise<void> {
+    if (this.locationsReady) {
+      const currentPosition = this.lastPosition ?? (await this.getCurrentPosition());
+      const isFinalPageBoundary =
+        currentPosition.page !== null &&
+        currentPosition.totalPages !== null &&
+        currentPosition.page >= currentPosition.totalPages - 1;
+      const nextLocationIndex = isFinalPageBoundary
+        ? nextEpubLocationIndex(currentPosition.page, currentPosition.totalPages)
+        : null;
+
+      if (nextLocationIndex !== null) {
+        await this.goToLocationIndex(nextLocationIndex);
+        return;
+      }
+    }
+
     await this.requireRendition().next();
   }
 
@@ -231,6 +247,25 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     }
 
     await rendition.display(book.locations.cfiFromPercentage(clampProgressValue(progression)));
+  }
+
+  private async goToLocationIndex(locationIndex: number): Promise<void> {
+    const book = this.requireBook();
+    const rendition = this.requireRendition();
+    const totalPages = this.getTotalPages();
+
+    if (totalPages === null) {
+      return;
+    }
+
+    const clampedIndex = Math.min(totalPages - 1, Math.max(0, Math.floor(locationIndex)));
+    const cfi = book.locations.cfiFromLocation(clampedIndex) as unknown;
+
+    if (typeof cfi !== "string" || cfi.length === 0 || cfi === "-1") {
+      return;
+    }
+
+    await rendition.display(cfi);
   }
 
   setSpreadMode(mode: EpubSpreadMode): EpubSpreadState {
@@ -553,6 +588,18 @@ export function progressionToEpubPage(progression: number, totalPages: number): 
   const pageIndex = Math.ceil((normalizedTotalPages - 1) * clampProgressValue(progression));
 
   return Math.min(normalizedTotalPages, Math.max(1, pageIndex + 1));
+}
+
+export function nextEpubLocationIndex(page: number | null, totalPages: number | null): number | null {
+  if (page === null || totalPages === null || !Number.isFinite(page) || !Number.isFinite(totalPages)) {
+    return null;
+  }
+
+  if (page < 1 || totalPages < 2 || page >= totalPages) {
+    return null;
+  }
+
+  return Math.min(totalPages - 1, Math.max(0, Math.floor(page)));
 }
 
 function normalizePositiveInteger(value: number | undefined): number | null {
