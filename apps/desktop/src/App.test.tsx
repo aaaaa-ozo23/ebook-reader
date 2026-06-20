@@ -1,17 +1,45 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { defaultReaderTheme, type Book, type ImportBookResult, type TxtDocument } from "@reader/core";
+import {
+  defaultReaderTheme,
+  type Book,
+  type EpubLocator,
+  type ImportBookResult,
+  type TxtDocument,
+} from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { EpubReaderAdapter } from "./epub/EpubReaderAdapter";
 import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
+  getEpubBookSource,
   getReaderTheme,
   getReadingProgress,
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
 } from "./tauri/reader";
+
+const epubAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterGetTocMock = vi.hoisted(() =>
+  vi.fn(async () => [
+    {
+      id: "chapter-one",
+      title: "Chapter One",
+      href: "OPS/chapter-one.xhtml",
+      locator: {
+        kind: "epub" as const,
+        href: "OPS/chapter-one.xhtml",
+      },
+    },
+  ]),
+);
+const epubAdapterGoToMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -22,6 +50,7 @@ vi.mock("./tauri/library", () => ({
 }));
 
 vi.mock("./tauri/reader", () => ({
+  getEpubBookSource: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
   openTxtBook: vi.fn(),
@@ -29,6 +58,21 @@ vi.mock("./tauri/reader", () => ({
   saveReadingProgress: vi.fn(),
 }));
 
+vi.mock("./epub/EpubReaderAdapter", () => ({
+  EpubReaderAdapter: vi.fn(function MockEpubReaderAdapter() {
+    return {
+    close: epubAdapterCloseMock,
+    getToc: epubAdapterGetTocMock,
+    goTo: epubAdapterGoToMock,
+    next: epubAdapterNextMock,
+    open: epubAdapterOpenMock,
+    previous: epubAdapterPreviousMock,
+    setTheme: epubAdapterSetThemeMock,
+    };
+  }),
+}));
+
+const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const importBookMock = vi.mocked(importBook);
@@ -39,14 +83,23 @@ const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
+const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    epubAdapterCloseMock.mockClear();
+    epubAdapterGetTocMock.mockClear();
+    epubAdapterGoToMock.mockClear();
+    epubAdapterNextMock.mockClear();
+    epubAdapterOpenMock.mockClear();
+    epubAdapterPreviousMock.mockClear();
+    epubAdapterSetThemeMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
     );
+    getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
@@ -244,18 +297,41 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
   });
 
-  it("shows a later-stage reader message for EPUB and PDF books", async () => {
+  it("opens an EPUB book in the reader shell", async () => {
     const user = userEvent.setup();
     const epubBook = createBook({ id: "epub-book", title: "Layout Notes", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
     listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Layout Notes" })).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
+    expect(markBookOpenedMock).toHaveBeenCalledWith("epub-book");
+    expect(openTxtBookMock).not.toHaveBeenCalled();
+    expect(await screen.findByRole("main", { name: "EPUB reader" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
+    expect(epubAdapterOpenMock).toHaveBeenCalledWith("epub-book");
+    expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
+  });
+
+  it("shows a later-stage reader message for PDF books", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "pdf-book", title: "Layout Notes PDF", format: "pdf" });
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Layout Notes PDF" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
     expect(await screen.findByText("Reader support coming later")).toBeVisible();
-    expect(screen.getByText("EPUB reading will be added in a later stage.")).toBeInTheDocument();
+    expect(screen.getByText("PDF reading will be added in a later stage.")).toBeInTheDocument();
     expect(markBookOpenedMock).not.toHaveBeenCalled();
     expect(openTxtBookMock).not.toHaveBeenCalled();
   });
@@ -304,6 +380,44 @@ describe("App", () => {
     expect(reader).toHaveAttribute("data-reader-theme", "dark");
   });
 
+  it("updates EPUB themes through the adapter without reopening the book", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "theme-epub", title: "Theme EPUB", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Theme EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(epubAdapterOpenMock).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    await user.click(screen.getByRole("button", { name: "dark" }));
+
+    await waitFor(() =>
+      expect(epubAdapterSetThemeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: "dark",
+          backgroundColor: "#171a1d",
+          textColor: "#f0e8d7",
+        }),
+      ),
+    );
+    expect(saveReaderThemeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "dark",
+      }),
+    );
+    expect(epubAdapterOpenMock).toHaveBeenCalledTimes(1);
+    expect(reader).toHaveAttribute("data-reader-theme", "dark");
+  });
+
   it("restores saved TXT progress and saves table-of-contents jumps", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({ id: "progress-txt", title: "Progress TXT", format: "txt" });
@@ -344,6 +458,61 @@ describe("App", () => {
           charOffset: 13,
         },
         expect.any(Number),
+      ),
+    );
+  });
+
+  it("restores saved EPUB progress and saves relocated locators", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "progress-epub", title: "Progress EPUB", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
+    const savedLocator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-two.xhtml",
+      cfi: "epubcfi(/6/4[chapter-two]!/4/1:18)",
+      progression: 0.42,
+    };
+    const relocatedLocator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-one.xhtml",
+      cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
+      progression: 0.75,
+    };
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
+    getReadingProgressMock.mockResolvedValueOnce({
+      bookId: "progress-epub",
+      locator: savedLocator,
+      progress: 0.42,
+      updatedAt: "2026-06-20T12:00:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Progress EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(epubAdapterOpenMock).toHaveBeenCalledWith("progress-epub"));
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          initialLocator?: EpubLocator;
+          onRelocated?: (locator: EpubLocator, progress?: number) => void;
+        }
+      | undefined;
+    expect(adapterOptions?.initialLocator).toEqual(savedLocator);
+
+    adapterOptions?.onRelocated?.(relocatedLocator, 0.75);
+    await user.click(within(reader).getByRole("button", { name: "Shelf" }));
+
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "progress-epub",
+        relocatedLocator,
+        0.75,
       ),
     );
   });

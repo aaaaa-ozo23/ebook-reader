@@ -2,6 +2,179 @@
 
 ## 会话：2026-06-20
 
+### 产品大阶段 3：EPUB 阅读器启动
+- **状态：** in_progress
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 读取 Build Web Apps React 性能实践、前端测试调试说明和现有 `task_plan.md` / `findings.md` / `progress.md`。
+  - 检查 `main` 工作区干净且与 `origin/main` 对齐。
+  - 设置本地 Git 身份为 `aaaaa-ozo23` / `aaaaa-ozo23@users.noreply.github.com`。
+  - 将 `codex/v0.1.0-mvp-integration` 快进到当前 `main`。
+  - 创建 `codex/stage3-epub-adapter` 分支。
+
+### 阶段 3.1：EPUB 适配器
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 安装 `epubjs@0.3.93` 到 `@reader/desktop`。
+  - 新增 `EpubReaderAdapter`，通过动态 import 封装 epub.js open/close/TOC/goTo/currentLocator/theme/selection/highlight 能力。
+  - 在 `tauri/reader.ts` 新增 `getEpubBookSource`，Tauri runtime 使用 `convertFileSrc(book.libraryPath)`，浏览器 fallback 使用显式 localStorage source fixture。
+  - 启用 Tauri asset protocol，scope 限定为 `$APPDATA/library/**`，并为 Rust `tauri` 依赖开启 `protocol-asset` feature。
+  - 更新 `pnpm-workspace.yaml` 的 allowBuilds，记录 `core-js`、`es5-ext` 和既有 `esbuild`。
+- 创建/修改的文件：
+  - `apps/desktop/package.json`
+  - `apps/desktop/src-tauri/Cargo.toml`
+  - `apps/desktop/src-tauri/Cargo.lock`
+  - `apps/desktop/src-tauri/tauri.conf.json`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `pnpm-lock.yaml`
+  - `pnpm-workspace.yaml`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+
+### 阶段 3.2：EPUB 阅读 UI
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 `ReaderShell` 拆成通用阅读壳、TXT 内容层和 EPUB 内容层，保留主题面板、目录侧栏、顶部栏和专注模式。
+  - 修改书架打开逻辑：TXT 和 EPUB 进入阅读器，PDF 保留后续阶段提示。
+  - 新增 EPUB 内容层，提供固定 host、上一页/下一页、目录跳转、加载态和错误态。
+  - 为 EPUB adapter 增加 `previous()` / `next()` 方法，供 UI 翻页按钮调用。
+  - 修复 EPUB TOC state 更新导致 adapter 打开 effect 重复执行的问题。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/App.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，15 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 3.3：EPUB 主题映射
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 EPUB iframe 主题 CSS 映射扩展到 `html`、`body`、正文容器、段落、链接、选区和高亮类。
+  - 将 `ReaderTheme` 的字体、字号、行高、段距、页边距、背景、文本色和暗色链接色映射到 epub.js themes。
+  - 保持主题面板改动即时调用 EPUB adapter `setTheme`，不重开 EPUB。
+  - 新增纯映射测试和 EPUB UI 主题变更测试。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/epub/EpubReaderAdapter.test.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，17 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 3.4：EPUB 进度恢复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 Rust 后端 `ReaderProgress.locator` 从 `TxtLocator` 改为通用 `Locator` enum，支持 `txt` 和 `epub`。
+  - 保持 `reading_progress` SQLite 表不迁移，继续存储 `locator_json`。
+  - `save_reading_progress` 按书籍格式校验 locator kind：TXT 只接受 TXT locator，EPUB 只接受 EPUB locator，PDF 仍不支持。
+  - EPUB locator 支持 `href`、`cfi`、`progression`，保存时规范化 `progression` 和 progress 到 `0..1`。
+  - 前端测试覆盖 EPUB 打开时恢复 CFI locator，以及 relocated 后保存 EPUB locator。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，21 tests。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 3.5：EPUB 高亮预研
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 复核 `EpubReaderAdapter` 中 `selected`、`book.getRange(cfiRange)`、`rendition.annotations.highlight/remove` 的接入点。
+  - 未落地完整标注 CRUD，避免阶段 3 扩大到统一标注表和重放生命周期。
+  - 在 `findings.md` 写入 CFI、选中文本、上下文、高亮重放限制和阶段 5 建议。
+- 创建/修改的文件：
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+
+### 阶段 3：EPUB E2E smoke 补齐
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 EPUB adapter 打开参数中显式设置 `openAs: "epub"`，让 Blob URL 和 Tauri asset URL 都按归档 EPUB 处理。
+  - 在 Playwright smoke 中运行时生成无版权最小 EPUB ZIP Blob，不提交二进制书籍文件。
+  - 覆盖从书架打开 EPUB、目录跳转、主题切换、返回书架，以及 console warning/error 收集。
+- 创建/修改的文件：
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 3：EPUB 响应式视觉修复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - Playwright 视觉检查发现主题面板打开时会覆盖 EPUB host。
+  - 新增 `reader-shell--theme-open` 布局状态，桌面为固定主题面板预留右侧空间。
+  - 窄屏下主题面板改为静态 grid 行，阅读视口排在主题面板之后，避免重叠和内容列变窄。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - Playwright 视觉截图：桌面和 375x760 窄屏 EPUB 阅读器无 Vite overlay、无 console warning/error，主题面板与 EPUB host 不重叠。
+
+### 阶段 3：最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 在 `codex/v0.1.0-mvp-integration` 上运行大阶段 3 全量验收。
+  - 使用 Playwright 视觉检查生成桌面和 375x760 窄屏 EPUB 阅读器截图。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，21 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage3-epub-desktop-final.png`、`D:\tl-temp\ebook-reader-stage3-epub-narrow-final.png`。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20
@@ -609,6 +782,7 @@
 | 2026-06-20 | 阶段 2.x ESLint 报 `react-hooks/set-state-in-effect`，指向 active chapter 初始化 effect | 1 | 删除该 effect，改在 TXT 文档加载完成时设置初始 active chapter |
 | 2026-06-20 | Browser 插件对本地页截图调用超时 | 1 | 继续使用 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成截图 |
 | 2026-06-20 | PowerShell 不接受本次 `git add ... && git commit ...` 命令分隔符 | 1 | 改为分两条命令执行 |
+| 2026-06-20 | 阶段 3.2 EPUB 内容层测试触发 `Maximum update depth exceeded` | 1 | 将 relocated 回调对 TOC 的读取改为 ref，避免 TOC state 更新导致 EPUB open effect 重复执行 |
 
 ## 五问重启检查
 

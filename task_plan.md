@@ -149,6 +149,30 @@
 | 3.4 EPUB 进度恢复 | `codex/stage3-epub-progress` | 实现 `EpubLocator`，保存 href、CFI、progression | 重启后恢复到章节内位置 |
 | 3.5 EPUB 高亮预研 | `codex/stage3-epub-highlight-spike` | 验证 CFI 高亮定位、选中文本和上下文保存策略 | 形成可实现结论并更新 `findings.md` |
 
+### 阶段 3 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 3.1 EPUB 适配器 | `codex/stage3-epub-adapter` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests |
+| 3.2 EPUB 阅读 UI | `codex/stage3-epub-reader-ui` | complete | `pnpm.cmd --filter @reader/desktop test`，15 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 3.3 EPUB 主题映射 | `codex/stage3-epub-theme` | complete | `pnpm.cmd --filter @reader/desktop test`，17 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 3.4 EPUB 进度恢复 | `codex/stage3-epub-progress` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests；`pnpm.cmd --filter @reader/desktop test`，18 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 3.5 EPUB 高亮预研 | `codex/stage3-epub-highlight-spike` | complete | 结论、限制和阶段 5 建议已写入 `findings.md`；`pnpm.cmd --filter @reader/desktop test`，18 tests |
+
+### 阶段 3 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，18 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，21 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，4 Chromium smoke tests，含自生成 EPUB fixture |
+| Playwright 视觉检查 | passed，桌面和 375x760 窄屏 EPUB 阅读器无 console warning/error、无 Vite overlay、主题面板与 EPUB host 不重叠 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
+
 ## 大阶段 4：PDF 阅读器
 
 目标：以稳定阅读为优先，提供页码、缩放、目录和进度恢复；复杂标注能力可以渐进。
@@ -254,6 +278,9 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 阶段 2.x Vitest 发现 jsdom 缺少 `scrollIntoView` | 1 | 对 active TOC 自动滚动增加运行时函数存在性检查 |
 | 阶段 2.x ESLint `react-hooks/set-state-in-effect` 指出 active 章节初始化 effect | 1 | 改为在 TXT 文档加载完成时同步设置初始 active chapter |
 | 阶段 2.x Browser 插件截图命令超时 | 1 | 保留 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成桌面和窄屏截图 |
+| 阶段 3.1 `epubjs` 安装触发 pnpm build-script 审批 | 1 | 批准 `core-js` 和 `es5-ext`，并在 `pnpm-workspace.yaml` 记录 allowBuilds |
+| 阶段 3.1 Tauri asset protocol 编译失败 | 1 | 为 Rust `tauri` 依赖开启 `protocol-asset` feature |
+| 阶段 3.2 EPUB 内容层打开后触发 React maximum update depth | 1 | 将 EPUB TOC 读取改为 ref，避免 TOC 更新改变 relocated 回调 identity 后重复 open/close |
 
 ## 备注
 

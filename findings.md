@@ -47,6 +47,23 @@
 - 阶段 2 修复未扩大后端分页接口：前端索引、滚动 idle 保存、instant programmatic scroll、active TOC 同步和 dark 主题变量化后，Playwright 长 TXT smoke 通过，未触发后端分页备选。
 - Browser QA 对空书架首屏的 DOM/console/style metrics 通过：桌面和 375x760 窄屏无 Vite overlay、无 console warn/error，导入按钮 icon 垂直中心偏移为 0。
 - Browser 插件截图接口本次对本地页 `Page.captureScreenshot` 超时；已使用 Playwright CLI 在 `D:\tl-temp\ebook-reader-stage2-shelf-desktop.png` 和 `D:\tl-temp\ebook-reader-stage2-shelf-narrow.png` 生成截图并人工查看。
+- 阶段 3.1 已安装 `epubjs` 0.3.93 到 `@reader/desktop`；npm 包自带类型声明，未使用 `@types/epubjs`。
+- 阶段 3.1 已新增桌面端 `EpubReaderAdapter`，通过动态 import 加载 `epubjs`，封装 open、close、TOC、goTo、currentLocator、setTheme、CFI selection capture 和 highlight/remove spike API。
+- 阶段 3.1 已启用 Tauri v2 asset protocol，scope 限定为 `$APPDATA/library/**`；Rust `tauri` 依赖需要同步开启 `protocol-asset` feature，否则 `cargo test` 会在 build script 阶段失败。
+- 阶段 3.1 前端 EPUB source 规则：Tauri runtime 下用 `convertFileSrc(book.libraryPath)`，浏览器/e2e fallback 只读取显式 localStorage fixture，不新增前端 fs 插件。
+- 阶段 3.2 已将 `ReaderShell` 拆为通用阅读壳、TXT 内容层和 EPUB 内容层；EPUB 与 TXT 共享顶部栏、主题面板、目录侧栏和专注模式。
+- 阶段 3.2 EPUB 从书架直接进入阅读器，PDF 仍保留后续阶段提示；EPUB 内容层提供固定渲染 host、上一页/下一页、目录跳转、加载态和错误态。
+- 阶段 3.2 EPUB adapter 的 `relocated` 回调不能依赖 React state 里的 TOC 数组 identity，否则 adapter 打开后更新 TOC 会触发 open effect 重跑；当前使用 ref 读取最新 TOC。
+- 阶段 3.3 EPUB 主题映射覆盖 iframe 内 `html`、`body`、正文容器、段落、链接、选区和高亮类；`html` 与 `body` 都设置背景，避免暗色主题 iframe 边缘露白。
+- 阶段 3.3 EPUB 主题变化通过现有主题面板即时调用 adapter `setTheme`，不重开书籍；TXT 主题 CSS 变量行为保持原样。
+- 阶段 3.4 Rust 后端 `ReaderProgress.locator` 已从 TXT 专用 struct 改为 `Locator` enum，当前支持 `txt` 和 `epub` 两种 kind；`reading_progress` SQLite 表保持不迁移。
+- 阶段 3.4 `save_reading_progress` 会按书籍格式校验 locator：TXT 只接受 `txt`，EPUB 只接受 `epub`，PDF 继续返回后续阶段不支持。
+- 阶段 3.4 EPUB 进度保存会规范化 `progress` 和 locator `progression` 到 `0..1`，并要求至少存在 href 或 cfi；打开时 adapter 已优先恢复 CFI，其次 href。
+- 阶段 3.5 EPUB 高亮预研结论：epub.js `selected` 事件可以提供 `cfiRange`，`book.getRange(cfiRange)` 可用于提取选中文本和同一 DOM 上下文，`rendition.annotations.highlight/remove` 可按 CFI 添加和移除高亮。
+- 阶段 3.5 EPUB 高亮限制：CFI 依赖书籍内容结构，导入副本变化或书籍重新打包可能导致旧 CFI 无法定位；上下文提取应作为辅助恢复信息，不能替代 CFI。
+- 阶段 3.5 阶段 5 建议：标注保存 `locator.kind = "epub"`、`cfi`、`href`、`selectedText`、`contextBefore`、`contextAfter`、颜色和用户笔记；打开 EPUB 后按书籍标注列表重放 `annotations.highlight`，删除时调用 `annotations.remove(cfiRange, "highlight")`。
+- 阶段 3 E2E 使用 Playwright 页面上下文生成无压缩最小 EPUB ZIP Blob，避免提交版权不明或二进制书籍样本；adapter 显式设置 `openAs: "epub"`，让 Blob URL 和 Tauri asset URL 都按 EPUB 归档打开。
+- 阶段 3 视觉检查发现主题面板在桌面/窄屏可能覆盖 EPUB host；修正为桌面端为固定面板预留右侧空间，窄屏将面板放入文档流，最终截图确认不再重叠。
 
 ## 技术决策
 
@@ -77,6 +94,14 @@
 | 书架更多操作同时支持右键和可见 More 按钮 | 右键满足桌面习惯，可见按钮保证键鼠和可发现性 |
 | TXT 大文件本轮不新增分页命令 | 现有接口兼容性较高，前端虚拟索引和滚动保存节流已覆盖用户反馈的跳转、恢复、滚动和目录同步问题 |
 | 程序化 TXT 跳转使用 instant scroll | 避免目录跳转和恢复进度时 smooth scroll 放大等待时间，并避免中途滚动事件覆盖保存位置 |
+| EPUB adapter 放在 `apps/desktop/src/epub` | epub.js 依赖 DOM/WebView，不进入 `packages/core`，保持 core 纯类型 |
+| EPUB 文件由 Tauri asset protocol 暴露给 WebView | 阶段 1 已把导入文件复制到 app data library，限制 asset scope 到该目录能避免给前端广泛 fs 权限 |
+| EPUB 阅读 UI 复用阶段 2 阅读壳 | 顶部栏、目录、主题和专注模式保持一致，格式差异收敛到内容层和 adapter |
+| EPUB 主题映射使用 adapter 内纯函数测试 | iframe CSS 注入不易在 jsdom 中完整渲染，先用纯映射测试锁定 CSS 输出，再用 App 测试锁定即时调用路径 |
+| EPUB 进度复用 `reading_progress.locator_json` | 现有表已经存 JSON；用 `kind` tag 扩展 locator 可兼容旧 TXT 进度并避免阶段 3.4 迁移风险 |
+| EPUB 高亮能力先停留在 adapter spike API | CFI selection/highlight 已有可用入口，但完整 CRUD 涉及统一标注表、颜色、列表和重放时机，留到阶段 5 更清晰 |
+| EPUB E2E fixture 运行时生成 | 既满足无版权样本要求，也避免仓库里长期维护二进制 fixture；测试仍走真实 epub.js 渲染 |
+| 主题面板打开时进入布局状态 | 通过 `reader-shell--theme-open` 控制桌面预留空间和移动端静态排布，避免浮层挡住 EPUB/TXT 内容 |
 
 ## 遇到的问题
 
@@ -93,6 +118,9 @@
 | `chardetng` 1.0.0 不接受旧式布尔参数 | 使用 `EncodingDetector::new(Iso2022JpDetection::Deny)` 和 `guess(None, Utf8Detection::Allow)` |
 | 阶段 2.2 章节识别使编码测试样本从 `full-text` 变为 `chapter-*` | 已把编码测试改为校验所有章节文本拼接等于原文，章节 ID 由章节测试覆盖 |
 | Playwright 长文本测试首次发现 `.reader-virtual-row--paragraph` 数量为 240 | 修正阅读器布局高度约束后重跑 e2e 通过，段落 DOM 数量低于 80 |
+| `pnpm.cmd --filter @reader/desktop add epubjs@^0.3.93` 首次返回 `ERR_PNPM_IGNORED_BUILDS` | 运行 `pnpm.cmd approve-builds core-js es5-ext` 后重跑 `pnpm.cmd install` 通过 |
+| 启用 Tauri asset protocol 后 `cargo test` 提示 allowlist 与依赖 feature 不匹配 | 在 `apps/desktop/src-tauri/Cargo.toml` 为 `tauri` 添加 `protocol-asset` feature |
+| 阶段 3.2 EPUB 内容层测试触发 `Maximum update depth exceeded` | `relocated` 回调用 ref 读取 TOC，避免 TOC state 更新改变回调 identity 并重复打开 EPUB |
 
 ## 资源
 
