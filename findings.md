@@ -81,6 +81,8 @@
 - 阶段 4.2 在 Vitest 中用 mock adapter 覆盖 PDF 打开、单/双页切换、页码跳转、缩放、适合宽度、进度恢复和保存链路。
 - 阶段 4.3 PDF outline 解析支持命名 destination 和显式 destination 数组，页引用通过 `getPageIndex()` 转 1-based `PdfLocator.page`。
 - 阶段 4.3 对没有 outline 或 outline 节点不可定位的 PDF 降级为 `Page 1...Page N` 页码目录，避免目录侧栏空置。
+- 阶段 4.4 Rust 后端 `Locator` 已新增 `pdf`，`PdfLocator` 支持 `page`、`zoomMode`、`scale` 和 `rects`，继续复用 `reading_progress.locator_json`，不新增 migration。
+- 阶段 4.4 PDF 进度保存会将 `page` 至少归一为 1、`scale` 限制到 `0.5..3.0`、非法 rect 过滤、非有限 progress 置空；PDF 书籍只接受 `pdf` locator。
 
 ## 技术决策
 
@@ -125,6 +127,7 @@
 | PDF 阅读 UI 复用 EPUB 控制条模型 | PDF 单页/双页、页码、缩放和适合宽度放在正文下方，目录侧栏与主题/专注模式继续由 ReaderShell 管理 |
 | PDF 双页偏好与实际渲染分离 | 用户可保持 `Double` 偏好；窄屏或可用宽度不足时 adapter 返回 single rendered mode，窗口变宽后恢复双页 |
 | PDF outline 解析失败不阻断打开 | outline 常含外部 URL 或不可解析 destination；节点不可定位时跳过或保留可定位子项，整本书最终仍可用页码目录 |
+| PDF 进度继续走 JSON locator 扩展 | 现有 `reading_progress.locator_json` 已能承载格式区分，不需要为 page/scale/rects 新增 SQLite migration |
 
 ## 遇到的问题
 

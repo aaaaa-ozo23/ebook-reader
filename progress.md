@@ -72,6 +72,30 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 4.4：PDF 进度恢复
+- **状态：** complete
+- **分支：** `codex/stage4-pdf-progress`
+- 执行的操作：
+  - 从 `codex/v0.1.0-mvp-integration` 创建 `codex/stage4-pdf-progress`。
+  - 在 Rust `Locator` enum 新增 `Pdf(PdfLocator)`，补齐 `PdfLocator`、`PdfZoomMode` 和 `PdfRect` 的 serde 模型。
+  - 放开 PDF 书籍保存进度，按格式拒绝 TXT/EPUB/PDF locator 混用。
+  - 归一化 PDF `page >= 1`、`scale` 到 `0.5..3.0`、过滤非法 rect；非有限 `progress` 置空。
+  - 将前端 `saveReadingProgress` Tauri invoke 返回类型改为通用 `ReaderProgress<Locator>`。
+  - 新增 Rust 单测覆盖 PDF 进度持久化、格式不匹配拒绝和归一化。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，22 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，30 tests。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化
