@@ -106,6 +106,20 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 3.5：EPUB 高亮预研
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 复核 `EpubReaderAdapter` 中 `selected`、`book.getRange(cfiRange)`、`rendition.annotations.highlight/remove` 的接入点。
+  - 未落地完整标注 CRUD，避免阶段 3 扩大到统一标注表和重放生命周期。
+  - 在 `findings.md` 写入 CFI、选中文本、上下文、高亮重放限制和阶段 5 建议。
+- 创建/修改的文件：
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20
