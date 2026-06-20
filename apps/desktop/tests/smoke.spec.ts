@@ -15,6 +15,20 @@ function collectConsoleIssues(page: Page): string[] {
   return issues;
 }
 
+async function readEpubPageState(page: Page): Promise<{ currentPage: number; totalPages: number }> {
+  const pageText = await page.getByText(/Page \d+ \/ \d+/).first().textContent();
+  const match = pageText?.match(/Page\s+(\d+)\s+\/\s+(\d+)/);
+
+  if (match === undefined || match === null) {
+    throw new Error(`Unable to read EPUB page state from: ${pageText ?? ""}`);
+  }
+
+  return {
+    currentPage: Number(match[1]),
+    totalPages: Number(match[2]),
+  };
+}
+
 test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await page.goto("/");
 
@@ -396,6 +410,29 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect.poll(async () => Number(await progressSlider.inputValue())).toBeGreaterThan(
     beforeSliderValue,
   );
+
+  const { totalPages } = await readEpubPageState(page);
+  expect(totalPages).toBeGreaterThan(2);
+
+  const penultimateSliderValue = Math.round(((totalPages - 2.5) / (totalPages - 1)) * 1000);
+  await progressSlider.evaluate((element, value) => {
+    const input = element as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+    valueSetter?.call(input, String(value));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  }, penultimateSliderValue);
+  await expect(
+    page.getByText(new RegExp(`Page ${totalPages - 1} / ${totalPages}`)).first(),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(
+    page.getByText(new RegExp(`Page ${totalPages} / ${totalPages}`)).first(),
+  ).toBeVisible();
+  await expect(page.getByText("100%").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(

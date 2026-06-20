@@ -832,3 +832,29 @@
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*
+
+## 2026-06-20 阶段 3.x EPUB Focus 与最后页修复
+
+### 状态
+- **当前状态：** complete
+- **分支：** `codex/stage3-epub-focus-last-page-fix`
+
+### 执行的操作
+- 设置本地 Git 身份为 `aaaaa-ozo23 <aaaaa-ozo23@users.noreply.github.com>`。
+- 从 `main` 同步 `codex/v0.1.0-mvp-integration`，并创建阶段修复分支。
+- 阅读 EPUB adapter、ReaderShell、EPUB CSS 和 Playwright smoke，定位 Focus 底部留白和最后页 Next 边界。
+- 调整 EPUB Focus 模式布局：缩小隐藏 chrome 后的视口底部 padding，扩大 EPUB 页面高度，并压缩底部控制条间距。
+- 调整 EPUB adapter：在倒数第二页及之后点击 Next 时，使用已生成 locations 的最后一个 CFI 补偿跳转；普通翻页保留 epub.js 原生路径。
+- 为 Next 最后一页边界补充单元测试和 Playwright smoke 步骤。
+
+### 已通过验证
+- `pnpm.cmd install`
+- `pnpm.cmd --filter @reader/core build`
+- `pnpm.cmd --filter @reader/desktop lint`
+- `pnpm.cmd --filter @reader/desktop test -- EpubReaderAdapter.test.ts`
+- `pnpm.cmd --filter @reader/desktop test`，23 tests
+- `pnpm.cmd --filter @reader/desktop build`
+- `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests
+- `pnpm.cmd --filter @reader/desktop test:e2e`，4 tests
+- Playwright Focus 视觉检查：`D:\tl-temp\ebook-reader-epub-focus-fix.png`，底部间距 18px，iframe 文本非空，无 console warning/error
+- `pnpm.cmd --filter @reader/desktop tauri:build`
