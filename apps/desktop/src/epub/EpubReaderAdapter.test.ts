@@ -1,7 +1,11 @@
 import { defaultReaderTheme, type ReaderTheme } from "@reader/core";
 import { describe, expect, it } from "vitest";
 
-import { buildEpubThemeRules, progressionToEpubPage } from "./EpubReaderAdapter";
+import {
+  buildEpubThemeRules,
+  nextEpubLocationIndex,
+  progressionToEpubPage,
+} from "./EpubReaderAdapter";
 
 describe("buildEpubThemeRules", () => {
   it("maps reader theme tokens into EPUB iframe CSS rules", () => {
@@ -50,5 +54,12 @@ describe("buildEpubThemeRules", () => {
     expect(progressionToEpubPage(0.5, 10)).toBe(6);
     expect(progressionToEpubPage(1, 10)).toBe(10);
     expect(progressionToEpubPage(2, 10)).toBe(10);
+  });
+
+  it("maps page navigation to generated location indexes", () => {
+    expect(nextEpubLocationIndex(1, 10)).toBe(1);
+    expect(nextEpubLocationIndex(9, 10)).toBe(9);
+    expect(nextEpubLocationIndex(10, 10)).toBeNull();
+    expect(nextEpubLocationIndex(null, 10)).toBeNull();
   });
 });

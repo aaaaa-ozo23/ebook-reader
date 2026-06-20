@@ -159,6 +159,7 @@
 | 3.4 EPUB 进度恢复 | `codex/stage3-epub-progress` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests；`pnpm.cmd --filter @reader/desktop test`，18 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 3.5 EPUB 高亮预研 | `codex/stage3-epub-highlight-spike` | complete | 结论、限制和阶段 5 建议已写入 `findings.md`；`pnpm.cmd --filter @reader/desktop test`，18 tests |
 | 3.x EPUB 导航与进度优化 | `codex/stage3-epub-navigation-optimization` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test -- --run`，22 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，4 tests；Playwright 视觉截图；`pnpm.cmd --filter @reader/desktop tauri:build` |
+| 3.x EPUB Focus 与最后页修复 | `codex/stage3-epub-focus-last-page-fix` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，23 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，4 tests；Playwright Focus 视觉截图；`pnpm.cmd --filter @reader/desktop tauri:build` |
 
 ### 阶段 3 最终验收记录
 
