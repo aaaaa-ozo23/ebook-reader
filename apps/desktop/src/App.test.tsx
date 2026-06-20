@@ -80,7 +80,11 @@ const epubAdapterSetSpreadModeMock = vi.hoisted(() =>
 const epubAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 
 const pdfAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
-const pdfAdapterFitWidthMock = vi.hoisted(() => vi.fn(async (_width: number) => undefined));
+const pdfAdapterFitWidthMock = vi.hoisted(() =>
+  vi.fn(async (width: number) => {
+    void width;
+  }),
+);
 const pdfAdapterGetTocMock = vi.hoisted(() =>
   vi.fn(async () => [
     {
@@ -109,9 +113,17 @@ const pdfAdapterGetTocMock = vi.hoisted(() =>
     },
   ]),
 );
-const pdfAdapterGoToMock = vi.hoisted(() => vi.fn(async (_locator: PdfLocator) => undefined));
+const pdfAdapterGoToMock = vi.hoisted(() =>
+  vi.fn(async (locator: PdfLocator) => {
+    void locator;
+  }),
+);
 const pdfAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
-const pdfAdapterOpenMock = vi.hoisted(() => vi.fn(async (_bookId: string) => undefined));
+const pdfAdapterOpenMock = vi.hoisted(() =>
+  vi.fn(async (bookId: string) => {
+    void bookId;
+  }),
+);
 const pdfAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
 const pdfAdapterRenderPageMock = vi.hoisted(() =>
   vi.fn(async (canvas: HTMLCanvasElement, pageNumber: number) => {
@@ -128,9 +140,16 @@ const pdfAdapterRenderPageMock = vi.hoisted(() =>
 );
 const pdfAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 const pdfAdapterSetViewModeMock = vi.hoisted(() =>
-  vi.fn((_mode: "single" | "double" | "continuous", _availableWidth?: number) => undefined),
+  vi.fn((mode: "single" | "double" | "continuous", availableWidth?: number) => {
+    void mode;
+    void availableWidth;
+  }),
 );
-const pdfAdapterSetZoomMock = vi.hoisted(() => vi.fn((_scale: number) => undefined));
+const pdfAdapterSetZoomMock = vi.hoisted(() =>
+  vi.fn((scale: number) => {
+    void scale;
+  }),
+);
 const pdfAdapterVisiblePagesMock = vi.hoisted(() => vi.fn(() => [1]));
 
 vi.mock("./tauri/library", () => ({

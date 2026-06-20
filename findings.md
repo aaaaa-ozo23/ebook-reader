@@ -79,6 +79,8 @@
 - 阶段 4.2 已移除 PDF 打开拦截，PDF 书籍从书架进入 `ReaderShell`，通过 `PdfReaderContent` 渲染 canvas 页面。
 - 阶段 4.2 PDF 控件沿用 EPUB 底部控制区风格，支持 `Previous`、`Next`、`Single`、`Double`、页码输入、缩放加减和 `Fit width`。
 - 阶段 4.2 在 Vitest 中用 mock adapter 覆盖 PDF 打开、单/双页切换、页码跳转、缩放、适合宽度、进度恢复和保存链路。
+- 阶段 4.3 PDF outline 解析支持命名 destination 和显式 destination 数组，页引用通过 `getPageIndex()` 转 1-based `PdfLocator.page`。
+- 阶段 4.3 对没有 outline 或 outline 节点不可定位的 PDF 降级为 `Page 1...Page N` 页码目录，避免目录侧栏空置。
 
 ## 技术决策
 
@@ -122,6 +124,7 @@
 | PDF adapter 放在 `apps/desktop/src/pdf` | PDF.js 依赖 DOM/canvas 和 worker，不进入纯 TypeScript core 包 |
 | PDF 阅读 UI 复用 EPUB 控制条模型 | PDF 单页/双页、页码、缩放和适合宽度放在正文下方，目录侧栏与主题/专注模式继续由 ReaderShell 管理 |
 | PDF 双页偏好与实际渲染分离 | 用户可保持 `Double` 偏好；窄屏或可用宽度不足时 adapter 返回 single rendered mode，窗口变宽后恢复双页 |
+| PDF outline 解析失败不阻断打开 | outline 常含外部 URL 或不可解析 destination；节点不可定位时跳过或保留可定位子项，整本书最终仍可用页码目录 |
 
 ## 遇到的问题
 
