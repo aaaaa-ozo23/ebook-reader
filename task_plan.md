@@ -155,6 +155,7 @@
 |--------|------|------|------|
 | 3.1 EPUB 适配器 | `codex/stage3-epub-adapter` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests |
 | 3.2 EPUB 阅读 UI | `codex/stage3-epub-reader-ui` | complete | `pnpm.cmd --filter @reader/desktop test`，15 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 3.3 EPUB 主题映射 | `codex/stage3-epub-theme` | complete | `pnpm.cmd --filter @reader/desktop test`，17 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 
 ## 大阶段 4：PDF 阅读器
 

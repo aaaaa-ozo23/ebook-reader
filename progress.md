@@ -63,6 +63,26 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 3.3：EPUB 主题映射
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 EPUB iframe 主题 CSS 映射扩展到 `html`、`body`、正文容器、段落、链接、选区和高亮类。
+  - 将 `ReaderTheme` 的字体、字号、行高、段距、页边距、背景、文本色和暗色链接色映射到 epub.js themes。
+  - 保持主题面板改动即时调用 EPUB adapter `setTheme`，不重开 EPUB。
+  - 新增纯映射测试和 EPUB UI 主题变更测试。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/epub/EpubReaderAdapter.test.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test` 通过，17 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20

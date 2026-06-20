@@ -372,6 +372,44 @@ describe("App", () => {
     expect(reader).toHaveAttribute("data-reader-theme", "dark");
   });
 
+  it("updates EPUB themes through the adapter without reopening the book", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "theme-epub", title: "Theme EPUB", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Theme EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(epubAdapterOpenMock).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    await user.click(screen.getByRole("button", { name: "dark" }));
+
+    await waitFor(() =>
+      expect(epubAdapterSetThemeMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: "dark",
+          backgroundColor: "#171a1d",
+          textColor: "#f0e8d7",
+        }),
+      ),
+    );
+    expect(saveReaderThemeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "dark",
+      }),
+    );
+    expect(epubAdapterOpenMock).toHaveBeenCalledTimes(1);
+    expect(reader).toHaveAttribute("data-reader-theme", "dark");
+  });
+
   it("restores saved TXT progress and saves table-of-contents jumps", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({ id: "progress-txt", title: "Progress TXT", format: "txt" });
