@@ -29,7 +29,13 @@ import {
   saveReaderTheme,
   saveReadingProgress,
 } from "../tauri/reader";
-import { EpubReaderAdapter } from "../epub/EpubReaderAdapter";
+import {
+  EpubReaderAdapter,
+  type EpubPosition,
+  type EpubProgressPreview,
+  type EpubSpreadMode,
+  type EpubSpreadState,
+} from "../epub/EpubReaderAdapter";
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -802,13 +808,24 @@ function EpubReaderContent({
 }: EpubReaderContentProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<EpubReaderAdapter | null>(null);
+  const isDraggingProgressRef = useRef(false);
   const pendingProgressRef = useRef<PendingEpubProgress | null>(null);
+  const positionRef = useRef<EpubPosition | null>(null);
+  const previewPositionRef = useRef<EpubProgressPreview | null>(null);
   const progressIdleTimerRef = useRef<number | null>(null);
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [visibleProgression, setVisibleProgression] = useState<number | null>(null);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const [position, setPosition] = useState<EpubPosition | null>(null);
+  const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(null);
+  const [requestedSpreadMode, setRequestedSpreadMode] = useState<EpubSpreadMode>("single");
+  const [spreadState, setSpreadState] = useState<EpubSpreadState>({
+    requested: "single",
+    rendered: "single",
+    canRenderDouble: false,
+  });
 
   useEffect(() => {
     tocItemsRef.current = tocItems;
@@ -818,6 +835,18 @@ function EpubReaderContent({
     themeRef.current = theme;
     void adapterRef.current?.setTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    isDraggingProgressRef.current = isDraggingProgress;
+  }, [isDraggingProgress]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
+  useEffect(() => {
+    previewPositionRef.current = previewPosition;
+  }, [previewPosition]);
 
   const flushPendingProgress = useCallback(() => {
     const pendingProgress = pendingProgressRef.current;
@@ -843,18 +872,29 @@ function EpubReaderContent({
     [flushPendingProgress],
   );
 
-  const handleRelocated = useCallback(
-    (locator: EpubLocator, progress?: number) => {
-      const activeTocItemId = findTocItemIdByHref(tocItemsRef.current, locator.href);
+  const updateActiveTocForHref = useCallback(
+    (href: string) => {
+      const activeTocItemId = findTocItemIdByHref(tocItemsRef.current, href);
 
       if (activeTocItemId !== null) {
         onActiveTocItemChange(activeTocItemId);
       }
+    },
+    [onActiveTocItemChange],
+  );
 
-      setVisibleProgression(progress ?? locator.progression ?? null);
+  const handleRelocated = useCallback(
+    (nextPosition: EpubPosition) => {
+      updateActiveTocForHref(nextPosition.locator.href);
+      setPosition(nextPosition);
+
+      if (!isDraggingProgressRef.current) {
+        setPreviewPosition(null);
+      }
+
       pendingProgressRef.current = {
-        locator,
-        progress,
+        locator: nextPosition.locator,
+        progress: nextPosition.progression ?? undefined,
       };
 
       if (progressIdleTimerRef.current !== null) {
@@ -866,7 +906,7 @@ function EpubReaderContent({
         flushPendingProgress();
       }, 750);
     },
-    [flushPendingProgress, onActiveTocItemChange],
+    [flushPendingProgress, updateActiveTocForHref],
   );
 
   useEffect(() => {
@@ -876,6 +916,14 @@ function EpubReaderContent({
     async function openEpub() {
       setIsLoading(true);
       setError(null);
+      setPosition(null);
+      setPreviewPosition(null);
+      setRequestedSpreadMode("single");
+      setSpreadState({
+        requested: "single",
+        rendered: "single",
+        canRenderDouble: false,
+      });
       onTocChange([]);
 
       try {
@@ -899,6 +947,7 @@ function EpubReaderContent({
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
+          onSpreadChange: setSpreadState,
         });
         openedAdapter = adapter;
         adapterRef.current = adapter;
@@ -940,28 +989,99 @@ function EpubReaderContent({
   }, [jumpRequest]);
 
   const handlePrevious = useCallback(() => {
+    setPreviewPosition(null);
     void adapterRef.current?.previous();
   }, []);
 
   const handleNext = useCallback(() => {
+    setPreviewPosition(null);
     void adapterRef.current?.next();
   }, []);
 
-  const progressLabel =
-    visibleProgression === null ? "Progress unavailable" : `${Math.round(visibleProgression * 100)}%`;
+  const handleSpreadModeChange = useCallback((mode: EpubSpreadMode) => {
+    setRequestedSpreadMode(mode);
+    const nextSpreadState = adapterRef.current?.setSpreadMode(mode);
+
+    if (nextSpreadState !== undefined) {
+      setSpreadState(nextSpreadState);
+    }
+  }, []);
+
+  const handleProgressPreview = useCallback(
+    (value: string) => {
+      const adapter = adapterRef.current;
+
+      if (adapter === null) {
+        return;
+      }
+
+      try {
+        const nextPreview = adapter.previewProgress(Number(value) / 1000);
+        previewPositionRef.current = nextPreview;
+        setPreviewPosition(nextPreview);
+        updateActiveTocForHref(nextPreview.locator.href);
+      } catch {
+        setPreviewPosition(null);
+      }
+    },
+    [updateActiveTocForHref],
+  );
+
+  const handleProgressChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      isDraggingProgressRef.current = true;
+      setIsDraggingProgress(true);
+      handleProgressPreview(event.currentTarget.value);
+    },
+    [handleProgressPreview],
+  );
+
+  const commitProgress = useCallback(() => {
+    const adapter = adapterRef.current;
+    const nextProgression =
+      previewPositionRef.current?.progression ?? positionRef.current?.progression ?? 0;
+
+    isDraggingProgressRef.current = false;
+    setIsDraggingProgress(false);
+
+    if (adapter === null) {
+      setPreviewPosition(null);
+      return;
+    }
+
+    void adapter.goToProgress(nextProgression).catch((progressError: unknown) => {
+      setPreviewPosition(null);
+      setError(getErrorMessage(progressError));
+    });
+  }, []);
+
+  const activeProgress = previewPosition ?? position;
+  const locationsReady = position?.locationsReady === true && position.totalPages !== null;
+  const activeProgression = locationsReady ? (activeProgress?.progression ?? 0) : 0;
+  const sliderValue = Math.round(activeProgression * 1000);
+  const progressPercent = Math.round(activeProgression * 100);
+  const progressPage = activeProgress?.page ?? null;
+  const totalPages = activeProgress?.totalPages ?? position?.totalPages ?? null;
+  const pageLabel =
+    progressPage !== null && totalPages !== null
+      ? `Page ${progressPage} / ${totalPages}`
+      : "Pages calculating";
+  const progressLabel = locationsReady ? `${progressPercent}%` : "Calculating pages";
+  const activeChapterTitle =
+    activeProgress !== null
+      ? (findTocItemByHref(tocItems, activeProgress.locator.href)?.title ?? book.title)
+      : book.title;
+  const progressControlStyle = {
+    "--epub-progress-percent": `${activeProgression * 100}%`,
+  } as CSSProperties;
+  const spreadModeDescription =
+    requestedSpreadMode === "double" && spreadState.rendered === "single"
+      ? "Double view will resume when the window is wide enough."
+      : undefined;
 
   return (
     <section className="reader-viewport reader-viewport--epub" aria-label={`${book.title} content`}>
       <article className="reader-page reader-page--epub">
-        <div className="reader-epub-toolbar" aria-label="EPUB navigation">
-          <button type="button" className="reader-tool-button" onClick={handlePrevious}>
-            Previous
-          </button>
-          <span>{progressLabel}</span>
-          <button type="button" className="reader-tool-button" onClick={handleNext}>
-            Next
-          </button>
-        </div>
         <div className="reader-epub-frame">
           {isLoading ? (
             <section className="reader-state reader-state--overlay" aria-label="Loading EPUB book">
@@ -979,6 +1099,77 @@ function EpubReaderContent({
             </section>
           ) : null}
           <div ref={hostRef} className="reader-epub-host" aria-hidden={error !== null} />
+        </div>
+        <div className="reader-epub-controls" aria-label="EPUB navigation">
+          <div className="reader-epub-control-row">
+            <button type="button" className="reader-tool-button" onClick={handlePrevious}>
+              Previous
+            </button>
+            <div className="reader-epub-status" aria-live="polite">
+              <span>{activeChapterTitle}</span>
+              <strong>{pageLabel}</strong>
+              <span>{progressLabel}</span>
+            </div>
+            <button type="button" className="reader-tool-button" onClick={handleNext}>
+              Next
+            </button>
+            <div
+              className="reader-epub-mode-toggle"
+              role="group"
+              aria-label="EPUB page view"
+              title={spreadModeDescription}
+            >
+              <button
+                type="button"
+                aria-pressed={requestedSpreadMode === "single"}
+                onClick={() => handleSpreadModeChange("single")}
+              >
+                Single
+              </button>
+              <button
+                type="button"
+                aria-pressed={requestedSpreadMode === "double"}
+                onClick={() => handleSpreadModeChange("double")}
+              >
+                Double
+              </button>
+            </div>
+          </div>
+          <div className="reader-epub-progress" style={progressControlStyle}>
+            <div className="reader-epub-progress__meta">
+              <span>{activeChapterTitle}</span>
+              <span>{locationsReady ? pageLabel : "Calculating pages"}</span>
+            </div>
+            <div className="reader-epub-progress__track">
+              {locationsReady ? (
+                <span
+                  className={`reader-epub-progress__tooltip ${
+                    isDraggingProgress ? "reader-epub-progress__tooltip--visible" : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  {progressPage !== null ? `Page ${progressPage}` : pageLabel}
+                </span>
+              ) : null}
+              <input
+                aria-label="EPUB reading progress"
+                className="reader-epub-progress__range"
+                disabled={!locationsReady}
+                max={1000}
+                min={0}
+                step={1}
+                type="range"
+                value={sliderValue}
+                onChange={handleProgressChange}
+                onKeyUp={commitProgress}
+                onPointerDown={() => {
+                  isDraggingProgressRef.current = true;
+                  setIsDraggingProgress(true);
+                }}
+                onPointerUp={commitProgress}
+              />
+            </div>
+          </div>
         </div>
       </article>
     </section>
@@ -1184,25 +1375,38 @@ function findTocItemById(items: TocItem[], itemId: string): TocItem | null {
 }
 
 function findTocItemIdByHref(items: TocItem[], href: string): string | null {
-  const normalizedHref = normalizeEpubHref(href);
+  return findTocItemByHref(items, href)?.id ?? null;
+}
 
+function findTocItemByHref(items: TocItem[], href: string): TocItem | null {
   for (const item of items) {
-    if (item.href !== undefined && normalizeEpubHref(item.href) === normalizedHref) {
-      return item.id;
+    if (item.href !== undefined && epubHrefsMatch(item.href, href)) {
+      return item;
     }
 
-    const childItemId = findTocItemIdByHref(item.children ?? [], href);
+    const childItem = findTocItemByHref(item.children ?? [], href);
 
-    if (childItemId !== null) {
-      return childItemId;
+    if (childItem !== null) {
+      return childItem;
     }
   }
 
   return null;
 }
 
+function epubHrefsMatch(firstHref: string, secondHref: string): boolean {
+  const first = normalizeEpubHref(firstHref);
+  const second = normalizeEpubHref(secondHref);
+
+  if (first.length === 0 || second.length === 0) {
+    return false;
+  }
+
+  return first === second || first.endsWith(`/${second}`) || second.endsWith(`/${first}`);
+}
+
 function normalizeEpubHref(href: string): string {
-  return href.split("#")[0] ?? href;
+  return (href.split("#")[0] ?? href).replaceAll("\\", "/").replace(/^\/+/, "");
 }
 
 function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {

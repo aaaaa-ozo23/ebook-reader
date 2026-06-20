@@ -1,7 +1,7 @@
 import { defaultReaderTheme, type ReaderTheme } from "@reader/core";
 import { describe, expect, it } from "vitest";
 
-import { buildEpubThemeRules } from "./EpubReaderAdapter";
+import { buildEpubThemeRules, progressionToEpubPage } from "./EpubReaderAdapter";
 
 describe("buildEpubThemeRules", () => {
   it("maps reader theme tokens into EPUB iframe CSS rules", () => {
@@ -31,6 +31,10 @@ describe("buildEpubThemeRules", () => {
       "line-height": "1.9 !important",
       margin: "0 !important",
       padding: "0 34px !important",
+      "user-select": "text !important",
+    });
+    expect(rules["body, p, div, section, article"]).toMatchObject({
+      "user-select": "text !important",
     });
     expect(rules.p).toMatchObject({
       "margin-bottom": "18px !important",
@@ -39,5 +43,12 @@ describe("buildEpubThemeRules", () => {
     expect(rules["a, a:visited"]).toMatchObject({
       color: "#f3bc55",
     });
+  });
+
+  it("maps generated locations progress to synthetic EPUB pages", () => {
+    expect(progressionToEpubPage(0, 10)).toBe(1);
+    expect(progressionToEpubPage(0.5, 10)).toBe(6);
+    expect(progressionToEpubPage(1, 10)).toBe(10);
+    expect(progressionToEpubPage(2, 10)).toBe(10);
   });
 });

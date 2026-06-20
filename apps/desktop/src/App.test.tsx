@@ -10,7 +10,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { EpubReaderAdapter } from "./epub/EpubReaderAdapter";
+import { EpubReaderAdapter, type EpubPosition } from "./epub/EpubReaderAdapter";
 import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
   getEpubBookSource,
@@ -33,12 +33,47 @@ const epubAdapterGetTocMock = vi.hoisted(() =>
         href: "OPS/chapter-one.xhtml",
       },
     },
+    {
+      id: "chapter-two",
+      title: "Chapter Two",
+      href: "OPS/chapter-two.xhtml",
+      locator: {
+        kind: "epub" as const,
+        href: "OPS/chapter-two.xhtml",
+      },
+    },
   ]),
 );
 const epubAdapterGoToMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterGoToProgressMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterPreviewProgressMock = vi.hoisted(() =>
+  vi.fn((progression: number) => {
+    const page = Math.max(1, Math.round(progression * 100));
+
+    return {
+      locator: {
+        kind: "epub" as const,
+        href: progression >= 0.5 ? "OPS/chapter-two.xhtml" : "OPS/chapter-one.xhtml",
+        cfi: `epubcfi(/6/${page})`,
+        progression,
+      },
+      progression,
+      page,
+      totalPages: 100,
+      locationsReady: true as const,
+    };
+  }),
+);
+const epubAdapterSetSpreadModeMock = vi.hoisted(() =>
+  vi.fn((mode: "single" | "double") => ({
+    requested: mode,
+    rendered: mode,
+    canRenderDouble: true,
+  })),
+);
 const epubAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("./tauri/library", () => ({
@@ -61,13 +96,16 @@ vi.mock("./tauri/reader", () => ({
 vi.mock("./epub/EpubReaderAdapter", () => ({
   EpubReaderAdapter: vi.fn(function MockEpubReaderAdapter() {
     return {
-    close: epubAdapterCloseMock,
-    getToc: epubAdapterGetTocMock,
-    goTo: epubAdapterGoToMock,
-    next: epubAdapterNextMock,
-    open: epubAdapterOpenMock,
-    previous: epubAdapterPreviousMock,
-    setTheme: epubAdapterSetThemeMock,
+      close: epubAdapterCloseMock,
+      getToc: epubAdapterGetTocMock,
+      goTo: epubAdapterGoToMock,
+      goToProgress: epubAdapterGoToProgressMock,
+      next: epubAdapterNextMock,
+      open: epubAdapterOpenMock,
+      previous: epubAdapterPreviousMock,
+      previewProgress: epubAdapterPreviewProgressMock,
+      setSpreadMode: epubAdapterSetSpreadModeMock,
+      setTheme: epubAdapterSetThemeMock,
     };
   }),
 }));
@@ -91,9 +129,12 @@ describe("App", () => {
     epubAdapterCloseMock.mockClear();
     epubAdapterGetTocMock.mockClear();
     epubAdapterGoToMock.mockClear();
+    epubAdapterGoToProgressMock.mockClear();
     epubAdapterNextMock.mockClear();
     epubAdapterOpenMock.mockClear();
     epubAdapterPreviousMock.mockClear();
+    epubAdapterPreviewProgressMock.mockClear();
+    epubAdapterSetSpreadModeMock.mockClear();
     epubAdapterSetThemeMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
@@ -320,6 +361,135 @@ describe("App", () => {
     expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
   });
 
+  it("shows EPUB navigation below the page and enables progress after locations are ready", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "epub-controls", title: "Controls EPUB", format: "epub" });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Controls EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    const slider = await screen.findByRole("slider", { name: "EPUB reading progress" });
+    expect(slider).toBeDisabled();
+    expect(screen.getAllByText("Calculating pages").length).toBeGreaterThan(0);
+
+    const frame = reader.querySelector(".reader-epub-frame");
+    const controls = reader.querySelector(".reader-epub-controls");
+    expect(frame).not.toBeNull();
+    expect(controls).not.toBeNull();
+    expect(frame?.compareDocumentPosition(controls as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(
+      createEpubPosition({
+        locator: {
+          kind: "epub",
+          href: "OPS/chapter-one.xhtml",
+          cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
+          progression: 0.36,
+        },
+        page: 36,
+        progression: 0.36,
+      }),
+    );
+
+    await waitFor(() => expect(slider).toBeEnabled());
+    expect(screen.getAllByText("Page 36 / 100").length).toBeGreaterThan(0);
+    expect(screen.getByText("36%")).toBeVisible();
+
+    await user.click(within(reader).getByRole("button", { name: "Previous" }));
+    await user.click(within(reader).getByRole("button", { name: "Next" }));
+
+    expect(epubAdapterPreviousMock).toHaveBeenCalledTimes(1);
+    expect(epubAdapterNextMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("previews EPUB progress while dragging and commits one jump on release", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "epub-progress", title: "Slider EPUB", format: "epub" });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Slider EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(
+      createEpubPosition({
+        locator: {
+          kind: "epub",
+          href: "OPS/chapter-one.xhtml",
+          cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
+          progression: 0.12,
+        },
+        page: 12,
+        progression: 0.12,
+      }),
+    );
+
+    const slider = await screen.findByRole("slider", { name: "EPUB reading progress" });
+    fireEvent.pointerDown(slider);
+    fireEvent.change(slider, {
+      target: {
+        value: "620",
+      },
+    });
+
+    expect(epubAdapterPreviewProgressMock).toHaveBeenCalledWith(0.62);
+    expect(epubAdapterGoToProgressMock).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Chapter Two" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+    expect(screen.getAllByText("Page 62 / 100").length).toBeGreaterThan(0);
+    expect(screen.getByText("62%")).toBeVisible();
+
+    fireEvent.pointerUp(slider);
+
+    await waitFor(() => expect(epubAdapterGoToProgressMock).toHaveBeenCalledWith(0.62));
+    expect(epubAdapterGoToProgressMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("toggles EPUB single and double page view through the adapter", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "epub-spread", title: "Spread EPUB", format: "epub" });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Spread EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    await user.click(screen.getByRole("button", { name: "Double" }));
+    expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("double");
+    expect(screen.getByRole("button", { name: "Double" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Single" }));
+    expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("single");
+    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("shows a later-stage reader message for PDF books", async () => {
     const user = userEvent.setup();
     const pdfBook = createBook({ id: "pdf-book", title: "Layout Notes PDF", format: "pdf" });
@@ -500,12 +670,22 @@ describe("App", () => {
     const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
       | {
           initialLocator?: EpubLocator;
-          onRelocated?: (locator: EpubLocator, progress?: number) => void;
+          onRelocated?: (position: EpubPosition) => void;
         }
       | undefined;
     expect(adapterOptions?.initialLocator).toEqual(savedLocator);
 
-    adapterOptions?.onRelocated?.(relocatedLocator, 0.75);
+    adapterOptions?.onRelocated?.(
+      createEpubPosition({
+        locator: relocatedLocator,
+        page: 75,
+        totalPages: 100,
+        progression: 0.75,
+      }),
+    );
+    await waitFor(() => expect(screen.getAllByText("Page 75 / 100").length).toBeGreaterThan(0));
+    expect(screen.getByText("75%")).toBeVisible();
+
     await user.click(within(reader).getByRole("button", { name: "Shelf" }));
 
     await waitFor(() =>
@@ -637,6 +817,26 @@ function createLongTxtDocument(book: Book): TxtDocument {
         text: secondText,
       },
     ],
+  };
+}
+
+function createEpubPosition(overrides: Partial<EpubPosition> = {}): EpubPosition {
+  const locator = overrides.locator ?? {
+    kind: "epub" as const,
+    href: "OPS/chapter-one.xhtml",
+    cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
+    progression: 0.1,
+  };
+
+  return {
+    locator,
+    progression: locator.progression ?? null,
+    page: 10,
+    totalPages: 100,
+    displayedPage: 1,
+    displayedTotal: 1,
+    locationsReady: true,
+    ...overrides,
   };
 }
 

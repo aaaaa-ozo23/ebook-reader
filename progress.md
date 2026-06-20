@@ -2,6 +2,42 @@
 
 ## 会话：2026-06-20
 
+### 阶段 3.x：EPUB 导航与进度优化
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 从最新 `main` 快进 `codex/v0.1.0-mvp-integration`，创建 `codex/stage3-epub-navigation-optimization`。
+  - 扩展 `EpubReaderAdapter`：打开后后台生成 epub.js locations，新增 `EpubPosition`、`previewProgress`、`goToProgress`、`setSpreadMode` 和 resize fallback。
+  - 将 EPUB 百分比和页码改为基于全书合成 locations：`page = location index + 1`、`totalPages = locations.length()`。
+  - 将 EPUB 上一页、下一页、页码、百分比和单/双页切换移到正文下方。
+  - 新增视频式横向进度条；拖动期间只预览 CFI、页码和 TOC active 状态，松手后调用一次跳转。
+  - 移除 `captureSelection` 中清空选区的 `removeAllRanges()`，并在 EPUB iframe CSS 中允许 `user-select: text`。
+  - 扩展 Vitest 覆盖底部控件、locations ready 后 slider 启用、拖动预览、松手跳转、单双页切换和页码百分比显示。
+  - 扩展 Playwright EPUB smoke：运行时生成更长的无版权 EPUB fixture，验证进度条、双页按钮和 iframe 选中文本保留。
+- 创建/修改的文件：
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/epub/EpubReaderAdapter.test.ts`
+  - `apps/desktop/tests/smoke.spec.ts`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 最终验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test -- --run` 通过，22 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，21 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，4 Chromium smoke tests。
+  - Playwright 视觉检查通过，截图：`D:\tl-temp\ebook-reader-stage3-opt-epub-desktop.png`、`D:\tl-temp\ebook-reader-stage3-opt-epub-narrow.png`。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+- 遇到的问题：
+  - E2E 首次发现 `rendition.resize()` 在 `display()` 完成前调用会导致 `Cannot read properties of undefined (reading 'resize')`；已增加 manager-ready 保护。
+  - E2E 随后发现 `display()` 前主动读取 `currentLocation()` 会触发 pageerror；已改为只有已有位置后才在 spread/resize 后重新报告当前位置。
+
 ### 产品大阶段 3：EPUB 阅读器启动
 - **状态：** in_progress
 - **开始时间：** 2026-06-20

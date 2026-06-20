@@ -64,6 +64,12 @@
 - 阶段 3.5 阶段 5 建议：标注保存 `locator.kind = "epub"`、`cfi`、`href`、`selectedText`、`contextBefore`、`contextAfter`、颜色和用户笔记；打开 EPUB 后按书籍标注列表重放 `annotations.highlight`，删除时调用 `annotations.remove(cfiRange, "highlight")`。
 - 阶段 3 E2E 使用 Playwright 页面上下文生成无压缩最小 EPUB ZIP Blob，避免提交版权不明或二进制书籍样本；adapter 显式设置 `openAs: "epub"`，让 Blob URL 和 Tauri asset URL 都按 EPUB 归档打开。
 - 阶段 3 视觉检查发现主题面板在桌面/窄屏可能覆盖 EPUB host；修正为桌面端为固定面板预留右侧空间，窄屏将面板放入文档流，最终截图确认不再重叠。
+- 阶段 3.x EPUB 百分比一直为 `0%` 的根因是 adapter 未调用 `book.locations.generate(...)`；epub.js 在未生成 locations 时无法给 `currentLocation()` 提供全书 percentage/location index。
+- 阶段 3.x EPUB 页码口径采用全书合成页码：`page = location index + 1`，`totalPages = book.locations.length()`；locations 生成前不显示假百分比，进度条禁用并保留上一页/下一页可用。
+- 阶段 3.x 进度条拖动需要拆成预览和提交：拖动时只用 `book.locations.cfiFromPercentage()` 和 spine href 计算页码/目录预览；松手后才调用一次 `rendition.display(cfi)`，避免拖动过程中连续重排 EPUB iframe。
+- 阶段 3.x 单页/双页视图通过 `rendition.spread("none" | "auto")` 实现；当 EPUB host 宽度小于约 860px 时保留用户双页偏好但实际渲染回退单页。
+- 阶段 3.x 文字复制失败的直接原因是 `selected` 事件捕获后调用了 `removeAllRanges()` 清空 iframe 选区；移除该调用并在 EPUB iframe 主题 CSS 中设置 `user-select: text` 后，浏览器原生复制不再被 adapter 主动破坏。
+- 阶段 3.x epub.js `rendition.resize()` 不能在 `display()` 完成前调用，否则可能出现 `Cannot read properties of undefined (reading 'resize')`；spread resize 需要等待 rendition manager 可用，初始位置报告也要等 currentLocation 存在。
 
 ## 技术决策
 
@@ -102,6 +108,7 @@
 | EPUB 高亮能力先停留在 adapter spike API | CFI selection/highlight 已有可用入口，但完整 CRUD 涉及统一标注表、颜色、列表和重放时机，留到阶段 5 更清晰 |
 | EPUB E2E fixture 运行时生成 | 既满足无版权样本要求，也避免仓库里长期维护二进制 fixture；测试仍走真实 epub.js 渲染 |
 | 主题面板打开时进入布局状态 | 通过 `reader-shell--theme-open` 控制桌面预留空间和移动端静态排布，避免浮层挡住 EPUB/TXT 内容 |
+| EPUB 快速跳转使用 locations 预览模型 | 拖动期间不调用 `rendition.display`，只在释放后跳转一次，能让页码、百分比和目录即时跟随，同时避免 iframe 重排造成卡顿 |
 
 ## 遇到的问题
 

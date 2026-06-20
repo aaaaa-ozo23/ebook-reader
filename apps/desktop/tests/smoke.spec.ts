@@ -186,6 +186,16 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       createdAt: "2026-06-20T08:00:00.000Z",
       updatedAt: "2026-06-20T08:00:00.000Z",
     };
+    const chapterOneParagraphs = Array.from(
+      { length: 80 },
+      (_, index) =>
+        `<p>Chapter one generated reading sample paragraph ${index + 1}. This public domain test text gives epub locations enough material for synthetic page calculation.</p>`,
+    ).join("");
+    const chapterTwoParagraphs = Array.from(
+      { length: 80 },
+      (_, index) =>
+        `<p>Chapter two generated reading sample paragraph ${index + 1}. This second section verifies progress dragging, table-of-contents syncing, and text selection.</p>`,
+    ).join("");
     const entries = [
       {
         name: "mimetype",
@@ -243,7 +253,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   <head><title>Chapter One</title></head>
   <body>
     <h1>Chapter One</h1>
-    <p>This generated EPUB fixture is public domain test text.</p>
+    ${chapterOneParagraphs}
   </body>
 </html>`,
       },
@@ -254,7 +264,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   <head><title>Chapter Two</title></head>
   <body>
     <h1>Chapter Two</h1>
-    <p>The second chapter verifies table-of-contents navigation.</p>
+    ${chapterTwoParagraphs}
   </body>
 </html>`,
       },
@@ -359,11 +369,52 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(page.locator(".reader-epub-host iframe")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
+  const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
+  await expect(progressSlider).toBeEnabled({
+    timeout: 20000,
+  });
+  await expect(page.getByText(/Page \d+ \/ \d+/).first()).toBeVisible();
+
   await page.getByRole("button", { name: "Chapter Two" }).click();
   await expect(page.getByRole("button", { name: "Chapter Two" })).toHaveAttribute(
     "aria-current",
     "location",
   );
+
+  const beforeSliderValue = Number(await progressSlider.inputValue());
+  const sliderBox = await progressSlider.boundingBox();
+  expect(sliderBox).not.toBeNull();
+
+  if (sliderBox !== null) {
+    await page.mouse.move(sliderBox.x + sliderBox.width * 0.72, sliderBox.y + sliderBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(sliderBox.x + sliderBox.width * 0.82, sliderBox.y + sliderBox.height / 2);
+    await expect(page.locator(".reader-epub-progress__tooltip")).toContainText(/Page \d+/);
+    await page.mouse.up();
+  }
+
+  await expect.poll(async () => Number(await progressSlider.inputValue())).toBeGreaterThan(
+    beforeSliderValue,
+  );
+
+  await page.getByRole("button", { name: "Double" }).click();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator(".reader-epub-host iframe")).toBeVisible();
+
+  const epubIframe = page.locator(".reader-epub-host iframe");
+  const epubFrame = await (await epubIframe.elementHandle())?.contentFrame();
+  expect(epubFrame).not.toBeNull();
+
+  if (epubFrame !== null) {
+    await epubFrame.getByText(/generated reading sample paragraph/).first().dblclick();
+    const selectedText = await epubIframe.evaluate(
+      (iframe) => (iframe as HTMLIFrameElement).contentWindow?.getSelection()?.toString() ?? "",
+    );
+    expect(selectedText.length).toBeGreaterThan(0);
+  }
 
   await page.getByRole("button", { name: "Theme" }).click();
   await page.getByRole("button", { name: "dark" }).click();
