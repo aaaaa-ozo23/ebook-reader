@@ -192,17 +192,33 @@ pub struct ReaderTheme {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxtLocator {
-    pub kind: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chapter_id: Option<String>,
     pub char_offset: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpubLocator {
+    pub href: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cfi: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progression: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Locator {
+    Txt(TxtLocator),
+    Epub(EpubLocator),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReaderProgress {
     pub book_id: String,
-    pub locator: TxtLocator,
+    pub locator: Locator,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<f64>,
     pub updated_at: String,
@@ -290,7 +306,7 @@ pub fn get_reading_progress(
 pub fn save_reading_progress(
     app: &AppHandle,
     book_id: &str,
-    locator: TxtLocator,
+    locator: Locator,
     progress: Option<f64>,
 ) -> anyhow::Result<ReaderProgress> {
     let database_path = init_app_database(app)?;
@@ -558,18 +574,14 @@ pub fn get_reading_progress_at(
 pub fn save_reading_progress_at(
     database_path: &Path,
     book_id: &str,
-    locator: TxtLocator,
+    mut locator: Locator,
     progress: Option<f64>,
 ) -> anyhow::Result<ReaderProgress> {
     init_database_at(database_path)?;
     let conn = open_database(database_path)?;
-    validate_txt_locator(&locator)?;
     let book =
         find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
-
-    if book.format != BookFormat::Txt {
-        bail!("TXT progress can only be saved for txt books");
-    }
+    normalize_locator_for_book(book.format, &mut locator)?;
 
     let normalized_progress = progress.map(|value| value.clamp(0.0, 1.0));
     let locator_json =
@@ -931,12 +943,30 @@ fn normalize_reader_theme(mut theme: ReaderTheme) -> ReaderTheme {
     theme
 }
 
-fn validate_txt_locator(locator: &TxtLocator) -> anyhow::Result<()> {
-    if locator.kind != "txt" {
-        bail!("reading progress locator must have kind txt");
-    }
+fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyhow::Result<()> {
+    match (format, locator) {
+        (BookFormat::Txt, Locator::Txt(_)) => Ok(()),
+        (BookFormat::Txt, _) => bail!("TXT books can only save txt reading progress"),
+        (BookFormat::Epub, Locator::Epub(epub_locator)) => {
+            let has_cfi = epub_locator
+                .cfi
+                .as_deref()
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false);
 
-    Ok(())
+            if epub_locator.href.trim().is_empty() && !has_cfi {
+                bail!("EPUB progress requires an href or cfi");
+            }
+
+            epub_locator.progression = epub_locator
+                .progression
+                .filter(|value| !value.is_nan())
+                .map(|value| value.clamp(0.0, 1.0));
+            Ok(())
+        }
+        (BookFormat::Epub, _) => bail!("EPUB books can only save epub reading progress"),
+        (BookFormat::Pdf, _) => bail!("PDF progress is not supported yet"),
+    }
 }
 
 fn row_to_reader_progress(row: &Row<'_>) -> rusqlite::Result<ReaderProgress> {
@@ -1106,8 +1136,8 @@ mod tests {
     use super::{
         get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
         list_books_at, mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_theme_at,
-        save_reading_progress_at, schema_version, BookFormat, ImportBookStatus, ReaderTheme,
-        ReaderThemeMode, TxtLocator, DB_FILE_NAME,
+        save_reading_progress_at, schema_version, BookFormat, EpubLocator, ImportBookStatus,
+        Locator, ReaderTheme, ReaderThemeMode, TxtLocator, DB_FILE_NAME,
     };
 
     #[test]
@@ -1322,11 +1352,10 @@ mod tests {
         save_reading_progress_at(
             &database_path,
             &imported.book.id,
-            TxtLocator {
-                kind: "txt".to_string(),
+            Locator::Txt(TxtLocator {
                 chapter_id: None,
                 char_offset: 3,
-            },
+            }),
             Some(0.5),
         )
         .expect("save progress");
@@ -1515,11 +1544,10 @@ mod tests {
         fs::write(&source_path, "第一章 初见\n正文").expect("write source");
         let imported =
             import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
-        let locator = TxtLocator {
-            kind: "txt".to_string(),
+        let locator = Locator::Txt(TxtLocator {
             chapter_id: Some("chapter-1-0".to_string()),
             char_offset: 6,
-        };
+        });
 
         let saved = save_reading_progress_at(
             &database_path,
@@ -1540,7 +1568,7 @@ mod tests {
     }
 
     #[test]
-    fn reading_progress_rejects_non_txt_books_and_invalid_locator_kind() {
+    fn reading_progress_persists_for_epub_books() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
         let library_dir = temp_dir.path().join("library");
@@ -1548,28 +1576,92 @@ mod tests {
         fs::write(&epub_path, "epub placeholder").expect("write epub");
         let imported =
             import_book_at(&database_path, &library_dir, &epub_path).expect("import epub");
-        let valid_locator = TxtLocator {
-            kind: "txt".to_string(),
-            chapter_id: None,
-            char_offset: 0,
-        };
-        let invalid_locator = TxtLocator {
-            kind: "epub".to_string(),
-            chapter_id: None,
-            char_offset: 0,
-        };
+        let locator = Locator::Epub(EpubLocator {
+            href: "OPS/chapter-one.xhtml".to_string(),
+            cfi: Some("epubcfi(/6/2[chapter-one]!/4/1:12)".to_string()),
+            progression: Some(1.4),
+        });
 
-        let non_txt_error =
-            save_reading_progress_at(&database_path, &imported.book.id, valid_locator, Some(0.2))
-                .expect_err("epub progress should fail");
-        let invalid_kind_error =
-            save_reading_progress_at(&database_path, "missing", invalid_locator, None)
-                .expect_err("invalid locator should fail");
+        let saved = save_reading_progress_at(
+            &database_path,
+            &imported.book.id,
+            locator.clone(),
+            Some(-0.25),
+        )
+        .expect("save epub progress");
+        let restored = get_reading_progress_at(&database_path, &imported.book.id)
+            .expect("get epub progress")
+            .expect("progress exists");
 
-        assert!(non_txt_error
+        assert_eq!(saved.book_id, imported.book.id);
+        assert_eq!(saved.progress, Some(0.0));
+        assert_eq!(restored.progress, Some(0.0));
+        assert_eq!(
+            restored.locator,
+            Locator::Epub(EpubLocator {
+                href: "OPS/chapter-one.xhtml".to_string(),
+                cfi: Some("epubcfi(/6/2[chapter-one]!/4/1:12)".to_string()),
+                progression: Some(1.0),
+            })
+        );
+    }
+
+    #[test]
+    fn reading_progress_rejects_format_mismatched_locators() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let txt_path = temp_dir.path().join("book.txt");
+        let epub_path = temp_dir.path().join("book.epub");
+        fs::write(&txt_path, "第一章 初见\n正文").expect("write txt");
+        fs::write(&epub_path, "epub placeholder").expect("write epub");
+        let imported_txt =
+            import_book_at(&database_path, &library_dir, &txt_path).expect("import txt");
+        let imported_epub =
+            import_book_at(&database_path, &library_dir, &epub_path).expect("import epub");
+
+        let txt_book_error = save_reading_progress_at(
+            &database_path,
+            &imported_txt.book.id,
+            Locator::Epub(EpubLocator {
+                href: "OPS/chapter-one.xhtml".to_string(),
+                cfi: None,
+                progression: None,
+            }),
+            Some(0.2),
+        )
+        .expect_err("txt book should reject epub locator");
+        let epub_book_error = save_reading_progress_at(
+            &database_path,
+            &imported_epub.book.id,
+            Locator::Txt(TxtLocator {
+                chapter_id: None,
+                char_offset: 0,
+            }),
+            Some(0.2),
+        )
+        .expect_err("epub book should reject txt locator");
+        let invalid_epub_error = save_reading_progress_at(
+            &database_path,
+            &imported_epub.book.id,
+            Locator::Epub(EpubLocator {
+                href: "   ".to_string(),
+                cfi: None,
+                progression: None,
+            }),
+            None,
+        )
+        .expect_err("empty epub locator should fail");
+
+        assert!(txt_book_error
             .to_string()
-            .contains("TXT progress can only be saved"));
-        assert!(invalid_kind_error.to_string().contains("kind txt"));
+            .contains("TXT books can only save txt"));
+        assert!(epub_book_error
+            .to_string()
+            .contains("EPUB books can only save epub"));
+        assert!(invalid_epub_error
+            .to_string()
+            .contains("requires an href or cfi"));
     }
 
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {

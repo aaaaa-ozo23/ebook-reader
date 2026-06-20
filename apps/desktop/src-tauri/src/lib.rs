@@ -55,7 +55,7 @@ fn get_reading_progress(
 fn save_reading_progress(
     app: tauri::AppHandle,
     book_id: String,
-    locator: db::TxtLocator,
+    locator: db::Locator,
     progress: Option<f64>,
 ) -> Result<db::ReaderProgress, String> {
     db::save_reading_progress(&app, &book_id, locator, progress).map_err(|error| error.to_string())
