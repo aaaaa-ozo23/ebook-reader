@@ -1,9 +1,16 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { defaultReaderTheme, type Book, type ImportBookResult, type TxtDocument } from "@reader/core";
+import {
+  defaultReaderTheme,
+  type Book,
+  type EpubLocator,
+  type ImportBookResult,
+  type TxtDocument,
+} from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { EpubReaderAdapter } from "./epub/EpubReaderAdapter";
 import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
   getEpubBookSource,
@@ -76,6 +83,7 @@ const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
+const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 
 describe("App", () => {
   beforeEach(() => {
@@ -450,6 +458,61 @@ describe("App", () => {
           charOffset: 13,
         },
         expect.any(Number),
+      ),
+    );
+  });
+
+  it("restores saved EPUB progress and saves relocated locators", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({ id: "progress-epub", title: "Progress EPUB", format: "epub" });
+    const openedBook = {
+      ...epubBook,
+      lastOpenedAt: "2026-06-20T10:00:00.000Z",
+    };
+    const savedLocator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-two.xhtml",
+      cfi: "epubcfi(/6/4[chapter-two]!/4/1:18)",
+      progression: 0.42,
+    };
+    const relocatedLocator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-one.xhtml",
+      cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
+      progression: 0.75,
+    };
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(openedBook);
+    getReadingProgressMock.mockResolvedValueOnce({
+      bookId: "progress-epub",
+      locator: savedLocator,
+      progress: 0.42,
+      updatedAt: "2026-06-20T12:00:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Progress EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(epubAdapterOpenMock).toHaveBeenCalledWith("progress-epub"));
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          initialLocator?: EpubLocator;
+          onRelocated?: (locator: EpubLocator, progress?: number) => void;
+        }
+      | undefined;
+    expect(adapterOptions?.initialLocator).toEqual(savedLocator);
+
+    adapterOptions?.onRelocated?.(relocatedLocator, 0.75);
+    await user.click(within(reader).getByRole("button", { name: "Shelf" }));
+
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "progress-epub",
+        relocatedLocator,
+        0.75,
       ),
     );
   });

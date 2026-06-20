@@ -83,6 +83,29 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 
+### 阶段 3.4：EPUB 进度恢复
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 Rust 后端 `ReaderProgress.locator` 从 `TxtLocator` 改为通用 `Locator` enum，支持 `txt` 和 `epub`。
+  - 保持 `reading_progress` SQLite 表不迁移，继续存储 `locator_json`。
+  - `save_reading_progress` 按书籍格式校验 locator kind：TXT 只接受 TXT locator，EPUB 只接受 EPUB locator，PDF 仍不支持。
+  - EPUB locator 支持 `href`、`cfi`、`progression`，保存时规范化 `progression` 和 progress 到 `0..1`。
+  - 前端测试覆盖 EPUB 打开时恢复 CFI locator，以及 relocated 后保存 EPUB locator。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，21 tests。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，18 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+
 ### 阶段 1/2 修复优化启动
 - **状态：** complete
 - **开始时间：** 2026-06-20
