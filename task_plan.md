@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-阶段 1/2 修复优化进行中：书架移除入口、导入按钮图标、TXT 大文件阅读性能和 dark 主题可读性。
+阶段 1/2 修复优化已完成并通过全量验收；下一步进入阶段 3：EPUB 阅读器。
 
 ## 分支策略
 
@@ -84,6 +84,20 @@
 |--------|------|------|------|
 | 1.x 书架更多操作与移除 | `codex/stage1-book-actions-remove` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test`，13 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 2.x TXT 阅读器性能与主题修复 | `codex/stage2-txt-reader-polish` | complete | `pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test`，14 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，20 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，3 tests；Browser QA metrics；Playwright screenshots |
+
+### 阶段 1/2 修复优化最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，14 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，20 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，3 Chromium smoke tests |
+| Browser QA | passed，桌面和 375x760 窄屏 DOM/console/style metrics 通过；Browser 截图超时后用 Playwright CLI 生成截图 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 2：TXT 阅读器优先打磨
 

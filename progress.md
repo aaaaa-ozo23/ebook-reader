@@ -3,7 +3,7 @@
 ## 会话：2026-06-20
 
 ### 阶段 1/2 修复优化启动
-- **状态：** in_progress
+- **状态：** complete
 - **开始时间：** 2026-06-20
 - 执行的操作：
   - 读取 `planning-with-files-zh`、Build Web Apps 前端测试调试、React 性能实践说明。
@@ -74,6 +74,25 @@
   - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，3 tests。
   - Browser QA metrics 通过：桌面和窄屏首屏存在书架 main、空状态、导入按钮，无 Vite overlay，无 console warning/error，导入 icon 垂直中心偏移为 0。
   - Playwright 截图：`D:\tl-temp\ebook-reader-stage2-shelf-desktop.png`、`D:\tl-temp\ebook-reader-stage2-shelf-narrow.png` 已人工查看。
+
+### 阶段 1/2 修复优化最终验收
+- **状态：** complete
+- **开始时间：** 2026-06-20
+- 执行的操作：
+  - 将 `codex/stage1-book-actions-remove` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 将 `codex/stage2-txt-reader-polish` 合并回 `codex/v0.1.0-mvp-integration`。
+  - 在集成分支运行阶段 1/2 修复优化全量验收。
+  - 运行 `pnpm.cmd --filter @reader/desktop tauri:build`，生成 release exe、MSI、NSIS installer。
+- 验证：
+  - `pnpm.cmd install` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，14 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，20 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，3 Chromium smoke tests。
+  - Browser QA metrics 通过。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过。
 
 ## 会话：2026-06-19
 
@@ -589,6 +608,7 @@
 | 2026-06-20 | 阶段 2.x Vitest 发现 jsdom 中 `scrollIntoView` 不存在，ReaderSidebar effect 抛错 | 1 | 对 `activeItemRef.current.scrollIntoView` 增加函数存在性检查 |
 | 2026-06-20 | 阶段 2.x ESLint 报 `react-hooks/set-state-in-effect`，指向 active chapter 初始化 effect | 1 | 删除该 effect，改在 TXT 文档加载完成时设置初始 active chapter |
 | 2026-06-20 | Browser 插件对本地页截图调用超时 | 1 | 继续使用 Browser DOM/console/style metrics，并用 Playwright CLI 在仓库外生成截图 |
+| 2026-06-20 | PowerShell 不接受本次 `git add ... && git commit ...` 命令分隔符 | 1 | 改为分两条命令执行 |
 
 ## 五问重启检查
 
