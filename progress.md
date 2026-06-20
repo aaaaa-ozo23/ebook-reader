@@ -127,6 +127,22 @@
   - `pnpm.cmd --filter @reader/desktop lint` 通过。
   - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 tests。
 
+### 阶段 4 最终验收
+- **状态：** complete
+- **分支：** `codex/v0.1.0-mvp-integration`
+- 验证：
+  - `pnpm.cmd install` 通过，lockfile up to date。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，30 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，22 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 Chromium smoke tests。
+  - Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage4-pdf-desktop.png`、`D:\tl-temp\ebook-reader-stage4-pdf-mobile-375x760.png`；desktop 双页 `Pages 1-2 / 3`、mobile 375x760 回退单页 `Page 1 / 3`，canvas 像素非空，console 无 warning/error。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+- 说明：
+  - 本轮未使用 in-app Browser 工具；当前会话只暴露了 node_repl/Playwright 能力，因此视觉检查使用 Playwright fallback。
+
 ## 会话：2026-06-20
 
 ### 阶段 3.x：EPUB 导航与进度优化

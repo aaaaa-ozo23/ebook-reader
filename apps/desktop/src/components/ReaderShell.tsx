@@ -1389,7 +1389,6 @@ function PdfReaderContent({
           onPositionChange: handlePositionChange,
         });
         openedAdapter = adapter;
-        adapterRef.current = adapter;
 
         await adapter.open(book.id);
 
@@ -1397,6 +1396,8 @@ function PdfReaderContent({
           return;
         }
 
+        adapterRef.current = adapter;
+        await adapter.setTheme(themeRef.current);
         const nextTocItems = await adapter.getToc();
 
         if (!isCurrent) {

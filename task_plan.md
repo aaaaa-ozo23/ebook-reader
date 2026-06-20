@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 4：PDF 阅读器正在进行；4.1-4.5 已完成，下一步进入阶段 4 全量验收、合回 `main` 并推送。
+大阶段 4：PDF 阅读器已完成全量验收；下一步合回 `main` 并推送。
 
 ## 分支策略
 
@@ -196,6 +196,20 @@
 | 4.3 PDF outline | `codex/stage4-pdf-outline` | complete | `pnpm.cmd --filter @reader/desktop test -- PdfReaderAdapter.test.ts`，30 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 4.4 PDF 进度恢复 | `codex/stage4-pdf-progress` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，22 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，30 tests |
 | 4.5 PDF 标注策略 | `codex/stage4-pdf-annotation-spike` | complete | 更新 `findings.md` 记录文本层、PDF 坐标 rect、高亮重放、跨页选择和扫描版 PDF 风险 |
+
+### 阶段 4 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，30 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，22 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，5 Chromium smoke tests，含自生成 PDF Blob |
+| Playwright 视觉检查 | passed，桌面双页和 375x760 窄屏 PDF 阅读器 canvas 非空、无 console warning/error、控件不重叠 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 5：书签、高亮、想法与检索
 
