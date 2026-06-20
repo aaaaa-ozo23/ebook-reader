@@ -63,6 +63,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
     const { default: createEpub } = await import("epubjs");
     const book = createEpub(this.sourceUrl, {
+      openAs: "epub",
       replacements: "blobUrl",
     });
     const rendition = book.renderTo(this.container, {
