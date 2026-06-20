@@ -159,6 +159,20 @@
 | 3.4 EPUB 进度恢复 | `codex/stage3-epub-progress` | complete | `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，21 tests；`pnpm.cmd --filter @reader/desktop test`，18 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 3.5 EPUB 高亮预研 | `codex/stage3-epub-highlight-spike` | complete | 结论、限制和阶段 5 建议已写入 `findings.md`；`pnpm.cmd --filter @reader/desktop test`，18 tests |
 
+### 阶段 3 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，18 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，21 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，4 Chromium smoke tests，含自生成 EPUB fixture |
+| Playwright 视觉检查 | passed，桌面和 375x760 窄屏 EPUB 阅读器无 console warning/error、无 Vite overlay、主题面板与 EPUB host 不重叠 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
+
 ## 大阶段 4：PDF 阅读器
 
 目标：以稳定阅读为优先，提供页码、缩放、目录和进度恢复；复杂标注能力可以渐进。
