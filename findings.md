@@ -41,6 +41,9 @@
 - 阶段 2.6 已接入 `@tanstack/react-virtual`，正文按章节标题和段落拆成虚拟块，Playwright 长 TXT fixture 验证 DOM 段落数量低于 80。
 - 阶段 2.6 浏览器 e2e 使用显式 `localStorage` fallback 书库和 TXT 文档 fixture，真实文件导入仍由 Rust 测试覆盖。
 - 阶段 2 最终 Browser QA：桌面 1280x800 与窄屏约 375x760 下书架首屏无旧空壳文案、无 console warning/error、无 Vite error overlay，视图切换可交互。
+- 阶段 1/2 修复优化确认：“移除”只删除 SQLite 书架记录和 `app_data_dir()/library` 内应用副本，不删除原始导入文件。
+- 阶段 1/2 修复优化确认：TXT 大文件先保持 `open_txt_book` 返回结构兼容，通过前端索引、滚动 idle 保存和 TOC 同步优化；只有验证仍不达标时再扩大到后端分页块接口。
+- 阶段 1 修复已新增 `remove_book` Tauri 命令、`RemoveBookResult` 纯类型、右键/More 菜单和确认移除弹窗；Rust 测试确认删除书库副本、级联清理进度且保留原始文件。
 
 ## 技术决策
 
@@ -67,6 +70,8 @@
 | 阶段 2.4 主题设置存在 core/Rust 双默认值 | 将 `defaultReaderTheme` 和 Rust `default_reader_theme()` 对齐，书架字体单独固定为系统 sans |
 | 阶段 2.5 进度保存不依赖页码 | 保存 `TxtLocator`，目录跳转和滚动保存 `chapterId` 与全局 `charOffset`，`progress` 仅作辅助比例 |
 | 阶段 2.6 虚拟化必须有有界滚动容器 | `reader-shell`/`reader-main` 使用 `100vh`，`reader-viewport` 内部滚动；否则 TanStack Virtual 会把全部段落视为可见 |
+| 书架移除删除应用副本但保留原始文件 | 用户原始文件不应被应用破坏；应用书库副本需要随书架记录移除，避免本地存储继续占用空间 |
+| 书架更多操作同时支持右键和可见 More 按钮 | 右键满足桌面习惯，可见按钮保证键鼠和可发现性 |
 
 ## 遇到的问题
 

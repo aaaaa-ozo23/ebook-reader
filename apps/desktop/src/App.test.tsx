@@ -1,10 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { defaultReaderTheme, type Book, type ImportBookResult, type TxtDocument } from "@reader/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
-import { importBook, listBooks, markBookOpened, pickBookFile } from "./tauri/library";
+import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
 import {
   getReaderTheme,
   getReadingProgress,
@@ -18,6 +18,7 @@ vi.mock("./tauri/library", () => ({
   listBooks: vi.fn(),
   markBookOpened: vi.fn(),
   pickBookFile: vi.fn(),
+  removeBook: vi.fn(),
 }));
 
 vi.mock("./tauri/reader", () => ({
@@ -35,6 +36,7 @@ const listBooksMock = vi.mocked(listBooks);
 const markBookOpenedMock = vi.mocked(markBookOpened);
 const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
+const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 
@@ -56,6 +58,10 @@ describe("App", () => {
       updatedAt: "2026-06-19T12:00:00.000Z",
     }));
     pickBookFileMock.mockResolvedValue(null);
+    removeBookMock.mockImplementation(async (bookId) => ({
+      book: createBook({ id: bookId }),
+      removedLibraryPath: "D:\\library\\sample.epub",
+    }));
   });
 
   it("renders the bookshelf empty state", async () => {
@@ -96,6 +102,48 @@ describe("App", () => {
     expect(within(cards[0]).getByRole("heading", { name: "Recent Field Notes" })).toBeVisible();
     expect(within(cards[1]).getByRole("heading", { name: "Archive Notes" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("removes a book through the right-click actions menu after confirmation", async () => {
+    const user = userEvent.setup();
+    const book = createBook({ id: "remove-book", title: "Remove Candidate", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([book]);
+    removeBookMock.mockResolvedValueOnce({
+      book,
+      removedLibraryPath: "D:\\library\\remove-candidate.txt",
+    });
+
+    render(<App />);
+    const card = await screen.findByRole("article", { name: "Remove Candidate book" });
+
+    fireEvent.contextMenu(card, { clientX: 40, clientY: 60 });
+    await user.click(screen.getByRole("menuitem", { name: "Remove from shelf" }));
+
+    expect(await screen.findByRole("alertdialog", { name: "Remove from shelf?" })).toBeVisible();
+    expect(screen.getByText(/The original file you imported will not be deleted/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+
+    await waitFor(() => expect(removeBookMock).toHaveBeenCalledWith("remove-book"));
+    await waitFor(() =>
+      expect(screen.queryByRole("article", { name: "Remove Candidate book" })).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText("Book removed")).toBeVisible();
+    expect(screen.getByText("Remove Candidate was removed from this shelf.")).toBeVisible();
+  });
+
+  it("opens book actions from the visible more button", async () => {
+    const user = userEvent.setup();
+    const book = createBook({ id: "menu-book", title: "Menu Candidate", format: "txt" });
+    listBooksMock.mockResolvedValueOnce([book]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Menu Candidate" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "More actions for Menu Candidate" }));
+
+    expect(screen.getByRole("menu", { name: "Actions for Menu Candidate" })).toBeVisible();
+    expect(screen.getByRole("menuitem", { name: "Remove from shelf" })).toBeVisible();
   });
 
   it("does not import when file selection is canceled", async () => {

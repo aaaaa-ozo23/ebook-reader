@@ -231,13 +231,32 @@ button:disabled {
   box-shadow: none;
 }
 
-.import-button span {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  place-items: center;
+.import-button__icon {
+  position: relative;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.2);
+}
+
+.import-button__icon::before,
+.import-button__icon::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: #ffffff;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.import-button__icon::after {
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 
 .feedback {
@@ -391,6 +410,14 @@ button:disabled {
   gap: 18px;
 }
 
+.book-card__top {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .book-card__copy {
   min-width: 0;
 }
@@ -415,12 +442,127 @@ button:disabled {
   letter-spacing: 0;
 }
 
+.book-card__menu-button {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.64);
+  color: #2f3d45;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.book-card__menu-button:hover,
+.book-card__menu-button:focus-visible,
+.book-card__menu-button[aria-expanded="true"] {
+  border-color: #2f5d62;
+  background: #edf5f2;
+  color: #23484c;
+}
+
 .book-card__action {
   align-self: flex-start;
   min-height: 38px;
   background: #2f5d62;
   padding: 0 13px;
   box-shadow: none;
+}
+
+.book-action-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 200px;
+  border: 1px solid #d3c8b7;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 6px;
+  box-shadow: 0 18px 44px rgba(38, 50, 56, 0.18);
+}
+
+.book-action-menu button {
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #81352c;
+  padding: 0 10px;
+  text-align: left;
+  font-weight: 800;
+}
+
+.book-action-menu button:hover,
+.book-action-menu button:focus-visible {
+  background: #fff1ee;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 27, 31, 0.38);
+  padding: 24px;
+}
+
+.remove-book-dialog {
+  display: grid;
+  width: min(420px, 100%);
+  gap: 14px;
+  border: 1px solid #d3c8b7;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #263238;
+  padding: 18px;
+  box-shadow: 0 22px 60px rgba(20, 27, 31, 0.28);
+}
+
+.remove-book-dialog h2,
+.remove-book-dialog p {
+  margin: 0;
+}
+
+.remove-book-dialog h2 {
+  font-size: 1.18rem;
+  line-height: 1.2;
+}
+
+.remove-book-dialog p {
+  color: #5e6670;
+}
+
+.remove-book-dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.dialog-button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 13px;
+  font-weight: 800;
+}
+
+.dialog-button--secondary {
+  background: #ece7dc;
+  color: #29343b;
+}
+
+.dialog-button--danger {
+  background: #b94d3f;
+  color: #ffffff;
+}
+
+.dialog-button:disabled {
+  background: #9aa3aa;
 }
 
 .reader-shell {

@@ -1,4 +1,4 @@
-import type { Book, ImportBookResult } from "@reader/core";
+import type { Book, ImportBookResult, RemoveBookResult } from "@reader/core";
 
 const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
 const FALLBACK_BOOKS_KEY = "reader:fallback:books";
@@ -47,6 +47,25 @@ export async function markBookOpened(bookId: string): Promise<Book> {
   }
 
   return invokeCommand<Book>("mark_book_opened", { bookId });
+}
+
+export async function removeBook(bookId: string): Promise<RemoveBookResult> {
+  if (!hasTauriRuntime()) {
+    const books = getFallbackBooks();
+    const book = books.find((currentBook) => currentBook.id === bookId);
+
+    if (book === undefined) {
+      throw new Error(`Removing a book failed. ${DESKTOP_RUNTIME_ERROR}`);
+    }
+
+    setFallbackBooks(books.filter((currentBook) => currentBook.id !== bookId));
+    return {
+      book,
+      removedLibraryPath: book.libraryPath,
+    };
+  }
+
+  return invokeCommand<RemoveBookResult>("remove_book", { bookId });
 }
 
 export async function pickBookFile(): Promise<string | null> {
