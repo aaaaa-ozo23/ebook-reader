@@ -20,6 +20,7 @@ import {
   type ReaderProgress,
   type ReaderTheme,
   type ReaderThemeMode,
+  type SearchHit,
   type TocItem,
   type TxtChapter,
   type TxtDocument,
@@ -160,6 +161,7 @@ interface ReaderVirtualBlock {
 }
 
 type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
+type ReaderSearchProvider = (query: string) => Promise<Array<SearchHit<Locator>>>;
 
 interface TxtJumpRequest {
   locator: TxtLocator;
@@ -227,6 +229,7 @@ interface ReaderSelectionSnapshot {
 }
 
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
+  const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(book.format === "txt");
@@ -244,6 +247,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotationsBookId, setAnnotationsBookId] = useState(book.id);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<SearchHit<Locator>>>([]);
   const [currentBookmarkPosition, setCurrentBookmarkPosition] = useState<{
     bookId: string;
     locator: Locator;
@@ -562,6 +569,72 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     [document, handleTxtProgressChange, tocItems],
   );
 
+  const handleSearchProviderChange = useCallback(
+    (provider: ReaderSearchProvider | null) => {
+      searchProviderRef.current = provider;
+    },
+    [],
+  );
+
+  const handleSearchSubmit = useCallback(
+    (query: string) => {
+      const trimmedQuery = query.trim();
+      setSearchQuery(query);
+      setSearchError(null);
+
+      if (trimmedQuery === "") {
+        setSearchResults([]);
+        setIsSearchLoading(false);
+        return;
+      }
+
+      if (book.format === "txt") {
+        if (document === null) {
+          setSearchResults([]);
+          setSearchError("Search is still loading.");
+          setIsSearchLoading(false);
+          return;
+        }
+
+        setSearchResults(searchTxtDocument(document, trimmedQuery));
+        setIsSearchLoading(false);
+        return;
+      }
+
+      const searchProvider = searchProviderRef.current;
+
+      if (searchProvider === null) {
+        setSearchResults([]);
+        setSearchError("Search is still loading.");
+        setIsSearchLoading(false);
+        return;
+      }
+
+      setIsSearchLoading(true);
+      void searchProvider(trimmedQuery)
+        .then((hits) => {
+          setSearchResults(hits.slice(0, 100));
+          setSearchError(null);
+        })
+        .catch((searchFailure: unknown) => {
+          setSearchResults([]);
+          setSearchError(getErrorMessage(searchFailure));
+        })
+        .finally(() => {
+          setIsSearchLoading(false);
+        });
+    },
+    [book.format, document],
+  );
+
+  const handleJumpToSearchResult = useCallback(
+    (hit: SearchHit<Locator>) => {
+      handleJumpToLocator(hit.locator);
+      setSidebarTab("search");
+    },
+    [handleJumpToLocator],
+  );
+
   const handleCreateBookmark = useCallback(() => {
     const locator = currentBookmarkLocator;
 
@@ -784,6 +857,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         items={tocItems}
         isOpen={isSidebarOpen}
         label={`${formatBookFormat(book.format)} contents`}
+        isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
         onCreateBookmark={handleCreateBookmark}
         onDeleteAnnotation={handleDeleteAnnotation}
@@ -791,8 +865,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         onJumpToAnnotation={handleJumpToAnnotation}
         onJumpToBookmark={handleJumpToBookmark}
         onJumpToItem={handleJumpToTocItem}
+        onJumpToSearchResult={handleJumpToSearchResult}
+        onSearchQueryChange={setSearchQuery}
+        onSearchSubmit={handleSearchSubmit}
         onTabChange={setSidebarTab}
         onUpdateAnnotationNote={handleUpdateAnnotationNote}
+        searchError={searchError}
+        searchQuery={searchQuery}
+        searchResults={searchResults}
       />
       <section className="reader-main">
         <header className="reader-topbar">
@@ -872,6 +952,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onSelectionChange={handleSelectionChange}
+            onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -886,6 +967,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onSelectionChange={handleSelectionChange}
+            onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -915,6 +997,7 @@ interface ReaderSidebarProps {
   bookmarkError: string | null;
   items: TocItem[];
   isOpen: boolean;
+  isSearchLoading: boolean;
   label: string;
   onBackToLibrary: () => void;
   onCreateBookmark: () => void;
@@ -923,8 +1006,14 @@ interface ReaderSidebarProps {
   onJumpToAnnotation: (annotation: Annotation) => void;
   onJumpToBookmark: (bookmark: Bookmark<Locator>) => void;
   onJumpToItem: (itemId: string) => void;
+  onJumpToSearchResult: (hit: SearchHit<Locator>) => void;
+  onSearchQueryChange: (query: string) => void;
+  onSearchSubmit: (query: string) => void;
   onTabChange: (tab: ReaderSidebarTab) => void;
   onUpdateAnnotationNote: (annotationId: string, note: string) => void;
+  searchError: string | null;
+  searchQuery: string;
+  searchResults: Array<SearchHit<Locator>>;
 }
 
 function ReaderSidebar({
@@ -936,6 +1025,7 @@ function ReaderSidebar({
   bookmarkError,
   items,
   isOpen,
+  isSearchLoading,
   label,
   onBackToLibrary,
   onCreateBookmark,
@@ -944,8 +1034,14 @@ function ReaderSidebar({
   onJumpToAnnotation,
   onJumpToBookmark,
   onJumpToItem,
+  onJumpToSearchResult,
+  onSearchQueryChange,
+  onSearchSubmit,
   onTabChange,
   onUpdateAnnotationNote,
+  searchError,
+  searchQuery,
+  searchResults,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
@@ -1089,7 +1185,50 @@ function ReaderSidebar({
       {activeTab === "search" ? (
         <section className="reader-sidebar-panel" aria-label="Search">
           <h2>Search</h2>
-          <p className="reader-sidebar__empty">Search will be available in stage 5.5.</p>
+          <form
+            className="reader-search-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSearchSubmit(searchQuery);
+            }}
+          >
+            <label>
+              <span>Search in book</span>
+              <input
+                aria-label="Search in book"
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
+              />
+            </label>
+            <button type="submit" disabled={isSearchLoading}>
+              {isSearchLoading ? "Searching..." : "Search"}
+            </button>
+          </form>
+          {searchError !== null ? (
+            <p className="reader-sidebar__error" role="alert">
+              {searchError}
+            </p>
+          ) : null}
+          {searchQuery.trim() !== "" && !isSearchLoading && searchResults.length === 0 ? (
+            <p className="reader-sidebar__empty">No results.</p>
+          ) : null}
+          {searchResults.length > 0 ? (
+            <div className="reader-search-results" role="list">
+              {searchResults.map((hit) => (
+                <button
+                  key={hit.id}
+                  type="button"
+                  className="reader-search-result"
+                  role="listitem"
+                  aria-label={`Go to search result ${hit.excerpt}`}
+                  onClick={() => onJumpToSearchResult(hit)}
+                >
+                  <span>{hit.excerpt}</span>
+                  <small>{getLocatorLabel(hit.locator)}</small>
+                </button>
+              ))}
+            </div>
+          ) : null}
         </section>
       ) : null}
     </aside>
@@ -1539,6 +1678,7 @@ interface EpubReaderContentProps {
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: EpubLocator) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
+  onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -1552,6 +1692,7 @@ function EpubReaderContent({
   onBackToLibrary,
   onCurrentLocatorChange,
   onSelectionChange,
+  onSearchProviderChange,
   onTocChange,
 }: EpubReaderContentProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1743,6 +1884,9 @@ function EpubReaderContent({
         adapterRef.current = adapter;
 
         await adapter.open(book.id);
+        onSearchProviderChange((searchQuery) =>
+          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        );
         appliedEpubHighlightCfisRef.current = new Set();
         setIsAdapterReadyForHighlights(true);
         const nextTocItems = await adapter.getToc();
@@ -1769,10 +1913,11 @@ function EpubReaderContent({
       if (adapterRef.current === openedAdapter) {
         adapterRef.current = null;
       }
+      onSearchProviderChange(null);
       setIsAdapterReadyForHighlights(false);
       appliedEpubHighlightCfisRef.current = new Set();
     };
-  }, [book, handleRelocated, onSelectionChange, onTocChange]);
+  }, [book, handleRelocated, onSearchProviderChange, onSelectionChange, onTocChange]);
 
   useEffect(() => {
     const adapter = adapterRef.current;
@@ -2085,6 +2230,7 @@ interface PdfReaderContentProps {
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
+  onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -2098,6 +2244,7 @@ function PdfReaderContent({
   onBackToLibrary,
   onCurrentLocatorChange,
   onSelectionChange,
+  onSearchProviderChange,
   onTocChange,
 }: PdfReaderContentProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -2451,6 +2598,9 @@ function PdfReaderContent({
         }
 
         adapterRef.current = adapter;
+        onSearchProviderChange((searchQuery) =>
+          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        );
         await adapter.setTheme(themeRef.current);
         const nextTocItems = await adapter.getToc();
 
@@ -2482,12 +2632,14 @@ function PdfReaderContent({
       if (adapterRef.current === openedAdapter) {
         adapterRef.current = null;
       }
+      onSearchProviderChange(null);
       void openedAdapter?.close();
     };
   }, [
     book,
     handlePositionChange,
     onActiveTocItemChange,
+    onSearchProviderChange,
     onTocChange,
     renderVisiblePages,
   ]);
@@ -3163,6 +3315,66 @@ function formatAnnotationTimestamp(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function searchTxtDocument(
+  document: TxtDocument,
+  query: string,
+): Array<SearchHit<TxtLocator>> {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+
+  if (normalizedQuery.length === 0) {
+    return [];
+  }
+
+  const hits: Array<SearchHit<TxtLocator>> = [];
+
+  for (const chapter of document.chapters) {
+    const normalizedText = chapter.text.toLocaleLowerCase();
+    let matchIndex = normalizedText.indexOf(normalizedQuery);
+
+    while (matchIndex !== -1 && hits.length < 100) {
+      const charOffset = chapter.startChar + matchIndex;
+      const selectedText = chapter.text.slice(matchIndex, matchIndex + query.length);
+
+      hits.push({
+        id: `txt-search-${chapter.id}-${matchIndex}`,
+        locator: {
+          kind: "txt",
+          chapterId: chapter.id,
+          charOffset,
+          endCharOffset: charOffset + query.length,
+          selectedText,
+          contextBefore: chapter.text.slice(Math.max(0, matchIndex - 80), matchIndex),
+          contextAfter: chapter.text.slice(
+            matchIndex + query.length,
+            matchIndex + query.length + 80,
+          ),
+        },
+        excerpt: buildSearchExcerpt(chapter.text, matchIndex, query.length),
+      });
+
+      matchIndex = normalizedText.indexOf(
+        normalizedQuery,
+        matchIndex + Math.max(1, normalizedQuery.length),
+      );
+    }
+
+    if (hits.length >= 100) {
+      break;
+    }
+  }
+
+  return hits;
+}
+
+function buildSearchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+  const excerptStart = Math.max(0, matchIndex - 28);
+  const excerptEnd = Math.min(text.length, matchIndex + queryLength + 48);
+  const prefix = excerptStart > 0 ? "..." : "";
+  const suffix = excerptEnd < text.length ? "..." : "";
+
+  return `${prefix}${text.slice(excerptStart, excerptEnd).trim()}${suffix}`;
 }
 
 function renderHighlightedText(

@@ -112,6 +112,8 @@
 - 阶段 5.3 UI 确认：selection menu 保留 `Highlight` 默认黄色按钮，并提供黄/绿/蓝/粉色 swatch；EPUB/PDF/TXT 共享创建入口，PDF 保留缩放控件不变。
 - 阶段 5.4 Notes 面板确认：不新增 notes 表；`annotations.note` 直接承载用户想法，`type="note"` 表达从选区直接创建的想法记录，`type="highlight"` 也可通过同一面板追加 note。
 - 阶段 5.4 Notes 跳转确认：列表跳转复用 ReaderShell 的 locator 跳转入口，因此 TXT 会同步保存阅读进度，EPUB/PDF 交给各自 adapter goTo；删除 annotation 后高亮重放会通过前端 state 立即消失。
+- 阶段 5.5 搜索确认：统一 Search 面板由 ReaderShell 管理；TXT 搜索直接扫描已加载文档，EPUB/PDF 在 adapter 打开后注册 search provider，避免父组件持有格式内部 adapter。
+- 阶段 5.5 搜索粒度：TXT 返回字符偏移 locator，EPUB 返回 CFI locator，PDF 返回页级 locator；三格式结果上限均为 100 条，PDF 不做页内定位或 OCR。
 
 ## 技术决策
 
