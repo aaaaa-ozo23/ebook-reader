@@ -68,6 +68,12 @@ const epubAdapterRemoveHighlightMock = vi.hoisted(() => vi.fn());
 const epubAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const epubAdapterSearchMock = vi.hoisted(() =>
+  vi.fn(
+    async (): Promise<Array<{ id: string; locator: EpubLocator; excerpt: string }>> =>
+      [],
+  ),
+);
 const epubAdapterPreviewProgressMock = vi.hoisted(() =>
   vi.fn((progression: number) => {
     const page = Math.max(1, Math.round(progression * 100));
@@ -146,6 +152,12 @@ const pdfAdapterOpenMock = vi.hoisted(() =>
   }),
 );
 const pdfAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterSearchMock = vi.hoisted(() =>
+  vi.fn(
+    async (): Promise<Array<{ id: string; locator: PdfLocator; excerpt: string }>> =>
+      [],
+  ),
+);
 const pdfAdapterPreviewProgressMock = vi.hoisted(() =>
   vi.fn((progression: number) => {
     void progression;
@@ -242,6 +254,7 @@ vi.mock("./epub/EpubReaderAdapter", () => ({
       previous: epubAdapterPreviousMock,
       previewProgress: epubAdapterPreviewProgressMock,
       removeHighlight: epubAdapterRemoveHighlightMock,
+      search: epubAdapterSearchMock,
       setSpreadMode: epubAdapterSetSpreadModeMock,
       setTheme: epubAdapterSetThemeMock,
     };
@@ -337,6 +350,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
       renderPage: pdfAdapterRenderPageMock,
       renderTextLayer: pdfAdapterRenderTextLayerMock,
       pdfRectsToViewportRects: pdfAdapterPdfRectsToViewportRectsMock,
+      search: pdfAdapterSearchMock,
       setTheme: pdfAdapterSetThemeMock,
       setViewMode: (
         mode: "single" | "double" | "continuous",
@@ -400,6 +414,7 @@ describe("App", () => {
     epubAdapterNextMock.mockClear();
     epubAdapterOpenMock.mockClear();
     epubAdapterPreviousMock.mockClear();
+    epubAdapterSearchMock.mockClear();
     epubAdapterPreviewProgressMock.mockClear();
     epubAdapterSetSpreadModeMock.mockClear();
     epubAdapterSetThemeMock.mockClear();
@@ -411,6 +426,7 @@ describe("App", () => {
     pdfAdapterNextMock.mockClear();
     pdfAdapterOpenMock.mockClear();
     pdfAdapterPreviousMock.mockClear();
+    pdfAdapterSearchMock.mockClear();
     pdfAdapterPreviewProgressMock.mockClear();
     pdfAdapterRenderPageMock.mockClear();
     pdfAdapterRenderTextLayerMock.mockClear();
@@ -420,6 +436,8 @@ describe("App", () => {
     pdfAdapterSetZoomMock.mockClear();
     pdfAdapterVisiblePagesMock.mockClear();
     deleteAnnotationMock.mockClear();
+    epubAdapterSearchMock.mockResolvedValue([]);
+    pdfAdapterSearchMock.mockResolvedValue([]);
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({
@@ -1107,6 +1125,135 @@ describe("App", () => {
         screen.queryByRole("textbox", { name: "Note text for 她推开门" }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("searches TXT content and jumps to a result", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "search-txt",
+      title: "Search TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Search TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    await user.click(within(reader).getByRole("tab", { name: "Search" }));
+    await user.type(
+      within(reader).getByRole("textbox", { name: "Search in book" }),
+      "推开",
+    );
+    await user.click(within(reader).getByRole("button", { name: "Search" }));
+
+    const result = await within(reader).findByRole("listitem", {
+      name: /Go to search result .*推开/s,
+    });
+    await user.click(result);
+
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "search-txt",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: expect.any(Number) as number,
+        }),
+        expect.any(Number),
+      ),
+    );
+  });
+
+  it("searches EPUB content through the adapter and jumps to a result", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "search-epub",
+      title: "Search EPUB",
+      format: "epub",
+    });
+    const hitLocator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-two.xhtml",
+      cfi: "epubcfi(/6/4[chapter-two]!/4/1:2)",
+    };
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    epubAdapterSearchMock.mockResolvedValueOnce([
+      {
+        id: "epub-search-hit",
+        locator: hitLocator,
+        excerpt: "chapter match",
+      },
+    ]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Search EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    await user.click(within(reader).getByRole("tab", { name: "Search" }));
+    await user.type(
+      within(reader).getByRole("textbox", { name: "Search in book" }),
+      "chapter",
+    );
+    await user.click(within(reader).getByRole("button", { name: "Search" }));
+
+    await waitFor(() => expect(epubAdapterSearchMock).toHaveBeenCalledWith("chapter"));
+    await user.click(
+      await within(reader).findByRole("listitem", {
+        name: "Go to search result chapter match",
+      }),
+    );
+
+    expect(epubAdapterGoToMock).toHaveBeenCalledWith(hitLocator);
+  });
+
+  it("searches PDF content through the adapter and jumps to a page result", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({
+      id: "search-pdf",
+      title: "Search PDF",
+      format: "pdf",
+    });
+    const hitLocator: PdfLocator = {
+      kind: "pdf",
+      page: 2,
+      selectedText: "pdf match",
+    };
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(pdfBook);
+    pdfAdapterSearchMock.mockResolvedValueOnce([
+      {
+        id: "pdf-search-hit",
+        locator: hitLocator,
+        excerpt: "pdf match",
+      },
+    ]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Search PDF" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "PDF reader" });
+    await user.click(within(reader).getByRole("tab", { name: "Search" }));
+    await user.type(
+      within(reader).getByRole("textbox", { name: "Search in book" }),
+      "pdf",
+    );
+    await user.click(within(reader).getByRole("button", { name: "Search" }));
+
+    await waitFor(() => expect(pdfAdapterSearchMock).toHaveBeenCalledWith("pdf"));
+    await user.click(
+      await within(reader).findByRole("listitem", {
+        name: "Go to search result pdf match",
+      }),
+    );
+
+    await waitFor(() => expect(pdfAdapterGoToMock).toHaveBeenCalledWith(hitLocator));
   });
 
   it("shows EPUB navigation below the page and enables progress after locations are ready", async () => {

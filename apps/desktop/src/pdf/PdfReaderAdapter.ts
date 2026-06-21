@@ -162,9 +162,54 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   }
 
   async search(query: string): Promise<SearchHit<PdfLocator>[]> {
-    void query;
+    const normalizedQuery = query.trim().toLocaleLowerCase();
 
-    return [];
+    if (normalizedQuery.length === 0) {
+      return [];
+    }
+
+    const document = this.requireDocument();
+    const hits: SearchHit<PdfLocator>[] = [];
+
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const page = await document.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => (isPdfTextItem(item) ? item.str : ""))
+        .join(" ");
+      const normalizedPageText = pageText.toLocaleLowerCase();
+      let matchIndex = normalizedPageText.indexOf(normalizedQuery);
+
+      while (matchIndex !== -1 && hits.length < 100) {
+        const selectedText = pageText.slice(matchIndex, matchIndex + query.length);
+
+        hits.push({
+          id: `pdf-search-${pageNumber}-${matchIndex}`,
+          locator: {
+            kind: "pdf",
+            page: pageNumber,
+            selectedText,
+            contextBefore: pageText.slice(Math.max(0, matchIndex - 80), matchIndex),
+            contextAfter: pageText.slice(
+              matchIndex + query.length,
+              matchIndex + query.length + 80,
+            ),
+          },
+          excerpt: buildSearchExcerpt(pageText, matchIndex, query.length),
+        });
+
+        matchIndex = normalizedPageText.indexOf(
+          normalizedQuery,
+          matchIndex + Math.max(1, normalizedQuery.length),
+        );
+      }
+
+      if (hits.length >= 100) {
+        break;
+      }
+    }
+
+    return hits;
   }
 
   async previous(): Promise<void> {
@@ -613,6 +658,24 @@ function pdfPageToTocItem(page: number, totalPages: number): TocItem {
       page: normalizePdfPage(page, totalPages),
     },
   };
+}
+
+function isPdfTextItem(item: unknown): item is { str: string } {
+  return (
+    typeof item === "object" &&
+    item !== null &&
+    "str" in item &&
+    typeof item.str === "string"
+  );
+}
+
+function buildSearchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+  const excerptStart = Math.max(0, matchIndex - 48);
+  const excerptEnd = Math.min(text.length, matchIndex + queryLength + 72);
+  const prefix = excerptStart > 0 ? "..." : "";
+  const suffix = excerptEnd < text.length ? "..." : "";
+
+  return `${prefix}${text.slice(excerptStart, excerptEnd).trim()}${suffix}`;
 }
 
 function getOutputScale(): number {

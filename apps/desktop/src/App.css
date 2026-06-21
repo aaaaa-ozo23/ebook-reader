@@ -818,6 +818,75 @@ button:disabled {
   font-weight: 800;
 }
 
+.reader-search-form {
+  display: grid;
+  gap: 8px;
+}
+
+.reader-search-form label {
+  display: grid;
+  gap: 5px;
+  color: rgba(247, 242, 232, 0.72);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.reader-search-form input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(247, 242, 232, 0.18);
+  border-radius: 8px;
+  background: rgba(12, 18, 20, 0.42);
+  color: #f7f2e8;
+  padding: 0 10px;
+  font: inherit;
+}
+
+.reader-search-form button {
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: #f3bc55;
+  color: #1d282d;
+  font-weight: 800;
+}
+
+.reader-search-results {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.reader-search-result {
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.reader-search-result span,
+.reader-search-result small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-search-result span {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.reader-search-result small {
+  margin-top: 4px;
+  color: rgba(247, 242, 232, 0.62);
+  font-size: 0.72rem;
+}
+
 .reader-toc {
   display: grid;
   min-height: 0;

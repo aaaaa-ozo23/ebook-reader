@@ -4,7 +4,7 @@
 
 ### 状态
 - **当前状态：** in_progress
-- **当前分支：** `codex/stage5-notes`
+- **当前分支：** `codex/stage5-search-basic`
 
 ### 执行的操作
 - 读取 `task_plan.md`、`progress.md`、`findings.md` 并运行 session catchup；确认上一轮只有大阶段 5 计划与本轮启动上下文未同步。
@@ -136,6 +136,33 @@
   - `pnpm.cmd --filter @reader/desktop build` 通过。
 - 遇到的问题：
   - Notes item 初版曾考虑用 effect 同步 textarea draft；为避免 `react-hooks/set-state-in-effect` 类问题，改为本地 draft 初始化后由用户输入和保存结果自然保持一致。
+
+### 阶段 5.5：搜索基础
+- **状态：** complete
+- **分支：** `codex/stage5-search-basic`
+- 执行的操作：
+  - 将侧栏 `Search` tab 从占位状态扩展为统一搜索表单、结果列表、空结果和错误状态。
+  - TXT 搜索在已加载 `TxtDocument` 中按章节扫描全文，生成 `TxtLocator.charOffset/endCharOffset` 和上下文 excerpt。
+  - EPUB adapter 实现 `search(query)`，遍历 epub.js spine section 的 `find()` 结果，返回 CFI locator。
+  - PDF adapter 实现 `search(query)`，逐页读取 `getTextContent()`，返回页级 `PdfLocator.page` 结果。
+  - EPUB/PDF 内容层在 adapter 打开后向 ReaderShell 注册搜索 provider，卸载时注销。
+  - 搜索结果点击复用现有 locator 跳转链路，TXT 跳转会同步保存阅读进度。
+  - 扩展 Vitest 覆盖 TXT/EPUB/PDF 搜索提交和结果跳转。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，41 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次 desktop build 发现 EPUB/PDF search mock 的空数组返回被 TypeScript 推断为 `never[]`；为 mock 增加显式 Promise 返回类型后通过。
 
 ## 2026-06-21 大阶段 3/4：阅读体验统一调整
 
