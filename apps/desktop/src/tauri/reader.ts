@@ -1,4 +1,7 @@
 import {
+  type Annotation,
+  type AnnotationKind,
+  type Bookmark,
   type Book,
   defaultReaderTheme,
   type EpubLocator,
@@ -14,6 +17,8 @@ const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
 const FALLBACK_EPUB_SOURCES_KEY = "reader:fallback:epubSources";
 const FALLBACK_PDF_SOURCES_KEY = "reader:fallback:pdfSources";
 const FALLBACK_TXT_DOCUMENTS_KEY = "reader:fallback:txtDocuments";
+const FALLBACK_ANNOTATIONS_KEY = "reader:fallback:annotations";
+const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
@@ -129,6 +134,117 @@ export async function saveReadingProgress(
     locator,
     progress,
   });
+}
+
+export async function listBookmarks<TLocator extends Locator = Locator>(
+  bookId: string,
+): Promise<Array<Bookmark<TLocator>>> {
+  if (!hasTauriRuntime()) {
+    return getFallbackBookmarks<TLocator>(bookId);
+  }
+
+  return invokeCommand<Array<Bookmark<TLocator>>>("list_bookmarks", { bookId });
+}
+
+export async function createBookmark<TLocator extends Locator = Locator>(
+  bookId: string,
+  locator: TLocator,
+  label?: string,
+): Promise<Bookmark<TLocator>> {
+  if (!hasTauriRuntime()) {
+    const bookmark: Bookmark<TLocator> = {
+      id: createFallbackId(),
+      bookId,
+      locator,
+      label: normalizeBookmarkLabel(label),
+      createdAt: new Date().toISOString(),
+    };
+    setFallbackBookmarks(bookId, [bookmark, ...getFallbackBookmarks<TLocator>(bookId)]);
+    return bookmark;
+  }
+
+  return invokeCommand<Bookmark<TLocator>>("create_bookmark", {
+    bookId,
+    locator,
+    label,
+  });
+}
+
+export async function deleteBookmark(bookmarkId: string): Promise<void> {
+  if (!hasTauriRuntime()) {
+    deleteFallbackBookmark(bookmarkId);
+    return;
+  }
+
+  return invokeCommand<void>("delete_bookmark", { bookmarkId });
+}
+
+export async function listAnnotations(bookId: string): Promise<Annotation[]> {
+  if (!hasTauriRuntime()) {
+    return getFallbackAnnotations(bookId);
+  }
+
+  return invokeCommand<Annotation[]>("list_annotations", { bookId });
+}
+
+export async function createAnnotation(
+  bookId: string,
+  annotationType: AnnotationKind,
+  locator: Locator,
+  color?: string,
+  selectedText?: string,
+  note?: string,
+): Promise<Annotation> {
+  if (!hasTauriRuntime()) {
+    const now = new Date().toISOString();
+    const annotation: Annotation = {
+      id: createFallbackId(),
+      bookId,
+      type: annotationType,
+      color: normalizeOptionalText(color),
+      selectedText: normalizeOptionalText(selectedText),
+      note: normalizeOptionalText(note),
+      locator,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setFallbackAnnotations(bookId, [annotation, ...getFallbackAnnotations(bookId)]);
+    return annotation;
+  }
+
+  return invokeCommand<Annotation>("create_annotation", {
+    bookId,
+    annotationType,
+    locator,
+    color,
+    selectedText,
+    note,
+  });
+}
+
+export async function updateAnnotation(
+  annotationId: string,
+  color?: string,
+  note?: string,
+): Promise<Annotation> {
+  if (!hasTauriRuntime()) {
+    return updateFallbackAnnotation(annotationId, color, note);
+  }
+
+  return invokeCommand<Annotation>("update_annotation", {
+    annotationId,
+    color,
+    note,
+  });
+}
+
+export async function deleteAnnotation(annotationId: string): Promise<void> {
+  if (!hasTauriRuntime()) {
+    deleteFallbackAnnotation(annotationId);
+    return;
+  }
+
+  return invokeCommand<void>("delete_annotation", { annotationId });
 }
 
 function getFallbackPdfSource(bookId: string): string | null {
@@ -262,4 +378,227 @@ function setFallbackReadingProgress(
 
   progressByBook[bookId] = progress;
   window.localStorage.setItem(FALLBACK_READING_PROGRESS_KEY, JSON.stringify(progressByBook));
+}
+
+function getFallbackBookmarks<TLocator extends Locator>(
+  bookId: string,
+): Array<Bookmark<TLocator>> {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+
+  if (rawBookmarks === null) {
+    return [];
+  }
+
+  try {
+    const bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+      string,
+      Array<Bookmark<TLocator>>
+    >;
+    return bookmarksByBook[bookId] ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function setFallbackBookmarks<TLocator extends Locator>(
+  bookId: string,
+  bookmarks: Array<Bookmark<TLocator>>,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+  let bookmarksByBook: Record<string, Array<Bookmark<Locator>>> = {};
+
+  if (rawBookmarks !== null) {
+    try {
+      bookmarksByBook = JSON.parse(rawBookmarks) as Record<string, Array<Bookmark<Locator>>>;
+    } catch {
+      bookmarksByBook = {};
+    }
+  }
+
+  bookmarksByBook[bookId] = bookmarks as Array<Bookmark<Locator>>;
+  window.localStorage.setItem(FALLBACK_BOOKMARKS_KEY, JSON.stringify(bookmarksByBook));
+}
+
+function deleteFallbackBookmark(bookmarkId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+
+  if (rawBookmarks === null) {
+    return;
+  }
+
+  try {
+    const bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+      string,
+      Array<Bookmark<Locator>>
+    >;
+    const nextBookmarksByBook = Object.fromEntries(
+      Object.entries(bookmarksByBook).map(([bookId, bookmarks]) => [
+        bookId,
+        bookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
+      ]),
+    );
+    window.localStorage.setItem(
+      FALLBACK_BOOKMARKS_KEY,
+      JSON.stringify(nextBookmarksByBook),
+    );
+  } catch {
+    window.localStorage.removeItem(FALLBACK_BOOKMARKS_KEY);
+  }
+}
+
+function getFallbackAnnotations(bookId: string): Annotation[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const rawAnnotations = window.localStorage.getItem(FALLBACK_ANNOTATIONS_KEY);
+
+  if (rawAnnotations === null) {
+    return [];
+  }
+
+  try {
+    const annotationsByBook = JSON.parse(rawAnnotations) as Record<
+      string,
+      Annotation[]
+    >;
+    return (annotationsByBook[bookId] ?? []).filter(
+      (annotation) => annotation.deletedAt === undefined,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function setFallbackAnnotations(bookId: string, annotations: Annotation[]): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawAnnotations = window.localStorage.getItem(FALLBACK_ANNOTATIONS_KEY);
+  let annotationsByBook: Record<string, Annotation[]> = {};
+
+  if (rawAnnotations !== null) {
+    try {
+      annotationsByBook = JSON.parse(rawAnnotations) as Record<string, Annotation[]>;
+    } catch {
+      annotationsByBook = {};
+    }
+  }
+
+  annotationsByBook[bookId] = annotations;
+  window.localStorage.setItem(FALLBACK_ANNOTATIONS_KEY, JSON.stringify(annotationsByBook));
+}
+
+function updateFallbackAnnotation(
+  annotationId: string,
+  color?: string,
+  note?: string,
+): Annotation {
+  if (typeof window === "undefined") {
+    throw new Error(`annotation not found: ${annotationId}`);
+  }
+
+  const rawAnnotations = window.localStorage.getItem(FALLBACK_ANNOTATIONS_KEY);
+
+  if (rawAnnotations === null) {
+    throw new Error(`annotation not found: ${annotationId}`);
+  }
+
+  const annotationsByBook = JSON.parse(rawAnnotations) as Record<string, Annotation[]>;
+
+  for (const [bookId, annotations] of Object.entries(annotationsByBook)) {
+    const annotationIndex = annotations.findIndex(
+      (annotation) => annotation.id === annotationId && annotation.deletedAt === undefined,
+    );
+
+    if (annotationIndex === -1) {
+      continue;
+    }
+
+    const currentAnnotation = annotations[annotationIndex];
+    const updatedAnnotation: Annotation = {
+      ...currentAnnotation,
+      color: normalizeOptionalText(color) ?? currentAnnotation.color,
+      note: normalizeOptionalText(note),
+      updatedAt: new Date().toISOString(),
+    };
+    annotationsByBook[bookId] = annotations.map((annotation) =>
+      annotation.id === annotationId ? updatedAnnotation : annotation,
+    );
+    window.localStorage.setItem(
+      FALLBACK_ANNOTATIONS_KEY,
+      JSON.stringify(annotationsByBook),
+    );
+
+    return updatedAnnotation;
+  }
+
+  throw new Error(`annotation not found: ${annotationId}`);
+}
+
+function deleteFallbackAnnotation(annotationId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawAnnotations = window.localStorage.getItem(FALLBACK_ANNOTATIONS_KEY);
+
+  if (rawAnnotations === null) {
+    return;
+  }
+
+  try {
+    const annotationsByBook = JSON.parse(rawAnnotations) as Record<
+      string,
+      Annotation[]
+    >;
+    const deletedAt = new Date().toISOString();
+    const nextAnnotationsByBook = Object.fromEntries(
+      Object.entries(annotationsByBook).map(([bookId, annotations]) => [
+        bookId,
+        annotations.map((annotation) =>
+          annotation.id === annotationId
+            ? { ...annotation, deletedAt, updatedAt: deletedAt }
+            : annotation,
+        ),
+      ]),
+    );
+    window.localStorage.setItem(
+      FALLBACK_ANNOTATIONS_KEY,
+      JSON.stringify(nextAnnotationsByBook),
+    );
+  } catch {
+    window.localStorage.removeItem(FALLBACK_ANNOTATIONS_KEY);
+  }
+}
+
+function createFallbackId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `bookmark-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+}
+
+function normalizeBookmarkLabel(label: string | undefined): string | undefined {
+  const normalizedLabel = label?.trim();
+  return normalizedLabel === "" ? undefined : normalizedLabel;
+}
+
+function normalizeOptionalText(value: string | undefined): string | undefined {
+  const normalizedValue = value?.trim();
+  return normalizedValue === "" ? undefined : normalizedValue;
 }

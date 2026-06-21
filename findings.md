@@ -94,6 +94,26 @@
 - 阶段 3/4 体验统一调整确认：非 Focus 模式底部空白主要来自 reader viewport 底部 padding、正文框与控件 gap、控件内部 padding 和 PDF stage 固定 min-height；本轮只压缩普通模式，Focus 专属规则保持既有行为。
 - 阶段 3/4 视觉验证：Browser 插件可检查本地书架首屏并确认无 console warning/error，但其只读 evaluate 环境没有 `localStorage`，无法注入 EPUB/PDF fixture；阅读器视觉状态改用项目 Playwright 生成无版权 EPUB/PDF Blob。
 - 阶段 3/4 视觉验证结果：EPUB/PDF 桌面和 375x760 视口均无正文/控制区重叠，frame-to-controls gap 为 8px，底部 gap 为 27-28px；PDF canvas 非空，EPUB iframe 存在且 slider/页码输入在 locations ready 后启用。
+- 阶段 5 启动确认：SQLite 初始迁移已包含 `bookmarks` 和 `annotations` 表；当前 Rust/Tauri 层尚未实现书签或标注 CRUD 命令，前端 `tauri/reader.ts` 也只有阅读进度/主题/source 相关 bridge。
+- 阶段 5 启动确认：`packages/core` 已有 `Annotation`、`LocatorContext`、`TxtLocator`、`EpubLocator`、`PdfLocator`；缺少 `Bookmark` 类型，TXT locator 也缺少可表达选区终点的可选字段。
+- 阶段 5 启动确认：EPUB adapter 已有 `onSelected`、`addHighlight`、`removeHighlight` 入口；PDF adapter 仍是 canvas-only，用户可见 PDF 选区/高亮前需要叠加 PDF.js `TextLayer`。
+- 阶段 5.1 书签实现确认：现有 `bookmarks` 表字段足够承载 MVP 书签，`locator_json` 可保存 TXT/EPUB/PDF union locator，因此本阶段未新增 migration。
+- 阶段 5.1 书签实现确认：书签创建复用 `normalize_locator_for_book`，该函数文案已从阅读进度专用改为通用 locator 校验；后续 annotations CRUD 可以复用同一校验入口。
+- 阶段 5.1 书签 UI 确认：ReaderShell 侧栏已扩展为 tabs，但 `Notes` 和 `Search` 先显示空状态；后续 5.4/5.5 在同一侧栏 panel 内填充，不需要另起面板体系。
+- 阶段 5.2 选区实现确认：TXT 选区 MVP 限定在同一个虚拟块内，使用块文本中的 selectedText 首次出现位置计算 `charOffset/endCharOffset`；跨块/跨章节 selection 当前返回 null。
+- 阶段 5.2 选区实现确认：EPUB selection 菜单依赖 epub.js CFI range 和当前 `EpubPosition.locator.href`；`handleRelocated` 必须同步更新 position ref，否则 selected 事件紧跟 relocated 时无法生成 locator。
+- 阶段 5.2 PDF text layer 确认：`pdfjs.TextLayer` 可直接从 display API 动态 import 使用；TextLayer 覆盖 canvas 后可产生 DOM selection，rect 通过 `PageViewport.convertToPdfPoint()` 转成 PDF 坐标系。
+- 阶段 5.2 PDF selection 限制：当前仅接受同一个 `.reader-pdf-text-layer` 内的选区；跨页选择暂不显示菜单，符合阶段 5 MVP 的单页 PDF 高亮范围。
+- 阶段 5.3 高亮实现确认：现有 `annotations` 表字段足够承载 MVP 高亮，`locator_json` 存 TXT/EPUB/PDF union locator，未新增 SQLite migration。
+- 阶段 5.3 后端确认：annotations CRUD 复用 `normalize_locator_for_book`，能拒绝格式不匹配 locator；删除 annotation 使用 `deleted_at` 软删除，删除 book 仍通过外键级联移除关联记录。
+- 阶段 5.3 TXT 高亮重放口径：仅重放当前虚拟块内与 `[charOffset, endCharOffset)` 相交的 highlight；跨块 selection 仍由 5.2 选择层拒绝，后续如需跨段高亮可拆多条 locator 或扩展范围模型。
+- 阶段 5.3 EPUB 高亮重放口径：打开书籍后按 annotation CFI 调用 `rendition.annotations.highlight`，颜色由 annotation `color` 提供；删除/更新时用 CFI 集合差异移除旧高亮。
+- 阶段 5.3 PDF 高亮重放口径：保存 PDF 坐标系 rect，重放时用当前缩放下 `PageViewport.convertToViewportRectangle()` 计算 overlay；扫描版 PDF 无 text layer 时不会产生新高亮。
+- 阶段 5.3 UI 确认：selection menu 保留 `Highlight` 默认黄色按钮，并提供黄/绿/蓝/粉色 swatch；EPUB/PDF/TXT 共享创建入口，PDF 保留缩放控件不变。
+- 阶段 5.4 Notes 面板确认：不新增 notes 表；`annotations.note` 直接承载用户想法，`type="note"` 表达从选区直接创建的想法记录，`type="highlight"` 也可通过同一面板追加 note。
+- 阶段 5.4 Notes 跳转确认：列表跳转复用 ReaderShell 的 locator 跳转入口，因此 TXT 会同步保存阅读进度，EPUB/PDF 交给各自 adapter goTo；删除 annotation 后高亮重放会通过前端 state 立即消失。
+- 阶段 5.5 搜索确认：统一 Search 面板由 ReaderShell 管理；TXT 搜索直接扫描已加载文档，EPUB/PDF 在 adapter 打开后注册 search provider，避免父组件持有格式内部 adapter。
+- 阶段 5.5 搜索粒度：TXT 返回字符偏移 locator，EPUB 返回 CFI locator，PDF 返回页级 locator；三格式结果上限均为 100 条，PDF 不做页内定位或 OCR。
 
 ## 技术决策
 

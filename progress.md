@@ -1,5 +1,187 @@
 # 进度日志
 
+## 2026-06-21 大阶段 5：书签、高亮、想法与检索
+
+### 状态
+- **当前状态：** in_progress
+- **当前分支：** `codex/stage5-search-basic`
+
+### 执行的操作
+- 读取 `task_plan.md`、`progress.md`、`findings.md` 并运行 session catchup；确认上一轮只有大阶段 5 计划与本轮启动上下文未同步。
+- 确认 `main` 工作区干净并与 `origin/main` 对齐。
+- 执行 `git fetch origin --prune`。
+- 将 `codex/v0.1.0-mvp-integration` 从 `main` 快进到 `db8fde9`。
+- 创建 `codex/stage5-bookmarks`，开始阶段 5.1。
+- 更新 `task_plan.md` 当前阶段和阶段 5 执行记录。
+
+### 待执行
+- 实现书签 core 类型、Rust CRUD、Tauri bridge、浏览器 fallback、ReaderShell 书签 UI 与三格式跳转。
+- 完成 5.1 针对性 Rust/Vitest 验证后合回 `codex/v0.1.0-mvp-integration`。
+
+### 阶段 5.1：书签能力
+- **状态：** complete
+- **分支：** `codex/stage5-bookmarks`
+- 执行的操作：
+  - 在 `@reader/core` 新增 `Bookmark` 类型，并给 `TxtLocator` 增加可选 `endCharOffset`。
+  - 在 Rust `db.rs` 新增 `Bookmark` struct、`list_bookmarks`、`create_bookmark`、`delete_bookmark` 以及 `_at` 测试入口。
+  - 复用现有 `bookmarks` 表，不新增 SQLite migration；创建书签前按书籍格式校验 locator。
+  - 在 Tauri `lib.rs` 注册书签 CRUD 命令。
+  - 在 `tauri/reader.ts` 新增书签 bridge 和浏览器 localStorage fallback。
+  - 扩展 `ReaderShell`：顶部 `Bookmark` 按钮、侧栏 `Contents / Bookmarks / Notes / Search` tabs、书签列表、删除和跳转。
+  - 将 TXT 跳转请求升级为 locator 级跳转，书签可回到保存的字符偏移附近；EPUB/PDF 内容层回传当前 locator 供书签保存。
+  - 增加 Vitest 覆盖 TXT 书签创建和跳转。
+- 创建/修改的文件：
+  - `packages/core/src/index.ts`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，24 tests。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx` 通过，32 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次 lint 发现书签加载 effect 中同步 reset state 触发 `react-hooks/set-state-in-effect`；改为带 `bookId` 的派生状态，避免跨书籍复用旧书签/locator。
+  - 新增书签跳转测试中删除按钮 aria-label 与跳转按钮同名匹配；为跳转按钮增加 `Go to bookmark ...` aria-label 后解决。
+
+### 阶段 5.2：选中菜单
+- **状态：** complete
+- **分支：** `codex/stage5-selection-menu`
+- 执行的操作：
+  - 新增统一 `ReaderSelectionSnapshot` 和 `SelectionMenu`，提供 `Highlight`、`Note`、`Copy` 三个动作入口。
+  - TXT 阅读器在单个虚拟块内捕获 DOM Selection，映射为 `TxtLocator.charOffset/endCharOffset`，并保存 selectedText/context。
+  - EPUB 阅读器接入既有 `EpubReaderAdapter.onSelected`，将 CFI range 转换为 EPUB selection snapshot。
+  - PDF adapter 新增 `renderTextLayer` 和 `viewportRectsToPdfRects`，PDF 页面 canvas 上叠加 PDF.js TextLayer。
+  - PDF 阅读器对单页 text layer 内选区生成 `PdfLocator.page/rects/scale/zoomMode`，跨页选区暂不生成菜单。
+  - 扩展 Vitest 覆盖 EPUB selection menu 显示；更新 PDF adapter mock 支持 text layer。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，33 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次 selection menu 测试触发 `onSelected` 紧跟 `onRelocated` 时，EPUB position ref 仍为空；在 `handleRelocated` 中同步更新 ref 后解决。
+  - 首次 build 发现 TS 不接受对 `Node` 调用 `closest`；改为显式把 selection node 转成 `Element` 或其 parent `Element`。
+
+### 阶段 5.3：高亮保存
+- **状态：** complete
+- **分支：** `codex/stage5-highlights`
+- 执行的操作：
+  - 在 Rust `db.rs` 新增 `AnnotationKind`、`Annotation`、annotations CRUD `_at` 入口和 app 入口。
+  - 在 Tauri `lib.rs` 注册 `list_annotations`、`create_annotation`、`update_annotation`、`delete_annotation` 命令。
+  - 在 `tauri/reader.ts` 新增 annotations bridge 和浏览器 localStorage fallback；fallback 按 `deletedAt` 过滤软删除记录。
+  - 将 selection menu 的 `Highlight` 接到 `createAnnotation(type="highlight")`，默认黄色，并增加绿/蓝/粉色 swatch。
+  - TXT 阅读器按 `TxtLocator.charOffset/endCharOffset` 在虚拟块内重放 `<mark>` 高亮。
+  - EPUB 阅读器按 CFI 调用 `adapter.addHighlight(cfi, color)` 重放高亮。
+  - PDF adapter 新增 `pdfRectsToViewportRects()`，PDF 阅读器用保存的页内 rect 渲染 overlay 高亮。
+  - 扩展 Vitest 覆盖高亮创建、TXT 重放、EPUB adapter 重放和 PDF overlay 重放。
+- 创建/修改的文件：
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，27 tests。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，36 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次高亮创建测试断言多写了可选 `note` 参数；实际调用省略该参数，已修正测试。
+  - 首次 lint 报 PDF annotations effect 同步调用会 setState 的渲染回调；改为 `requestAnimationFrame` 调度重算 overlay 后通过。
+
+### 阶段 5.4：想法/笔记
+- **状态：** complete
+- **分支：** `codex/stage5-notes`
+- 执行的操作：
+  - 将 `SelectionMenu` 的 `Note` 动作接入 `createAnnotation(type="note")`，创建后自动打开侧栏 `Notes` tab。
+  - 将侧栏 `Notes` 从占位空状态扩展为当前书 annotations 列表，展示摘录、颜色、更新时间和 note 文本框。
+  - 支持对高亮或 note 记录追加/编辑 note，保存时调用 `updateAnnotation`。
+  - 支持删除 annotation，删除后从本地列表移除；后端软删除逻辑沿用 5.3。
+  - 支持从 Notes 列表跳回 TXT/EPUB/PDF 原文 locator。
+  - 增加 Notes 面板样式，复用现有侧栏风格。
+  - 扩展 Vitest 覆盖从 EPUB selection 创建 note、TXT Notes 面板编辑/跳转/删除。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，38 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - Notes item 初版曾考虑用 effect 同步 textarea draft；为避免 `react-hooks/set-state-in-effect` 类问题，改为本地 draft 初始化后由用户输入和保存结果自然保持一致。
+
+### 阶段 5.5：搜索基础
+- **状态：** complete
+- **分支：** `codex/stage5-search-basic`
+- 执行的操作：
+  - 将侧栏 `Search` tab 从占位状态扩展为统一搜索表单、结果列表、空结果和错误状态。
+  - TXT 搜索在已加载 `TxtDocument` 中按章节扫描全文，生成 `TxtLocator.charOffset/endCharOffset` 和上下文 excerpt。
+  - EPUB adapter 实现 `search(query)`，遍历 epub.js spine section 的 `find()` 结果，返回 CFI locator。
+  - PDF adapter 实现 `search(query)`，逐页读取 `getTextContent()`，返回页级 `PdfLocator.page` 结果。
+  - EPUB/PDF 内容层在 adapter 打开后向 ReaderShell 注册搜索 provider，卸载时注销。
+  - 搜索结果点击复用现有 locator 跳转链路，TXT 跳转会同步保存阅读进度。
+  - 扩展 Vitest 覆盖 TXT/EPUB/PDF 搜索提交和结果跳转。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/epub/EpubReaderAdapter.ts`
+  - `apps/desktop/src/pdf/PdfReaderAdapter.ts`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，41 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次 desktop build 发现 EPUB/PDF search mock 的空数组返回被 TypeScript 推断为 `never[]`；为 mock 增加显式 Promise 返回类型后通过。
+
+### 阶段 5 最终验收
+- **状态：** complete
+- **分支：** `codex/v0.1.0-mvp-integration`
+- 验证：
+  - `pnpm.cmd install` 通过，workspace already up to date。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，41 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，27 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 Chromium smoke tests。
+  - Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage5-notes-search-desktop.png`、`D:\tl-temp\ebook-reader-stage5-notes-search-mobile-375x760.png`；桌面 viewport 高度 829.7，375x760 viewport 高度 619.9，Notes/Search 可见，无 console warning/error。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+- 遇到的问题：
+  - 临时视觉脚本首次从仓库根运行 Node 无法解析 workspace 内 `@playwright/test`；改在 `apps/desktop` 工作目录执行后继续。
+  - 第二次视觉脚本因中文 stdin 编码和多结果 strict locator 失败；改用 ASCII fixture 并选择首个结果后通过。
+  - 首次 `tauri:build` 因旧 `ebook-reader-desktop.exe` 进程 PID 16968 锁定 release 产物失败；结束该产物进程后重跑通过。
+
 ## 2026-06-21 大阶段 3/4：阅读体验统一调整
 
 ### 状态

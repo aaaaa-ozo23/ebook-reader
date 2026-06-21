@@ -63,6 +63,21 @@ interface EpubLocationLike {
   start?: EpubLocationLike;
 }
 
+interface EpubSearchSection {
+  href?: string;
+  load?: (loader?: unknown) => Promise<unknown> | unknown;
+  find?: (query: string) => Array<{ cfi?: string; excerpt?: string }>;
+  unload?: () => void;
+}
+
+interface EpubSearchableBook {
+  load?: unknown;
+  spine?: {
+    each?: (callback: (section: EpubSearchSection) => void) => void;
+    spineItems?: EpubSearchSection[];
+  };
+}
+
 const EPUB_THEME_NAME = "reader-theme";
 const EPUB_LOCATION_CHARS = 1500;
 const EPUB_MIN_SPREAD_WIDTH = 860;
@@ -287,12 +302,55 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   }
 
   async search(query: string): Promise<SearchHit<EpubLocator>[]> {
-    void query;
+    const normalizedQuery = query.trim();
 
-    return [];
+    if (normalizedQuery.length === 0) {
+      return [];
+    }
+
+    const book = this.requireBook();
+    const sections = getEpubSearchSections(book);
+    const hits: SearchHit<EpubLocator>[] = [];
+
+    for (const section of sections) {
+      if (hits.length >= 100) {
+        break;
+      }
+
+      try {
+        await Promise.resolve(section.load?.((book as EpubSearchableBook).load));
+        const sectionHits = section.find?.(normalizedQuery) ?? [];
+
+        for (const [index, sectionHit] of sectionHits.entries()) {
+          if (hits.length >= 100) {
+            break;
+          }
+
+          const href = section.href ?? "";
+          const excerpt = sectionHit.excerpt?.trim() ?? normalizedQuery;
+
+          hits.push({
+            id: `epub-search-${href}-${index}`,
+            locator: {
+              kind: "epub",
+              href,
+              cfi: sectionHit.cfi,
+              selectedText: normalizedQuery,
+            },
+            excerpt,
+          });
+        }
+      } catch {
+        continue;
+      } finally {
+        section.unload?.();
+      }
+    }
+
+    return hits;
   }
 
-  addHighlight(cfiRange: string): void {
+  addHighlight(cfiRange: string, color = "#f3bc55"): void {
     const rendition = this.requireRendition();
 
     rendition.annotations.highlight(
@@ -301,7 +359,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       undefined,
       "reader-epub-highlight",
       {
-        fill: "#f3bc55",
+        fill: color,
         "fill-opacity": "0.32",
         "mix-blend-mode": "multiply",
       },
@@ -524,6 +582,23 @@ function mapNavItemToTocItem(item: NavItem): TocItem {
     },
     children: item.subitems?.map(mapNavItemToTocItem),
   };
+}
+
+function getEpubSearchSections(book: EpubBook): EpubSearchSection[] {
+  const searchableBook = book as EpubSearchableBook;
+  const sections: EpubSearchSection[] = [];
+
+  if (typeof searchableBook.spine?.each === "function") {
+    searchableBook.spine.each((section) => {
+      sections.push(section);
+    });
+  }
+
+  if (sections.length === 0 && Array.isArray(searchableBook.spine?.spineItems)) {
+    sections.push(...searchableBook.spine.spineItems);
+  }
+
+  return sections;
 }
 
 function getLocationStart(location: Location | EpubLocationLike): EpubLocationLike {
