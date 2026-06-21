@@ -182,6 +182,15 @@ interface PendingPdfProgress {
   progress?: number;
 }
 
+interface ReaderSelectionSnapshot {
+  locator: Locator;
+  selectedText: string;
+  contextBefore?: string;
+  contextAfter?: string;
+  menuX: number;
+  menuY: number;
+}
+
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +210,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     bookId: string;
     locator: Locator;
   } | null>(null);
+  const [selectionSnapshot, setSelectionSnapshot] =
+    useState<ReaderSelectionSnapshot | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
@@ -532,6 +543,32 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       });
   }, []);
 
+  const handleSelectionChange = useCallback(
+    (snapshot: ReaderSelectionSnapshot | null) => {
+      setSelectionSnapshot(snapshot);
+    },
+    [],
+  );
+
+  const handleCopySelection = useCallback(() => {
+    const selectedText = selectionSnapshot?.selectedText;
+
+    if (selectedText === undefined || selectedText.trim() === "") {
+      return;
+    }
+
+    void navigator.clipboard?.writeText(selectedText).catch(() => undefined);
+    setSelectionSnapshot(null);
+  }, [selectionSnapshot]);
+
+  const handlePendingHighlight = useCallback(() => {
+    setSelectionSnapshot(null);
+  }, []);
+
+  const handlePendingNote = useCallback(() => {
+    setSelectionSnapshot(null);
+  }, []);
+
   const readerStyle = useMemo(
     () =>
       ({
@@ -633,6 +670,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             jumpRequest={txtJumpRequest}
             onActiveChapterChange={setActiveTocItemId}
             onProgressChange={handleTxtProgressChange}
+            onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
           />
         ) : null}
@@ -645,6 +683,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onSelectionChange={handleSelectionChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -657,6 +696,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onSelectionChange={handleSelectionChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -665,6 +705,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           theme={theme}
           themeError={themeError}
           onThemeChange={handleThemeChange}
+        />
+        <SelectionMenu
+          selection={selectionSnapshot}
+          onCopy={handleCopySelection}
+          onHighlight={handlePendingHighlight}
+          onNote={handlePendingNote}
         />
       </section>
     </main>
@@ -832,6 +878,46 @@ function ReaderSidebar({
   );
 }
 
+interface SelectionMenuProps {
+  selection: ReaderSelectionSnapshot | null;
+  onCopy: () => void;
+  onHighlight: () => void;
+  onNote: () => void;
+}
+
+function SelectionMenu({
+  selection,
+  onCopy,
+  onHighlight,
+  onNote,
+}: SelectionMenuProps) {
+  if (selection === null) {
+    return null;
+  }
+
+  return (
+    <div
+      className="reader-selection-menu"
+      role="toolbar"
+      aria-label="Selection actions"
+      style={{
+        left: `${selection.menuX}px`,
+        top: `${selection.menuY}px`,
+      }}
+    >
+      <button type="button" onClick={onHighlight}>
+        Highlight
+      </button>
+      <button type="button" onClick={onNote}>
+        Note
+      </button>
+      <button type="button" onClick={onCopy}>
+        Copy
+      </button>
+    </div>
+  );
+}
+
 interface TxtReaderContentProps {
   blocks: ReaderBlock[];
   document: TxtDocument | null;
@@ -841,6 +927,7 @@ interface TxtReaderContentProps {
   jumpRequest: TxtJumpRequest | null;
   onActiveChapterChange: (chapterId: string) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
+  onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onBackToLibrary: () => void;
 }
 
@@ -853,6 +940,7 @@ function TxtReaderContent({
   jumpRequest,
   onActiveChapterChange,
   onProgressChange,
+  onSelectionChange,
   onBackToLibrary,
 }: TxtReaderContentProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
@@ -1066,6 +1154,10 @@ function TxtReaderContent({
     scheduleActiveChapterChange,
   ]);
 
+  const handleTextSelection = useCallback(() => {
+    onSelectionChange(captureTxtSelection());
+  }, [onSelectionChange]);
+
   if (isLoading) {
     return (
       <section className="reader-state" aria-label="Loading TXT book">
@@ -1096,6 +1188,8 @@ function TxtReaderContent({
       ref={viewportRef}
       className="reader-viewport"
       aria-label={`${document.book.title} content`}
+      onKeyUp={handleTextSelection}
+      onMouseUp={handleTextSelection}
       onScroll={handleScroll}
     >
       <article className="reader-page reader-page--virtual">
@@ -1119,6 +1213,9 @@ function TxtReaderContent({
                 ref={virtualizer.measureElement}
                 className={`reader-virtual-row reader-virtual-row--${block.kind}`}
                 data-index={virtualItem.index}
+                data-chapter-id={block.chapterId}
+                data-char-offset={block.charOffset}
+                data-reader-block-text={block.text}
                 style={{
                   transform: `translateY(${virtualItem.start}px)`,
                 }}
@@ -1141,6 +1238,7 @@ interface EpubReaderContentProps {
   onActiveTocItemChange: (tocItemId: string) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: EpubLocator) => void;
+  onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -1152,6 +1250,7 @@ function EpubReaderContent({
   onActiveTocItemChange,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onSelectionChange,
   onTocChange,
 }: EpubReaderContentProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1239,6 +1338,7 @@ function EpubReaderContent({
 
   const handleRelocated = useCallback(
     (nextPosition: EpubPosition) => {
+      positionRef.current = nextPosition;
       updateActiveTocForHref(nextPosition.locator.href);
       onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
@@ -1306,6 +1406,32 @@ function EpubReaderContent({
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
+          onSelected: (selection) => {
+            const currentPosition = positionRef.current;
+            const selectedText = selection.selectedText?.trim() ?? "";
+
+            if (currentPosition === null || selectedText === "") {
+              onSelectionChange(null);
+              return;
+            }
+
+            onSelectionChange({
+              locator: {
+                kind: "epub",
+                href: currentPosition.locator.href,
+                cfi: selection.cfiRange,
+                progression: currentPosition.progression ?? undefined,
+                selectedText,
+                contextBefore: selection.contextBefore,
+                contextAfter: selection.contextAfter,
+              },
+              selectedText,
+              contextBefore: selection.contextBefore,
+              contextAfter: selection.contextAfter,
+              menuX: window.innerWidth / 2,
+              menuY: 112,
+            });
+          },
           onSpreadChange: setSpreadState,
         });
         openedAdapter = adapter;
@@ -1337,7 +1463,7 @@ function EpubReaderContent({
         adapterRef.current = null;
       }
     };
-  }, [book, handleRelocated, onTocChange]);
+  }, [book, handleRelocated, onSelectionChange, onTocChange]);
 
   useEffect(() => {
     if (jumpRequest === null) {
@@ -1619,6 +1745,7 @@ interface PdfReaderContentProps {
   onActiveTocItemChange: (tocItemId: string | null) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
+  onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -1630,11 +1757,13 @@ function PdfReaderContent({
   onActiveTocItemChange,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onSelectionChange,
   onTocChange,
 }: PdfReaderContentProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<PdfReaderAdapter | null>(null);
   const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
+  const textLayerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const isDraggingProgressRef = useRef(false);
   const pendingProgressRef = useRef<PendingPdfProgress | null>(null);
   const positionRef = useRef<PdfPosition | null>(null);
@@ -1721,6 +1850,17 @@ function PdfReaderContent({
         if (renderSequenceRef.current !== renderSequence) {
           return;
         }
+
+        const textLayer = textLayerRefs.current[index];
+
+        if (textLayer !== undefined && textLayer !== null) {
+          textLayer.hidden = false;
+          await adapter.renderTextLayer(textLayer, pageNumber);
+        }
+
+        if (renderSequenceRef.current !== renderSequence) {
+          return;
+        }
       }
 
       for (
@@ -1733,6 +1873,14 @@ function PdfReaderContent({
         if (canvas !== undefined && canvas !== null) {
           canvas.hidden = true;
           canvas.removeAttribute("data-page-number");
+        }
+
+        const textLayer = textLayerRefs.current[index];
+
+        if (textLayer !== undefined && textLayer !== null) {
+          textLayer.hidden = true;
+          textLayer.replaceChildren();
+          textLayer.removeAttribute("data-page-number");
         }
       }
     } catch (renderError) {
@@ -1775,6 +1923,87 @@ function PdfReaderContent({
     },
     [flushPendingProgress, onActiveTocItemChange, onCurrentLocatorChange],
   );
+
+  const capturePdfSelection = useCallback(() => {
+    const selection = window.getSelection();
+    const adapter = adapterRef.current;
+    const currentPosition = positionRef.current;
+
+    if (
+      selection === null ||
+      selection.rangeCount === 0 ||
+      adapter === null ||
+      currentPosition === null
+    ) {
+      onSelectionChange(null);
+      return;
+    }
+
+    const selectedText = selection.toString().trim();
+
+    if (selectedText === "") {
+      onSelectionChange(null);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    const startLayer = getPdfTextLayer(range.startContainer);
+    const endLayer = getPdfTextLayer(range.endContainer);
+
+    if (startLayer === null || endLayer === null || startLayer !== endLayer) {
+      onSelectionChange(null);
+      return;
+    }
+
+    const page = Number.parseInt(startLayer.dataset.pageNumber ?? "", 10);
+
+    if (!Number.isFinite(page)) {
+      onSelectionChange(null);
+      return;
+    }
+
+    const layerRect = startLayer.getBoundingClientRect();
+    const viewportRects = Array.from(range.getClientRects())
+      .map((rect) => ({
+        x: rect.left - layerRect.left,
+        y: rect.top - layerRect.top,
+        width: rect.width,
+        height: rect.height,
+      }))
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+
+    if (viewportRects.length === 0) {
+      onSelectionChange(null);
+      return;
+    }
+
+    void adapter
+      .viewportRectsToPdfRects(page, viewportRects, currentPosition.scale)
+      .then((rects) => {
+        if (rects === undefined || rects.length === 0) {
+          onSelectionChange(null);
+          return;
+        }
+
+        const menuRect = range.getBoundingClientRect();
+        onSelectionChange({
+          locator: {
+            kind: "pdf",
+            page,
+            rects,
+            scale: currentPosition.scale,
+            zoomMode: currentPosition.zoomMode,
+            selectedText,
+          },
+          selectedText,
+          menuX: menuRect.left + menuRect.width / 2,
+          menuY: Math.max(72, menuRect.top - 48),
+        });
+      })
+      .catch(() => {
+        onSelectionChange(null);
+      });
+  }, [onSelectionChange]);
 
   useEffect(() => {
     themeRef.current = theme;
@@ -2118,6 +2347,8 @@ function PdfReaderContent({
                 key={index}
                 className="reader-pdf-sheet"
                 hidden={visiblePageNumbers[index] === undefined}
+                onKeyUp={capturePdfSelection}
+                onMouseUp={capturePdfSelection}
               >
                 <canvas
                   ref={(canvas) => {
@@ -2129,6 +2360,13 @@ function PdfReaderContent({
                       ? undefined
                       : `PDF page ${visiblePageNumbers[index]}`
                   }
+                />
+                <div
+                  ref={(textLayer) => {
+                    textLayerRefs.current[index] = textLayer;
+                  }}
+                  className="reader-pdf-text-layer"
+                  aria-hidden="true"
                 />
               </div>
             ))}
@@ -2492,6 +2730,77 @@ function getLocatorLabel(locator: Locator): string {
   }
 
   return `Page ${locator.page}`;
+}
+
+function captureTxtSelection(): ReaderSelectionSnapshot | null {
+  const selection = window.getSelection();
+
+  if (selection === null || selection.rangeCount === 0) {
+    return null;
+  }
+
+  const selectedText = selection.toString().trim();
+
+  if (selectedText === "") {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  const startRow = getSelectionRow(range.startContainer);
+  const endRow = getSelectionRow(range.endContainer);
+
+  if (startRow === null || endRow === null || startRow !== endRow) {
+    return null;
+  }
+
+  const blockText = startRow.dataset.readerBlockText ?? "";
+  const selectedIndex = blockText.indexOf(selectedText);
+  const blockCharOffset = Number.parseInt(startRow.dataset.charOffset ?? "0", 10);
+
+  if (selectedIndex === -1 || !Number.isFinite(blockCharOffset)) {
+    return null;
+  }
+
+  const charOffset = blockCharOffset + selectedIndex;
+  const endCharOffset = charOffset + selectedText.length;
+  const rect = range.getBoundingClientRect();
+
+  return {
+    locator: {
+      kind: "txt",
+      chapterId: startRow.dataset.chapterId,
+      charOffset,
+      endCharOffset,
+      selectedText,
+      contextBefore: blockText.slice(Math.max(0, selectedIndex - 80), selectedIndex),
+      contextAfter: blockText.slice(selectedIndex + selectedText.length, selectedIndex + selectedText.length + 80),
+    },
+    selectedText,
+    contextBefore: blockText.slice(Math.max(0, selectedIndex - 80), selectedIndex),
+    contextAfter: blockText.slice(selectedIndex + selectedText.length, selectedIndex + selectedText.length + 80),
+    menuX: rect.left + rect.width / 2,
+    menuY: Math.max(72, rect.top - 48),
+  };
+}
+
+function getSelectionRow(node: Node): HTMLElement | null {
+  const element =
+    node instanceof Element
+      ? node
+      : node.parentNode instanceof Element
+        ? node.parentNode
+        : null;
+  return element?.closest<HTMLElement>(".reader-virtual-row") ?? null;
+}
+
+function getPdfTextLayer(node: Node): HTMLElement | null {
+  const element =
+    node instanceof Element
+      ? node
+      : node.parentNode instanceof Element
+        ? node.parentNode
+        : null;
+  return element?.closest<HTMLElement>(".reader-pdf-text-layer") ?? null;
 }
 
 function flattenTocItems(

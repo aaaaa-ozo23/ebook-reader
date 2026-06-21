@@ -100,6 +100,10 @@
 - 阶段 5.1 书签实现确认：现有 `bookmarks` 表字段足够承载 MVP 书签，`locator_json` 可保存 TXT/EPUB/PDF union locator，因此本阶段未新增 migration。
 - 阶段 5.1 书签实现确认：书签创建复用 `normalize_locator_for_book`，该函数文案已从阅读进度专用改为通用 locator 校验；后续 annotations CRUD 可以复用同一校验入口。
 - 阶段 5.1 书签 UI 确认：ReaderShell 侧栏已扩展为 tabs，但 `Notes` 和 `Search` 先显示空状态；后续 5.4/5.5 在同一侧栏 panel 内填充，不需要另起面板体系。
+- 阶段 5.2 选区实现确认：TXT 选区 MVP 限定在同一个虚拟块内，使用块文本中的 selectedText 首次出现位置计算 `charOffset/endCharOffset`；跨块/跨章节 selection 当前返回 null。
+- 阶段 5.2 选区实现确认：EPUB selection 菜单依赖 epub.js CFI range 和当前 `EpubPosition.locator.href`；`handleRelocated` 必须同步更新 position ref，否则 selected 事件紧跟 relocated 时无法生成 locator。
+- 阶段 5.2 PDF text layer 确认：`pdfjs.TextLayer` 可直接从 display API 动态 import 使用；TextLayer 覆盖 canvas 后可产生 DOM selection，rect 通过 `PageViewport.convertToPdfPoint()` 转成 PDF 坐标系。
+- 阶段 5.2 PDF selection 限制：当前仅接受同一个 `.reader-pdf-text-layer` 内的选区；跨页选择暂不显示菜单，符合阶段 5 MVP 的单页 PDF 高亮范围。
 
 ## 技术决策
 
