@@ -24,6 +24,7 @@ import {
 import {
   createAnnotation,
   createBookmark,
+  deleteAnnotation,
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
@@ -34,6 +35,7 @@ import {
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
+  updateAnnotation,
 } from "./tauri/reader";
 
 const epubAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
@@ -197,6 +199,7 @@ const pdfAdapterSetZoomMock = vi.hoisted(() =>
 const pdfAdapterVisiblePagesMock = vi.hoisted(() => vi.fn(() => [1]));
 const createBookmarkMock = vi.hoisted(() => vi.fn());
 const createAnnotationMock = vi.hoisted(() => vi.fn());
+const deleteAnnotationMock = vi.hoisted(() => vi.fn());
 const deleteBookmarkMock = vi.hoisted(() => vi.fn());
 const listAnnotationsMock = vi.hoisted(() => vi.fn());
 const listBookmarksMock = vi.hoisted(() => vi.fn());
@@ -212,6 +215,7 @@ vi.mock("./tauri/library", () => ({
 vi.mock("./tauri/reader", () => ({
   createAnnotation: createAnnotationMock,
   createBookmark: createBookmarkMock,
+  deleteAnnotation: deleteAnnotationMock,
   deleteBookmark: deleteBookmarkMock,
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
@@ -222,6 +226,7 @@ vi.mock("./tauri/reader", () => ({
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
   saveReadingProgress: vi.fn(),
+  updateAnnotation: vi.fn(),
 }));
 
 vi.mock("./epub/EpubReaderAdapter", () => ({
@@ -367,6 +372,7 @@ const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const createAnnotationMocked = vi.mocked(createAnnotation);
 const createBookmarkMocked = vi.mocked(createBookmark);
+const deleteAnnotationMocked = vi.mocked(deleteAnnotation);
 const deleteBookmarkMocked = vi.mocked(deleteBookmark);
 const importBookMock = vi.mocked(importBook);
 const listAnnotationsMocked = vi.mocked(listAnnotations);
@@ -378,6 +384,7 @@ const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
+const updateAnnotationMock = vi.mocked(updateAnnotation);
 const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
 
@@ -412,6 +419,7 @@ describe("App", () => {
     pdfAdapterSetViewModeMock.mockClear();
     pdfAdapterSetZoomMock.mockClear();
     pdfAdapterVisiblePagesMock.mockClear();
+    deleteAnnotationMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({
@@ -439,6 +447,23 @@ describe("App", () => {
         updatedAt: "2026-06-21T10:00:00.000Z",
       }),
     );
+    updateAnnotationMock.mockImplementation(async (annotationId, color, note) => ({
+      id: annotationId,
+      bookId: "book-id",
+      type: "highlight",
+      color,
+      selectedText: "Saved text",
+      note,
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+      createdAt: "2026-06-21T10:00:00.000Z",
+      updatedAt: "2026-06-21T10:05:00.000Z",
+    }));
+    deleteAnnotationMocked.mockResolvedValue(undefined);
     createBookmarkMocked.mockImplementation(async (bookId, locator, label) => ({
       id: "bookmark-created",
       bookId,
@@ -829,6 +854,64 @@ describe("App", () => {
     );
   });
 
+  it("creates a note from an EPUB selection and opens the notes panel", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-note",
+      title: "Note EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Note EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+          onSelected?: (selection: {
+            cfiRange: string;
+            selectedText?: string;
+            contextBefore?: string;
+            contextAfter?: string;
+          }) => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(createEpubPosition());
+    adapterOptions?.onSelected?.({
+      cfiRange: "epubcfi(/6/2[chapter-one]!/4/1:2,/4/1:8)",
+      selectedText: "Selected note",
+    });
+
+    const selectionActions = await screen.findByRole("toolbar", {
+      name: "Selection actions",
+    });
+    await user.click(within(selectionActions).getByRole("button", { name: "Note" }));
+
+    await waitFor(() =>
+      expect(createAnnotationMocked).toHaveBeenCalledWith(
+        "epub-note",
+        "note",
+        expect.objectContaining({
+          kind: "epub",
+          cfi: "epubcfi(/6/2[chapter-one]!/4/1:2,/4/1:8)",
+          selectedText: "Selected note",
+        }),
+        "#f3bc55",
+        "Selected note",
+      ),
+    );
+    expect(screen.getByRole("tab", { name: "Notes" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await screen.findByText("Selected note")).toBeVisible();
+  });
+
   it("replays saved TXT highlights in visible text blocks", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({
@@ -945,6 +1028,84 @@ describe("App", () => {
         },
       ],
       1,
+    );
+  });
+
+  it("edits, jumps to, and deletes notes from the notes sidebar", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "notes-txt",
+      title: "Notes TXT",
+      format: "txt",
+    });
+    const annotation = createAnnotationRecord({
+      id: "annotation-note",
+      bookId: "notes-txt",
+      note: "old note",
+      selectedText: "她推开门",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+    listAnnotationsMocked.mockResolvedValueOnce([annotation]);
+    updateAnnotationMock.mockResolvedValueOnce({
+      ...annotation,
+      note: "new note",
+      updatedAt: "2026-06-21T10:08:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Notes TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    await user.click(within(reader).getByRole("tab", { name: "Notes" }));
+
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note text for 她推开门",
+    });
+    await user.clear(noteInput);
+    await user.type(noteInput, "new note");
+    await user.click(within(reader).getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateAnnotationMock).toHaveBeenCalledWith(
+        "annotation-note",
+        "#f3bc55",
+        "new note",
+      ),
+    );
+
+    await user.click(
+      within(reader).getByRole("button", { name: "Go to Highlight 她推开门" }),
+    );
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "notes-txt",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: 7,
+        }),
+        expect.any(Number),
+      ),
+    );
+
+    await user.click(within(reader).getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(deleteAnnotationMocked).toHaveBeenCalledWith("annotation-note"),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("textbox", { name: "Note text for 她推开门" }),
+      ).not.toBeInTheDocument(),
     );
   });
 
