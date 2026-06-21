@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 4：PDF 阅读器已完成全量验收；下一步合回 `main` 并推送。
+大阶段 3/4：阅读器体验统一调整已完成全量验收；下一步合回 `main` 并推送。
 
 ## 分支策略
 
@@ -210,6 +210,12 @@
 | `pnpm.cmd --filter @reader/desktop test:e2e` | passed，5 Chromium smoke tests，含自生成 PDF Blob |
 | Playwright 视觉检查 | passed，桌面双页和 375x760 窄屏 PDF 阅读器 canvas 非空、无 console warning/error、控件不重叠 |
 | `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
+
+### 阶段 3/4 阅读体验统一调整执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 3/4.x EPUB/PDF 控件统一与空间优化 | `codex/stage3-4-reader-ui-unification` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，31 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，22 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，5 tests；Playwright 视觉截图；`pnpm.cmd --filter @reader/desktop tauri:build` |
 
 ## 大阶段 5：书签、高亮、想法与检索
 
