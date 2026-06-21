@@ -157,6 +157,18 @@ const pdfAdapterRenderPageMock = vi.hoisted(() =>
     };
   }),
 );
+const pdfAdapterRenderTextLayerMock = vi.hoisted(() =>
+  vi.fn(async (container: HTMLElement, pageNumber: number) => {
+    container.dataset.pageNumber = String(pageNumber);
+
+    return {
+      pageNumber,
+      width: 600,
+      height: 800,
+      scale: 1,
+    };
+  }),
+);
 const pdfAdapterSetThemeMock = vi.hoisted(() => vi.fn(async () => undefined));
 const pdfAdapterSetViewModeMock = vi.hoisted(() =>
   vi.fn((mode: "single" | "double" | "continuous", availableWidth?: number) => {
@@ -299,6 +311,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
         return createPosition(pageFromProgress(progression));
       },
       renderPage: pdfAdapterRenderPageMock,
+      renderTextLayer: pdfAdapterRenderTextLayerMock,
       setTheme: pdfAdapterSetThemeMock,
       setViewMode: (
         mode: "single" | "double" | "continuous",
@@ -320,6 +333,10 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 
         return createPosition();
       },
+      viewportRectsToPdfRects: async (
+        _pageNumber: number,
+        rects: Array<{ x: number; y: number; width: number; height: number }>,
+      ) => rects,
     };
   }),
 }));
@@ -365,6 +382,7 @@ describe("App", () => {
     pdfAdapterPreviousMock.mockClear();
     pdfAdapterPreviewProgressMock.mockClear();
     pdfAdapterRenderPageMock.mockClear();
+    pdfAdapterRenderTextLayerMock.mockClear();
     pdfAdapterSetThemeMock.mockClear();
     pdfAdapterSetViewModeMock.mockClear();
     pdfAdapterSetZoomMock.mockClear();
@@ -709,6 +727,49 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
     expect(epubAdapterOpenMock).toHaveBeenCalledWith("epub-book");
     expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
+  });
+
+  it("shows selection actions for an EPUB selection", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-selection",
+      title: "Selection EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Selection EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+          onSelected?: (selection: {
+            cfiRange: string;
+            selectedText?: string;
+            contextBefore?: string;
+            contextAfter?: string;
+          }) => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(createEpubPosition());
+    adapterOptions?.onSelected?.({
+      cfiRange: "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+      selectedText: "Selected text",
+      contextBefore: "Before",
+      contextAfter: "After",
+    });
+
+    const selectionActions = await screen.findByRole("toolbar", {
+      name: "Selection actions",
+    });
+    expect(within(selectionActions).getByRole("button", { name: "Highlight" })).toBeVisible();
+    expect(within(selectionActions).getByRole("button", { name: "Note" })).toBeVisible();
+    expect(within(selectionActions).getByRole("button", { name: "Copy" })).toBeVisible();
   });
 
   it("shows EPUB navigation below the page and enables progress after locations are ready", async () => {

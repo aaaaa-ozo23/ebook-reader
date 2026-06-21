@@ -311,6 +311,70 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     };
   }
 
+  async renderTextLayer(
+    container: HTMLElement,
+    pageNumber = this.currentPage,
+    scale = this.scale,
+  ): Promise<PdfPageRenderResult> {
+    const pdfjs = await loadPdfjs();
+    const document = this.requireDocument();
+    const page = await document.getPage(
+      normalizePdfPage(pageNumber, document.numPages),
+    );
+    const renderScale = normalizePdfScale(scale);
+    const viewport = page.getViewport({ scale: renderScale });
+    const textContent = await page.getTextContent();
+
+    container.replaceChildren();
+    container.dataset.pageNumber = String(page.pageNumber);
+    container.style.width = `${Math.floor(viewport.width)}px`;
+    container.style.height = `${Math.floor(viewport.height)}px`;
+
+    const textLayer = new pdfjs.TextLayer({
+      textContentSource: textContent,
+      container,
+      viewport,
+    });
+
+    await textLayer.render();
+
+    return {
+      pageNumber: page.pageNumber,
+      width: viewport.width,
+      height: viewport.height,
+      scale: renderScale,
+    };
+  }
+
+  async viewportRectsToPdfRects(
+    pageNumber: number,
+    rects: Array<{ x: number; y: number; width: number; height: number }>,
+    scale = this.scale,
+  ): Promise<PdfLocator["rects"]> {
+    const document = this.requireDocument();
+    const page = await document.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const viewport = page.getViewport({ scale: normalizePdfScale(scale) });
+
+    return rects
+      .map((rect) => {
+        const [x1, y1] = viewport.convertToPdfPoint(rect.x, rect.y);
+        const [x2, y2] = viewport.convertToPdfPoint(
+          rect.x + rect.width,
+          rect.y + rect.height,
+        );
+        const x = Math.min(x1, x2);
+        const y = Math.min(y1, y2);
+
+        return {
+          x,
+          y,
+          width: Math.abs(x2 - x1),
+          height: Math.abs(y2 - y1),
+        };
+      })
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+  }
+
   private get totalPages(): number {
     return this.requireDocument().numPages;
   }
