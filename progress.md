@@ -1,5 +1,39 @@
 # 进度日志
 
+## 2026-06-21 大阶段 3/4：阅读体验统一调整
+
+### 状态
+- **当前状态：** complete
+- **分支：** `codex/stage3-4-reader-ui-unification`
+
+### 执行的操作
+- 从 `main` 快进 `codex/v0.1.0-mvp-integration`，创建 `codex/stage3-4-reader-ui-unification`。
+- 为 EPUB 阅读器增加页码输入，沿用当前 synthetic locations 页码，输入提交时换算为 `goToProgress`。
+- 为 PDF adapter 增加 `previewProgress`、`goToProgress` 和 `progressToPdfPage`，PDF slider 可按页预览并在释放后跳转。
+- 在 PDF 阅读器底部增加与 EPUB 同风格的进度条，并把 EPUB/PDF 页码输入统一放入进度 meta 行。
+- 压缩非 Focus 模式 reader viewport 底部 padding、阅读框与控制条 gap、控制条内部 padding，并移除桌面 EPUB/PDF 主阅读区不必要的固定 min-height。
+- 扩展 Vitest 和 Playwright smoke 覆盖 EPUB 页码输入、PDF slider 预览/提交。
+- 更新 `task_plan.md` 和 `findings.md` 记录本轮阶段 3/4 体验统一调整。
+
+### 已通过验证
+- `pnpm.cmd install` 通过，lockfile already up to date。
+- `pnpm.cmd --filter @reader/core build` 通过。
+- `pnpm.cmd --filter @reader/desktop lint` 通过。
+- `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，31 tests。
+- `pnpm.cmd --filter @reader/desktop test` 通过，31 tests。
+- `pnpm.cmd --filter @reader/desktop build` 通过。
+- `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，22 tests。
+- `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 Chromium smoke tests，含新增 EPUB 页码输入和 PDF progress slider 路径。
+- Browser 本地首屏检查通过：`http://127.0.0.1:1420/` 书架非空壳、无 console warning/error；Browser 无法注入 localStorage fixture，阅读器视觉使用 Playwright fallback。
+- Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage34-epub-desktop.png`、`D:\tl-temp\ebook-reader-stage34-epub-mobile-375x760.png`、`D:\tl-temp\ebook-reader-stage34-pdf-desktop.png`、`D:\tl-temp\ebook-reader-stage34-pdf-mobile-375x760.png`；EPUB/PDF 桌面和 375x760 均无正文/控制区重叠，底部 gap 27-28px，PDF canvas 非空。
+- `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+
+### 遇到的问题
+- 首次针对性 Vitest 发现 PDF 双页模式下跳到第 2 页时状态文案是 `Pages 2-3 / 3`，原新增断言误写为单页 `Page 2 / 3`；已修正测试断言，代码行为符合双页规则。
+- 首次临时 Playwright 视觉脚本使用裸 `playwright` 导入失败；桌面包直接依赖的是 `@playwright/test`，改用 `@playwright/test` 导出的 `chromium` 后通过。
+- 首次 EPUB 视觉截图捕获过早，locations 尚未生成导致 slider/页码输入 disabled；改为等待两个控件 enabled 后重跑并覆盖截图。
+- 首次 `pnpm.cmd --filter @reader/desktop tauri:build` 前端构建通过，但 release `ebook-reader-desktop.exe` 被旧运行进程 PID 4612 锁定；结束该生成产物进程后重跑通过。
+
 ## 2026-06-20 大阶段 4：PDF 阅读器
 
 ### 阶段 4.1：PDF.js 接入

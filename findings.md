@@ -88,6 +88,12 @@
 - 阶段 4.5 PDF 风险：扫描版/图片型 PDF 没有文本层，旋转或裁剪页面需要坐标转换测试；跨页选择应拆成多页 rects，MVP 可先交付单页选择和跨页只读回放。
 - 阶段 4 E2E PDF fixture 使用 Playwright 页面上下文运行时生成最小 PDF Blob，不提交二进制样本；测试覆盖 canvas 非空、页码跳转、双页、适合宽度和返回书架。
 - 阶段 4 E2E 发现 PDF reader 卸载时 ResizeObserver 可能在 adapter close 后触发；修正为先清空 adapter ref 再 close，并对 resize callback 加错误保护。
+- 阶段 3/4 体验统一调整确认：EPUB 页码输入继续使用阶段 3.x 的全书合成 locations 页码，不接入 EPUB 原生 page-list；输入页码通过 `(page - 1) / (totalPages - 1)` 换算为 `goToProgress`。
+- 阶段 3/4 体验统一调整确认：PDF 进度条按页粒度工作，`progression` 使用 `Math.round(progression * (totalPages - 1)) + 1` 反推 1-based 页码；拖动只预览页码/目录，释放后才提交跳转。
+- 阶段 3/4 体验统一调整确认：EPUB/PDF 页码输入都放入进度 meta 行，避免为 EPUB 额外增加一整行控件；PDF 缩放控件继续作为 PDF 专有紧凑行保留。
+- 阶段 3/4 体验统一调整确认：非 Focus 模式底部空白主要来自 reader viewport 底部 padding、正文框与控件 gap、控件内部 padding 和 PDF stage 固定 min-height；本轮只压缩普通模式，Focus 专属规则保持既有行为。
+- 阶段 3/4 视觉验证：Browser 插件可检查本地书架首屏并确认无 console warning/error，但其只读 evaluate 环境没有 `localStorage`，无法注入 EPUB/PDF fixture；阅读器视觉状态改用项目 Playwright 生成无版权 EPUB/PDF Blob。
+- 阶段 3/4 视觉验证结果：EPUB/PDF 桌面和 375x760 视口均无正文/控制区重叠，frame-to-controls gap 为 8px，底部 gap 为 27-28px；PDF canvas 非空，EPUB iframe 存在且 slider/页码输入在 locations ready 后启用。
 
 ## 技术决策
 

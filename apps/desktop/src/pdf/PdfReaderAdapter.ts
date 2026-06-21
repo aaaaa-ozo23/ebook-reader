@@ -5,11 +5,7 @@ import type {
   SearchHit,
   TocItem,
 } from "@reader/core";
-import type {
-  PDFDocumentLoadingTask,
-  PDFDocumentProxy,
-  RenderTask,
-} from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
@@ -104,7 +100,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
     this.loadingTask = loadingTask;
     this.document = document;
-    this.currentPage = normalizePdfPage(this.initialLocator?.page ?? 1, document.numPages);
+    this.currentPage = normalizePdfPage(
+      this.initialLocator?.page ?? 1,
+      document.numPages,
+    );
     this.scale = normalizePdfScale(this.initialLocator?.scale ?? PDF_DEFAULT_SCALE);
     this.renderedMode = this.resolveRenderedMode(this.viewMode);
     this.reportPosition();
@@ -126,7 +125,11 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     const outline = await document.getOutline();
 
     if (outline !== null && outline.length > 0) {
-      const outlineItems = await pdfOutlineToTocItems(outline, document, document.numPages);
+      const outlineItems = await pdfOutlineToTocItems(
+        outline,
+        document,
+        document.numPages,
+      );
 
       if (outlineItems.length > 0) {
         return outlineItems;
@@ -178,6 +181,19 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     this.reportPosition();
   }
 
+  previewProgress(progression: number): PdfPosition {
+    const document = this.requireDocument();
+    const page = progressToPdfPage(progression, document.numPages);
+
+    return this.createPosition(page);
+  }
+
+  async goToProgress(progression: number): Promise<void> {
+    const document = this.requireDocument();
+    this.currentPage = progressToPdfPage(progression, document.numPages);
+    this.reportPosition();
+  }
+
   setZoom(scale: number): PdfPosition {
     this.scale = normalizePdfScale(scale);
     this.reportPosition();
@@ -186,7 +202,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   }
 
   async fitWidth(width: number, pageNumber = this.currentPage): Promise<PdfPosition> {
-    const page = await this.requireDocument().getPage(normalizePdfPage(pageNumber, this.totalPages));
+    const page = await this.requireDocument().getPage(
+      normalizePdfPage(pageNumber, this.totalPages),
+    );
     const viewport = page.getViewport({ scale: 1 });
     this.scale = normalizePdfScale(width / Math.max(viewport.width, 1));
     this.reportPosition("fit-width");
@@ -204,22 +222,31 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
   getPosition(zoomMode: "fit-width" | "custom" = "custom"): PdfPosition {
     const document = this.requireDocument();
-    const totalPages = document.numPages;
-    const page = normalizePdfPage(this.currentPage, totalPages);
+    const page = normalizePdfPage(this.currentPage, document.numPages);
+
+    return this.createPosition(page, zoomMode);
+  }
+
+  private createPosition(
+    page: number,
+    zoomMode: "fit-width" | "custom" = "custom",
+  ): PdfPosition {
+    const totalPages = this.requireDocument().numPages;
+    const normalizedPage = normalizePdfPage(page, totalPages);
     const scale = normalizePdfScale(this.scale);
 
     return {
       locator: {
         kind: "pdf",
-        page,
+        page: normalizedPage,
         scale,
         zoomMode,
       },
-      page,
+      page: normalizedPage,
       totalPages,
       scale,
       zoomMode,
-      progression: pageToProgress(page, totalPages),
+      progression: pageToProgress(normalizedPage, totalPages),
       viewMode: this.viewMode,
       renderedMode: this.renderedMode,
     };
@@ -243,7 +270,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     scale = this.scale,
   ): Promise<PdfPageRenderResult> {
     const document = this.requireDocument();
-    const page = await document.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const page = await document.getPage(
+      normalizePdfPage(pageNumber, document.numPages),
+    );
     const renderScale = normalizePdfScale(scale);
     const outputScale = getOutputScale();
     const viewport = page.getViewport({ scale: renderScale });
@@ -325,7 +354,10 @@ async function loadPdfjs(): Promise<PdfjsModule> {
 }
 
 function getPdfjsAssetUrl(directory: "cmaps" | "standard_fonts"): string {
-  return new URL(`${import.meta.env.BASE_URL}pdfjs/${directory}/`, window.location.href).toString();
+  return new URL(
+    `${import.meta.env.BASE_URL}pdfjs/${directory}/`,
+    window.location.href,
+  ).toString();
 }
 
 export function normalizePdfPage(page: number, totalPages: number): number {
@@ -350,6 +382,21 @@ export function pageToProgress(page: number, totalPages: number): number {
   }
 
   return (normalizePdfPage(page, totalPages) - 1) / (totalPages - 1);
+}
+
+export function progressToPdfPage(progression: number, totalPages: number): number {
+  const normalizedTotalPages = Number.isFinite(totalPages)
+    ? Math.max(1, Math.floor(totalPages))
+    : 1;
+
+  if (normalizedTotalPages <= 1 || !Number.isFinite(progression)) {
+    return 1;
+  }
+
+  const clampedProgression = Math.min(1, Math.max(0, progression));
+  const page = Math.round(clampedProgression * (normalizedTotalPages - 1)) + 1;
+
+  return normalizePdfPage(page, normalizedTotalPages);
 }
 
 async function pdfOutlineToTocItems(

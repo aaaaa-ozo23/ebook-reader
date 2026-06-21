@@ -13,7 +13,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { EpubReaderAdapter, type EpubPosition } from "./epub/EpubReaderAdapter";
 import { PdfReaderAdapter, type PdfPosition } from "./pdf/PdfReaderAdapter";
-import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
+import {
+  importBook,
+  listBooks,
+  markBookOpened,
+  pickBookFile,
+  removeBook,
+} from "./tauri/library";
 import {
   getEpubBookSource,
   getPdfBookSource,
@@ -118,6 +124,11 @@ const pdfAdapterGoToMock = vi.hoisted(() =>
     void locator;
   }),
 );
+const pdfAdapterGoToProgressMock = vi.hoisted(() =>
+  vi.fn(async (progression: number) => {
+    void progression;
+  }),
+);
 const pdfAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
 const pdfAdapterOpenMock = vi.hoisted(() =>
   vi.fn(async (bookId: string) => {
@@ -125,6 +136,11 @@ const pdfAdapterOpenMock = vi.hoisted(() =>
   }),
 );
 const pdfAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
+const pdfAdapterPreviewProgressMock = vi.hoisted(() =>
+  vi.fn((progression: number) => {
+    void progression;
+  }),
+);
 const pdfAdapterRenderPageMock = vi.hoisted(() =>
   vi.fn(async (canvas: HTMLCanvasElement, pageNumber: number) => {
     canvas.width = 600;
@@ -198,18 +214,23 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
     let renderedMode: "single" | "double" = "single";
     let zoomMode: "fit-width" | "custom" = options.initialLocator?.zoomMode ?? "custom";
     const totalPages = 3;
-    const createPosition = (): PdfPosition => ({
+    const clampPage = (nextPage: number) => Math.min(Math.max(nextPage, 1), totalPages);
+    const pageFromProgress = (progression: number) =>
+      clampPage(
+        Math.round(Math.min(Math.max(progression, 0), 1) * (totalPages - 1)) + 1,
+      );
+    const createPosition = (positionPage = page): PdfPosition => ({
       locator: {
         kind: "pdf",
-        page,
+        page: clampPage(positionPage),
         scale,
         zoomMode,
       },
-      page,
+      page: clampPage(positionPage),
       totalPages,
       scale,
       zoomMode,
-      progression: (page - 1) / (totalPages - 1),
+      progression: (clampPage(positionPage) - 1) / (totalPages - 1),
       viewMode,
       renderedMode,
     });
@@ -237,14 +258,20 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
       },
       goTo: async (locator: PdfLocator) => {
         await pdfAdapterGoToMock(locator);
-        page = Math.min(Math.max(locator.page, 1), totalPages);
+        page = clampPage(locator.page);
         scale = locator.scale ?? scale;
         zoomMode = locator.zoomMode ?? "custom";
         reportPosition();
       },
+      goToProgress: async (progression: number) => {
+        await pdfAdapterGoToProgressMock(progression);
+        page = pageFromProgress(progression);
+        zoomMode = "custom";
+        reportPosition();
+      },
       next: async () => {
         await pdfAdapterNextMock();
-        page = Math.min(page + (renderedMode === "double" ? 2 : 1), totalPages);
+        page = clampPage(page + (renderedMode === "double" ? 2 : 1));
         zoomMode = "custom";
         reportPosition();
       },
@@ -254,16 +281,24 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
       },
       previous: async () => {
         await pdfAdapterPreviousMock();
-        page = Math.max(page - (renderedMode === "double" ? 2 : 1), 1);
+        page = clampPage(page - (renderedMode === "double" ? 2 : 1));
         zoomMode = "custom";
         reportPosition();
       },
+      previewProgress: (progression: number) => {
+        pdfAdapterPreviewProgressMock(progression);
+        return createPosition(pageFromProgress(progression));
+      },
       renderPage: pdfAdapterRenderPageMock,
       setTheme: pdfAdapterSetThemeMock,
-      setViewMode: (mode: "single" | "double" | "continuous", availableWidth?: number) => {
+      setViewMode: (
+        mode: "single" | "double" | "continuous",
+        availableWidth?: number,
+      ) => {
         pdfAdapterSetViewModeMock(mode, availableWidth);
         viewMode = mode;
-        renderedMode = mode === "double" && (availableWidth ?? 1000) >= 920 ? "double" : "single";
+        renderedMode =
+          mode === "double" && (availableWidth ?? 1000) >= 920 ? "double" : "single";
         reportPosition();
 
         return createPosition();
@@ -312,9 +347,11 @@ describe("App", () => {
     pdfAdapterFitWidthMock.mockClear();
     pdfAdapterGetTocMock.mockClear();
     pdfAdapterGoToMock.mockClear();
+    pdfAdapterGoToProgressMock.mockClear();
     pdfAdapterNextMock.mockClear();
     pdfAdapterOpenMock.mockClear();
     pdfAdapterPreviousMock.mockClear();
+    pdfAdapterPreviewProgressMock.mockClear();
     pdfAdapterRenderPageMock.mockClear();
     pdfAdapterSetThemeMock.mockClear();
     pdfAdapterSetViewModeMock.mockClear();
@@ -322,7 +359,11 @@ describe("App", () => {
     pdfAdapterVisiblePagesMock.mockClear();
     listBooksMock.mockResolvedValue([]);
     markBookOpenedMock.mockImplementation(async (bookId) =>
-      createBook({ id: bookId, format: "txt", lastOpenedAt: "2026-06-19T10:00:00.000Z" }),
+      createBook({
+        id: bookId,
+        format: "txt",
+        lastOpenedAt: "2026-06-19T10:00:00.000Z",
+      }),
     );
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
@@ -346,8 +387,12 @@ describe("App", () => {
   it("renders the bookshelf empty state", async () => {
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Your library is empty" })).toBeVisible();
-    expect(screen.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Your library is empty" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("main", { name: "Ebook Reader bookshelf" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import book" })).toBeEnabled();
     expect(screen.getByText("Sorted by Recent reading")).toBeInTheDocument();
     expect(screen.queryByText("Desktop shell initialized.")).not.toBeInTheDocument();
@@ -378,14 +423,25 @@ describe("App", () => {
     libraryLoad.resolve([firstBook, recentBook]);
 
     const cards = await screen.findAllByRole("article");
-    expect(within(cards[0]).getByRole("heading", { name: "Recent Field Notes" })).toBeVisible();
-    expect(within(cards[1]).getByRole("heading", { name: "Archive Notes" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(cards[0]).getByRole("heading", { name: "Recent Field Notes" }),
+    ).toBeVisible();
+    expect(
+      within(cards[1]).getByRole("heading", { name: "Archive Notes" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Grid" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 
   it("removes a book through the right-click actions menu after confirmation", async () => {
     const user = userEvent.setup();
-    const book = createBook({ id: "remove-book", title: "Remove Candidate", format: "txt" });
+    const book = createBook({
+      id: "remove-book",
+      title: "Remove Candidate",
+      format: "txt",
+    });
     listBooksMock.mockResolvedValueOnce([book]);
     removeBookMock.mockResolvedValueOnce({
       book,
@@ -398,30 +454,48 @@ describe("App", () => {
     fireEvent.contextMenu(card, { clientX: 40, clientY: 60 });
     await user.click(screen.getByRole("menuitem", { name: "Remove from shelf" }));
 
-    expect(await screen.findByRole("alertdialog", { name: "Remove from shelf?" })).toBeVisible();
-    expect(screen.getByText(/The original file you imported will not be deleted/)).toBeVisible();
+    expect(
+      await screen.findByRole("alertdialog", { name: "Remove from shelf?" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText(/The original file you imported will not be deleted/),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
 
     await waitFor(() => expect(removeBookMock).toHaveBeenCalledWith("remove-book"));
     await waitFor(() =>
-      expect(screen.queryByRole("article", { name: "Remove Candidate book" })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole("article", { name: "Remove Candidate book" }),
+      ).not.toBeInTheDocument(),
     );
     expect(await screen.findByText("Book removed")).toBeVisible();
-    expect(screen.getByText("Remove Candidate was removed from this shelf.")).toBeVisible();
+    expect(
+      screen.getByText("Remove Candidate was removed from this shelf."),
+    ).toBeVisible();
   });
 
   it("opens book actions from the visible more button", async () => {
     const user = userEvent.setup();
-    const book = createBook({ id: "menu-book", title: "Menu Candidate", format: "txt" });
+    const book = createBook({
+      id: "menu-book",
+      title: "Menu Candidate",
+      format: "txt",
+    });
     listBooksMock.mockResolvedValueOnce([book]);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Menu Candidate" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Menu Candidate" }),
+    ).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "More actions for Menu Candidate" }));
+    await user.click(
+      screen.getByRole("button", { name: "More actions for Menu Candidate" }),
+    );
 
-    expect(screen.getByRole("menu", { name: "Actions for Menu Candidate" })).toBeVisible();
+    expect(
+      screen.getByRole("menu", { name: "Actions for Menu Candidate" }),
+    ).toBeVisible();
     expect(screen.getByRole("menuitem", { name: "Remove from shelf" })).toBeVisible();
   });
 
@@ -456,7 +530,9 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Importing..." })).toBeDisabled();
     importRequest.resolve(importResult);
 
-    expect(await screen.findByRole("heading", { name: "Imported Handbook" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Imported Handbook" }),
+    ).toBeVisible();
     expect(screen.getByText("Import complete")).toBeVisible();
     expect(screen.getByText("Imported Imported Handbook.")).toBeInTheDocument();
     expect(importBookMock).toHaveBeenCalledWith("D:\\books\\imported-handbook.epub");
@@ -467,15 +543,21 @@ describe("App", () => {
     const duplicateBook = createBook({ id: "same-book", title: "Existing Manual" });
     listBooksMock.mockResolvedValueOnce([duplicateBook]);
     pickBookFileMock.mockResolvedValueOnce("D:\\books\\existing-manual.pdf");
-    importBookMock.mockResolvedValueOnce(createImportResult("duplicate", duplicateBook));
+    importBookMock.mockResolvedValueOnce(
+      createImportResult("duplicate", duplicateBook),
+    );
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Existing Manual" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Existing Manual" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Import book" }));
 
     expect(await screen.findByText("Already in library")).toBeVisible();
-    expect(screen.getByText("Existing Manual is already on this shelf.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Existing Manual is already on this shelf."),
+    ).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(1);
   });
 
@@ -489,7 +571,9 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Import book" }));
 
-    await waitFor(() => expect(importBookMock).toHaveBeenCalledWith("D:\\books\\notes.md"));
+    await waitFor(() =>
+      expect(importBookMock).toHaveBeenCalledWith("D:\\books\\notes.md"),
+    );
     expect(await screen.findByRole("alert")).toHaveTextContent("Import failed");
     expect(screen.getByText("unsupported book format")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
@@ -519,13 +603,19 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Back to shelf" }));
 
-    expect(await screen.findByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+    expect(
+      await screen.findByRole("main", { name: "Ebook Reader bookshelf" }),
+    ).toBeVisible();
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
   });
 
   it("opens an EPUB book in the reader shell", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "epub-book", title: "Layout Notes", format: "epub" });
+    const epubBook = createBook({
+      id: "epub-book",
+      title: "Layout Notes",
+      format: "epub",
+    });
     const openedBook = {
       ...epubBook,
       lastOpenedAt: "2026-06-20T10:00:00.000Z",
@@ -548,7 +638,11 @@ describe("App", () => {
 
   it("shows EPUB navigation below the page and enables progress after locations are ready", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "epub-controls", title: "Controls EPUB", format: "epub" });
+    const epubBook = createBook({
+      id: "epub-controls",
+      title: "Controls EPUB",
+      format: "epub",
+    });
     listBooksMock.mockResolvedValueOnce([epubBook]);
     markBookOpenedMock.mockResolvedValueOnce(epubBook);
 
@@ -558,14 +652,20 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     const reader = await screen.findByRole("main", { name: "EPUB reader" });
     const slider = await screen.findByRole("slider", { name: "EPUB reading progress" });
+    const pageInput = await screen.findByRole("spinbutton", {
+      name: "EPUB page number",
+    });
     expect(slider).toBeDisabled();
+    expect(pageInput).toBeDisabled();
     expect(screen.getAllByText("Calculating pages").length).toBeGreaterThan(0);
 
     const frame = reader.querySelector(".reader-epub-frame");
     const controls = reader.querySelector(".reader-epub-controls");
     expect(frame).not.toBeNull();
     expect(controls).not.toBeNull();
-    expect(frame?.compareDocumentPosition(controls as Node)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(frame?.compareDocumentPosition(controls as Node)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
 
     const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
       | {
@@ -586,8 +686,23 @@ describe("App", () => {
     );
 
     await waitFor(() => expect(slider).toBeEnabled());
+    await waitFor(() => expect(pageInput).toBeEnabled());
     expect(screen.getAllByText("Page 36 / 100").length).toBeGreaterThan(0);
     expect(screen.getByText("36%")).toBeVisible();
+    expect(pageInput).toHaveValue(36);
+
+    fireEvent.change(pageInput, {
+      target: {
+        value: "42",
+      },
+    });
+    fireEvent.keyDown(pageInput, {
+      key: "Enter",
+    });
+
+    await waitFor(() =>
+      expect(epubAdapterGoToProgressMock).toHaveBeenCalledWith(41 / 99),
+    );
 
     await user.click(within(reader).getByRole("button", { name: "Previous" }));
     await user.click(within(reader).getByRole("button", { name: "Next" }));
@@ -598,7 +713,11 @@ describe("App", () => {
 
   it("previews EPUB progress while dragging and commits one jump on release", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "epub-progress", title: "Slider EPUB", format: "epub" });
+    const epubBook = createBook({
+      id: "epub-progress",
+      title: "Slider EPUB",
+      format: "epub",
+    });
     listBooksMock.mockResolvedValueOnce([epubBook]);
     markBookOpenedMock.mockResolvedValueOnce(epubBook);
 
@@ -650,7 +769,11 @@ describe("App", () => {
 
   it("toggles EPUB single and double page view through the adapter", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "epub-spread", title: "Spread EPUB", format: "epub" });
+    const epubBook = createBook({
+      id: "epub-spread",
+      title: "Spread EPUB",
+      format: "epub",
+    });
     listBooksMock.mockResolvedValueOnce([epubBook]);
     markBookOpenedMock.mockResolvedValueOnce(epubBook);
 
@@ -677,7 +800,11 @@ describe("App", () => {
 
   it("opens a PDF book in the reader shell", async () => {
     const user = userEvent.setup();
-    const pdfBook = createBook({ id: "pdf-book", title: "Layout Notes PDF", format: "pdf" });
+    const pdfBook = createBook({
+      id: "pdf-book",
+      title: "Layout Notes PDF",
+      format: "pdf",
+    });
     const openedBook = {
       ...pdfBook,
       lastOpenedAt: "2026-06-20T10:00:00.000Z",
@@ -686,7 +813,9 @@ describe("App", () => {
     markBookOpenedMock.mockResolvedValueOnce(openedBook);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Layout Notes PDF" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Layout Notes PDF" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -700,7 +829,11 @@ describe("App", () => {
 
   it("drives PDF page, spread, and zoom controls through the adapter", async () => {
     const user = userEvent.setup();
-    const pdfBook = createBook({ id: "pdf-controls", title: "Controls PDF", format: "pdf" });
+    const pdfBook = createBook({
+      id: "pdf-controls",
+      title: "Controls PDF",
+      format: "pdf",
+    });
     listBooksMock.mockResolvedValueOnce([pdfBook]);
     markBookOpenedMock.mockResolvedValueOnce(pdfBook);
 
@@ -726,7 +859,12 @@ describe("App", () => {
     expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByText("Page 3 / 3")).toBeVisible());
 
-    const pageInput = within(reader).getByRole("spinbutton", { name: "PDF page number" });
+    const pageInput = within(reader).getByRole("spinbutton", {
+      name: "PDF page number",
+    });
+    const progressSlider = within(reader).getByRole("slider", {
+      name: "PDF reading progress",
+    });
     fireEvent.change(pageInput, {
       target: {
         value: "2",
@@ -743,6 +881,24 @@ describe("App", () => {
         }),
       ),
     );
+    await waitFor(() => expect(screen.getByText("Pages 2-3 / 3")).toBeVisible());
+    expect(progressSlider).toHaveValue("500");
+
+    fireEvent.pointerDown(progressSlider);
+    fireEvent.change(progressSlider, {
+      target: {
+        value: "1000",
+      },
+    });
+
+    expect(pdfAdapterPreviewProgressMock).toHaveBeenCalledWith(1);
+    expect(pdfAdapterGoToProgressMock).not.toHaveBeenCalled();
+    expect(pageInput).toHaveValue(3);
+    expect(screen.getByText("Page 3 / 3")).toBeVisible();
+
+    fireEvent.pointerUp(progressSlider);
+
+    await waitFor(() => expect(pdfAdapterGoToProgressMock).toHaveBeenCalledWith(1));
 
     await user.click(within(reader).getByRole("button", { name: "+" }));
     expect(pdfAdapterSetZoomMock.mock.calls.at(-1)?.[0]).toBeCloseTo(1.1, 3);
@@ -754,7 +910,11 @@ describe("App", () => {
 
   it("restores saved PDF progress and saves current PDF locators", async () => {
     const user = userEvent.setup();
-    const pdfBook = createBook({ id: "progress-pdf", title: "Progress PDF", format: "pdf" });
+    const pdfBook = createBook({
+      id: "progress-pdf",
+      title: "Progress PDF",
+      format: "pdf",
+    });
     const savedLocator: PdfLocator = {
       kind: "pdf",
       page: 2,
@@ -775,7 +935,9 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     const reader = await screen.findByRole("main", { name: "PDF reader" });
-    await waitFor(() => expect(pdfAdapterOpenMock).toHaveBeenCalledWith("progress-pdf"));
+    await waitFor(() =>
+      expect(pdfAdapterOpenMock).toHaveBeenCalledWith("progress-pdf"),
+    );
 
     const adapterOptions = PdfReaderAdapterMock.mock.calls[0]?.[0] as
       | {
@@ -802,7 +964,11 @@ describe("App", () => {
 
   it("shows TXT reader errors inside the reader shell", async () => {
     const user = userEvent.setup();
-    const txtBook = createBook({ id: "broken-txt", title: "Broken TXT", format: "txt" });
+    const txtBook = createBook({
+      id: "broken-txt",
+      title: "Broken TXT",
+      format: "txt",
+    });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockRejectedValueOnce(new Error("failed to decode TXT file"));
@@ -813,7 +979,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Book could not be opened");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Book could not be opened",
+    );
     expect(screen.getByText("failed to decode TXT file")).toBeInTheDocument();
   });
 
@@ -846,7 +1014,11 @@ describe("App", () => {
 
   it("updates EPUB themes through the adapter without reopening the book", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "theme-epub", title: "Theme EPUB", format: "epub" });
+    const epubBook = createBook({
+      id: "theme-epub",
+      title: "Theme EPUB",
+      format: "epub",
+    });
     const openedBook = {
       ...epubBook,
       lastOpenedAt: "2026-06-20T10:00:00.000Z",
@@ -884,7 +1056,11 @@ describe("App", () => {
 
   it("restores saved TXT progress and saves table-of-contents jumps", async () => {
     const user = userEvent.setup();
-    const txtBook = createBook({ id: "progress-txt", title: "Progress TXT", format: "txt" });
+    const txtBook = createBook({
+      id: "progress-txt",
+      title: "Progress TXT",
+      format: "txt",
+    });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
@@ -928,7 +1104,11 @@ describe("App", () => {
 
   it("restores saved EPUB progress and saves relocated locators", async () => {
     const user = userEvent.setup();
-    const epubBook = createBook({ id: "progress-epub", title: "Progress EPUB", format: "epub" });
+    const epubBook = createBook({
+      id: "progress-epub",
+      title: "Progress EPUB",
+      format: "epub",
+    });
     const openedBook = {
       ...epubBook,
       lastOpenedAt: "2026-06-20T10:00:00.000Z",
@@ -959,7 +1139,9 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     const reader = await screen.findByRole("main", { name: "EPUB reader" });
-    await waitFor(() => expect(epubAdapterOpenMock).toHaveBeenCalledWith("progress-epub"));
+    await waitFor(() =>
+      expect(epubAdapterOpenMock).toHaveBeenCalledWith("progress-epub"),
+    );
 
     const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
       | {
@@ -977,7 +1159,9 @@ describe("App", () => {
         progression: 0.75,
       }),
     );
-    await waitFor(() => expect(screen.getAllByText("Page 75 / 100").length).toBeGreaterThan(0));
+    await waitFor(() =>
+      expect(screen.getAllByText("Page 75 / 100").length).toBeGreaterThan(0),
+    );
     expect(screen.getByText("75%")).toBeVisible();
 
     await user.click(within(reader).getByRole("button", { name: "Shelf" }));
@@ -993,7 +1177,11 @@ describe("App", () => {
 
   it("saves scroll progress after scroll idle instead of during every scroll event", async () => {
     const user = userEvent.setup();
-    const txtBook = createBook({ id: "scroll-txt", title: "Scroll TXT", format: "txt" });
+    const txtBook = createBook({
+      id: "scroll-txt",
+      title: "Scroll TXT",
+      format: "txt",
+    });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createLongTxtDocument(txtBook));
@@ -1049,7 +1237,10 @@ function createBook(overrides: Partial<Book> = {}): Book {
   };
 }
 
-function createImportResult(status: ImportBookResult["status"], book: Book): ImportBookResult {
+function createImportResult(
+  status: ImportBookResult["status"],
+  book: Book,
+): ImportBookResult {
   return { status, book };
 }
 
@@ -1082,8 +1273,14 @@ function createTxtDocument(book: Book): TxtDocument {
 }
 
 function createLongTxtDocument(book: Book): TxtDocument {
-  const firstParagraphs = Array.from({ length: 80 }, (_, index) => `第一章第 ${index + 1} 段。`);
-  const secondParagraphs = Array.from({ length: 80 }, (_, index) => `第二章第 ${index + 1} 段。`);
+  const firstParagraphs = Array.from(
+    { length: 80 },
+    (_, index) => `第一章第 ${index + 1} 段。`,
+  );
+  const secondParagraphs = Array.from(
+    { length: 80 },
+    (_, index) => `第二章第 ${index + 1} 段。`,
+  );
   const firstText = ["第一章 初见", ...firstParagraphs].join("\n");
   const secondText = ["第二章 风起", ...secondParagraphs].join("\n");
   const text = `${firstText}\n${secondText}`;
