@@ -685,6 +685,14 @@ button:disabled {
   padding-right: 2px;
 }
 
+.reader-notes {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
 .reader-bookmark {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -718,6 +726,96 @@ button:disabled {
 
 .reader-bookmark__delete {
   padding: 0 8px;
+}
+
+.reader-note {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(247, 242, 232, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 9px;
+}
+
+.reader-note__header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.reader-note__swatch {
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(247, 242, 232, 0.52);
+  border-radius: 999px;
+  background: var(--reader-highlight-color, #f3bc55);
+  margin-top: 4px;
+}
+
+.reader-note__jump {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  padding: 0;
+  text-align: left;
+}
+
+.reader-note__jump span,
+.reader-note__jump small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reader-note__jump span {
+  white-space: nowrap;
+  font-weight: 800;
+}
+
+.reader-note__jump small {
+  margin-top: 2px;
+  color: rgba(247, 242, 232, 0.62);
+  font-size: 0.72rem;
+}
+
+.reader-note__field {
+  display: grid;
+  gap: 5px;
+  color: rgba(247, 242, 232, 0.72);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.reader-note__field textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid rgba(247, 242, 232, 0.16);
+  border-radius: 8px;
+  background: rgba(12, 18, 20, 0.42);
+  color: #f7f2e8;
+  padding: 8px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.reader-note__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.reader-note__actions button {
+  min-height: 30px;
+  border: 1px solid rgba(247, 242, 232, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #f7f2e8;
+  padding: 0 9px;
+  font-weight: 800;
 }
 
 .reader-toc {

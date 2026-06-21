@@ -30,6 +30,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   createAnnotation,
   createBookmark,
+  deleteAnnotation,
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
@@ -40,6 +41,7 @@ import {
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
+  updateAnnotation,
 } from "../tauri/reader";
 import {
   EpubReaderAdapter,
@@ -610,6 +612,57 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       });
   }, []);
 
+  const handleJumpToAnnotation = useCallback(
+    (annotation: Annotation) => {
+      handleJumpToLocator(annotation.locator);
+      setSidebarTab("notes");
+    },
+    [handleJumpToLocator],
+  );
+
+  const handleUpdateAnnotationNote = useCallback(
+    (annotationId: string, note: string) => {
+      const annotation = annotations.find(
+        (currentAnnotation) => currentAnnotation.id === annotationId,
+      );
+
+      if (annotation === undefined) {
+        return;
+      }
+
+      setAnnotationError(null);
+
+      void updateAnnotation(annotationId, annotation.color, note)
+        .then((updatedAnnotation) => {
+          setAnnotations((currentAnnotations) =>
+            currentAnnotations.map((currentAnnotation) =>
+              currentAnnotation.id === annotationId
+                ? updatedAnnotation
+                : currentAnnotation,
+            ),
+          );
+        })
+        .catch((annotationUpdateError: unknown) => {
+          setAnnotationError(getErrorMessage(annotationUpdateError));
+        });
+    },
+    [annotations],
+  );
+
+  const handleDeleteAnnotation = useCallback((annotationId: string) => {
+    setAnnotationError(null);
+
+    void deleteAnnotation(annotationId)
+      .then(() => {
+        setAnnotations((currentAnnotations) =>
+          currentAnnotations.filter((annotation) => annotation.id !== annotationId),
+        );
+      })
+      .catch((annotationDeleteError: unknown) => {
+        setAnnotationError(getErrorMessage(annotationDeleteError));
+      });
+  }, []);
+
   const handleSelectionChange = useCallback(
     (snapshot: ReaderSelectionSnapshot | null) => {
       setSelectionSnapshot(snapshot);
@@ -664,8 +717,38 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   );
 
   const handlePendingNote = useCallback(() => {
+    const snapshot = selectionSnapshot;
+
+    if (snapshot === null) {
+      return;
+    }
+
+    setAnnotationError(null);
     setSelectionSnapshot(null);
-  }, []);
+
+    void createAnnotation(
+      book.id,
+      "note",
+      snapshot.locator,
+      DEFAULT_HIGHLIGHT_COLOR,
+      snapshot.selectedText,
+    )
+      .then((annotation) => {
+        setAnnotationsBookId(book.id);
+        setAnnotations((currentAnnotations) => [
+          annotation,
+          ...currentAnnotations.filter(
+            (currentAnnotation) => currentAnnotation.id !== annotation.id,
+          ),
+        ]);
+        setSidebarTab("notes");
+        setIsSidebarOpen(true);
+      })
+      .catch((annotationCreateError: unknown) => {
+        setAnnotationsBookId(book.id);
+        setAnnotationError(getErrorMessage(annotationCreateError));
+      });
+  }, [book.id, selectionSnapshot]);
 
   const readerStyle = useMemo(
     () =>
@@ -695,6 +778,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         activeTocItemId={activeTocItemId}
         activeTab={sidebarTab}
         annotationError={visibleAnnotationError}
+        annotations={visibleAnnotations}
         bookmarks={visibleBookmarks}
         bookmarkError={visibleBookmarkError}
         items={tocItems}
@@ -702,10 +786,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         label={`${formatBookFormat(book.format)} contents`}
         onBackToLibrary={onBackToLibrary}
         onCreateBookmark={handleCreateBookmark}
+        onDeleteAnnotation={handleDeleteAnnotation}
         onDeleteBookmark={handleDeleteBookmark}
+        onJumpToAnnotation={handleJumpToAnnotation}
         onJumpToBookmark={handleJumpToBookmark}
         onJumpToItem={handleJumpToTocItem}
         onTabChange={setSidebarTab}
+        onUpdateAnnotationNote={handleUpdateAnnotationNote}
       />
       <section className="reader-main">
         <header className="reader-topbar">
@@ -823,6 +910,7 @@ interface ReaderSidebarProps {
   activeTocItemId: string | null;
   activeTab: ReaderSidebarTab;
   annotationError: string | null;
+  annotations: Annotation[];
   bookmarks: Array<Bookmark<Locator>>;
   bookmarkError: string | null;
   items: TocItem[];
@@ -830,16 +918,20 @@ interface ReaderSidebarProps {
   label: string;
   onBackToLibrary: () => void;
   onCreateBookmark: () => void;
+  onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
+  onJumpToAnnotation: (annotation: Annotation) => void;
   onJumpToBookmark: (bookmark: Bookmark<Locator>) => void;
   onJumpToItem: (itemId: string) => void;
   onTabChange: (tab: ReaderSidebarTab) => void;
+  onUpdateAnnotationNote: (annotationId: string, note: string) => void;
 }
 
 function ReaderSidebar({
   activeTocItemId,
   activeTab,
   annotationError,
+  annotations,
   bookmarks,
   bookmarkError,
   items,
@@ -847,10 +939,13 @@ function ReaderSidebar({
   label,
   onBackToLibrary,
   onCreateBookmark,
+  onDeleteAnnotation,
   onDeleteBookmark,
+  onJumpToAnnotation,
   onJumpToBookmark,
   onJumpToItem,
   onTabChange,
+  onUpdateAnnotationNote,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
@@ -974,7 +1069,21 @@ function ReaderSidebar({
               {annotationError}
             </p>
           ) : null}
-          <p className="reader-sidebar__empty">No notes yet.</p>
+          {annotations.length === 0 ? (
+            <p className="reader-sidebar__empty">No notes yet.</p>
+          ) : (
+            <div className="reader-notes" role="list">
+              {annotations.map((annotation) => (
+                <ReaderNoteItem
+                  key={annotation.id}
+                  annotation={annotation}
+                  onDelete={onDeleteAnnotation}
+                  onJump={onJumpToAnnotation}
+                  onSave={onUpdateAnnotationNote}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : null}
       {activeTab === "search" ? (
@@ -984,6 +1093,69 @@ function ReaderSidebar({
         </section>
       ) : null}
     </aside>
+  );
+}
+
+interface ReaderNoteItemProps {
+  annotation: Annotation;
+  onDelete: (annotationId: string) => void;
+  onJump: (annotation: Annotation) => void;
+  onSave: (annotationId: string, note: string) => void;
+}
+
+function ReaderNoteItem({
+  annotation,
+  onDelete,
+  onJump,
+  onSave,
+}: ReaderNoteItemProps) {
+  const [draft, setDraft] = useState(annotation.note ?? "");
+  const excerpt =
+    annotation.selectedText ??
+    annotation.locator.selectedText ??
+    getLocatorLabel(annotation.locator);
+  const noteLabel = `${annotation.type === "note" ? "Note" : "Highlight"} ${excerpt}`;
+
+  return (
+    <article className="reader-note" role="listitem">
+      <div className="reader-note__header">
+        <span
+          className="reader-note__swatch"
+          style={
+            {
+              "--reader-highlight-color":
+                annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+            } as CSSProperties
+          }
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          className="reader-note__jump"
+          aria-label={`Go to ${noteLabel}`}
+          onClick={() => onJump(annotation)}
+        >
+          <span>{excerpt}</span>
+          <small>{formatAnnotationTimestamp(annotation.updatedAt)}</small>
+        </button>
+      </div>
+      <label className="reader-note__field">
+        <span>Note</span>
+        <textarea
+          aria-label={`Note text for ${excerpt}`}
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+        />
+      </label>
+      <div className="reader-note__actions">
+        <button type="button" onClick={() => onSave(annotation.id, draft)}>
+          Save
+        </button>
+        <button type="button" onClick={() => onDelete(annotation.id)}>
+          Delete
+        </button>
+      </div>
+    </article>
   );
 }
 
@@ -2976,6 +3148,21 @@ function getLocatorLabel(locator: Locator): string {
   }
 
   return `Page ${locator.page}`;
+}
+
+function formatAnnotationTimestamp(value: string): string {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function renderHighlightedText(

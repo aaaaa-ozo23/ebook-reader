@@ -4,7 +4,7 @@
 
 ### 状态
 - **当前状态：** in_progress
-- **当前分支：** `codex/stage5-highlights`
+- **当前分支：** `codex/stage5-notes`
 
 ### 执行的操作
 - 读取 `task_plan.md`、`progress.md`、`findings.md` 并运行 session catchup；确认上一轮只有大阶段 5 计划与本轮启动上下文未同步。
@@ -111,6 +111,31 @@
 - 遇到的问题：
   - 首次高亮创建测试断言多写了可选 `note` 参数；实际调用省略该参数，已修正测试。
   - 首次 lint 报 PDF annotations effect 同步调用会 setState 的渲染回调；改为 `requestAnimationFrame` 调度重算 overlay 后通过。
+
+### 阶段 5.4：想法/笔记
+- **状态：** complete
+- **分支：** `codex/stage5-notes`
+- 执行的操作：
+  - 将 `SelectionMenu` 的 `Note` 动作接入 `createAnnotation(type="note")`，创建后自动打开侧栏 `Notes` tab。
+  - 将侧栏 `Notes` 从占位空状态扩展为当前书 annotations 列表，展示摘录、颜色、更新时间和 note 文本框。
+  - 支持对高亮或 note 记录追加/编辑 note，保存时调用 `updateAnnotation`。
+  - 支持删除 annotation，删除后从本地列表移除；后端软删除逻辑沿用 5.3。
+  - 支持从 Notes 列表跳回 TXT/EPUB/PDF 原文 locator。
+  - 增加 Notes 面板样式，复用现有侧栏风格。
+  - 扩展 Vitest 覆盖从 EPUB selection 创建 note、TXT Notes 面板编辑/跳转/删除。
+- 创建/修改的文件：
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts` 通过，38 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - Notes item 初版曾考虑用 effect 同步 textarea draft；为避免 `react-hooks/set-state-in-effect` 类问题，改为本地 draft 初始化后由用户输入和保存结果自然保持一致。
 
 ## 2026-06-21 大阶段 3/4：阅读体验统一调整
 

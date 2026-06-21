@@ -110,6 +110,8 @@
 - 阶段 5.3 EPUB 高亮重放口径：打开书籍后按 annotation CFI 调用 `rendition.annotations.highlight`，颜色由 annotation `color` 提供；删除/更新时用 CFI 集合差异移除旧高亮。
 - 阶段 5.3 PDF 高亮重放口径：保存 PDF 坐标系 rect，重放时用当前缩放下 `PageViewport.convertToViewportRectangle()` 计算 overlay；扫描版 PDF 无 text layer 时不会产生新高亮。
 - 阶段 5.3 UI 确认：selection menu 保留 `Highlight` 默认黄色按钮，并提供黄/绿/蓝/粉色 swatch；EPUB/PDF/TXT 共享创建入口，PDF 保留缩放控件不变。
+- 阶段 5.4 Notes 面板确认：不新增 notes 表；`annotations.note` 直接承载用户想法，`type="note"` 表达从选区直接创建的想法记录，`type="highlight"` 也可通过同一面板追加 note。
+- 阶段 5.4 Notes 跳转确认：列表跳转复用 ReaderShell 的 locator 跳转入口，因此 TXT 会同步保存阅读进度，EPUB/PDF 交给各自 adapter goTo；删除 annotation 后高亮重放会通过前端 state 立即消失。
 
 ## 技术决策
 

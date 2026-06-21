@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 5：书签、高亮、想法与检索正在实施。5.1 书签能力、5.2 选中菜单和 5.3 高亮保存已完成；下一步进入 5.4 `codex/stage5-notes`，补齐想法/笔记的创建、浏览、编辑、删除和跳转。
+大阶段 5：书签、高亮、想法与检索正在实施。5.1 书签能力、5.2 选中菜单、5.3 高亮保存和 5.4 想法/笔记已完成；下一步进入 5.5 `codex/stage5-search-basic`，补齐三格式基础检索与跳转。
 
 ## 分支策略
 
@@ -236,7 +236,7 @@
 | 5.1 书签能力 | `codex/stage5-bookmarks` | complete | `pnpm.cmd --filter @reader/core build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，24 tests；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx`，32 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.2 选中菜单 | `codex/stage5-selection-menu` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，33 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.3 高亮保存 | `codex/stage5-highlights` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，36 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
-| 5.4 想法/笔记 | `codex/stage5-notes` | pending | 待验证 |
+| 5.4 想法/笔记 | `codex/stage5-notes` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，38 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.5 搜索基础 | `codex/stage5-search-basic` | pending | 待验证 |
 
 ## 大阶段 6：阅读体验完善与可访问性
