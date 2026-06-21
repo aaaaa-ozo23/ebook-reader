@@ -375,6 +375,36 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       .filter((rect) => rect.width > 0 && rect.height > 0);
   }
 
+  async pdfRectsToViewportRects(
+    pageNumber: number,
+    rects: NonNullable<PdfLocator["rects"]>,
+    scale = this.scale,
+  ): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
+    const document = this.requireDocument();
+    const page = await document.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const viewport = page.getViewport({ scale: normalizePdfScale(scale) });
+
+    return rects
+      .map((rect) => {
+        const viewportRect = viewport.convertToViewportRectangle([
+          rect.x,
+          rect.y,
+          rect.x + rect.width,
+          rect.y + rect.height,
+        ]);
+        const x = Math.min(viewportRect[0], viewportRect[2]);
+        const y = Math.min(viewportRect[1], viewportRect[3]);
+
+        return {
+          x,
+          y,
+          width: Math.abs(viewportRect[2] - viewportRect[0]),
+          height: Math.abs(viewportRect[3] - viewportRect[1]),
+        };
+      })
+      .filter((rect) => rect.width > 0 && rect.height > 0);
+  }
+
   private get totalPages(): number {
     return this.requireDocument().numPages;
   }
