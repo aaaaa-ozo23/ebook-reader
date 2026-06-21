@@ -15,8 +15,13 @@ function collectConsoleIssues(page: Page): string[] {
   return issues;
 }
 
-async function readEpubPageState(page: Page): Promise<{ currentPage: number; totalPages: number }> {
-  const pageText = await page.getByText(/Page \d+ \/ \d+/).first().textContent();
+async function readEpubPageState(
+  page: Page,
+): Promise<{ currentPage: number; totalPages: number }> {
+  const pageText = await page
+    .getByText(/Page \d+ \/ \d+/)
+    .first()
+    .textContent();
   const match = pageText?.match(/Page\s+(\d+)\s+\/\s+(\d+)/);
 
   if (match === undefined || match === null) {
@@ -32,11 +37,15 @@ async function readEpubPageState(page: Page): Promise<{ currentPage: number; tot
 test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+  await expect(
+    page.getByRole("main", { name: "Ebook Reader bookshelf" }),
+  ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Ebook Reader" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Import book" })).toBeVisible();
   await expect(page.locator(".import-button__icon")).toHaveCount(1);
-  await expect(page.getByRole("heading", { name: "Your library is empty" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your library is empty" }),
+  ).toBeVisible();
   await expect(page.getByText("Sorted by Recent reading")).toBeVisible();
   await expect(page.getByText("Desktop shell initialized.")).toHaveCount(0);
 });
@@ -63,14 +72,20 @@ test("removes a seeded book through the right-click actions menu", async ({ page
   await expect(card).toBeVisible();
   await card.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Remove from shelf" }).click();
-  await expect(page.getByRole("alertdialog", { name: "Remove from shelf?" })).toBeVisible();
+  await expect(
+    page.getByRole("alertdialog", { name: "Remove from shelf?" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Remove" }).click();
 
   await expect(card).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Your library is empty" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your library is empty" }),
+  ).toBeVisible();
 });
 
-test("opens a seeded TXT reader without rendering the whole document", async ({ page }) => {
+test("opens a seeded TXT reader without rendering the whole document", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const book = {
       id: "e2e-long-txt",
@@ -105,7 +120,8 @@ test("opens a seeded TXT reader without rendering the whole document", async ({ 
       encoding: "UTF-8",
       byteLength: text.length * 2,
       charCount: text.length,
-      lineCount: firstParagraphs.length + secondParagraphs.length + thirdParagraphs.length + 3,
+      lineCount:
+        firstParagraphs.length + secondParagraphs.length + thirdParagraphs.length + 3,
       chapters: [
         {
           id: "chapter-1-0",
@@ -150,7 +166,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({ 
   await expect(page.getByRole("heading", { name: "第一章 长文本" })).toBeVisible();
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");
 
-  const renderedParagraphCount = await page.locator(".reader-virtual-row--paragraph").count();
+  const renderedParagraphCount = await page
+    .locator(".reader-virtual-row--paragraph")
+    .count();
   expect(renderedParagraphCount).toBeGreaterThan(0);
   expect(renderedParagraphCount).toBeLessThan(80);
 
@@ -182,10 +200,14 @@ test("opens a seeded TXT reader without rendering the whole document", async ({ 
   );
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
-  await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+  await expect(
+    page.getByRole("main", { name: "Ebook Reader bookshelf" }),
+  ).toBeVisible();
 });
 
-test("opens a generated EPUB reader and uses contents and theme controls", async ({ page }) => {
+test("opens a generated EPUB reader and uses contents and theme controls", async ({
+  page,
+}) => {
   const consoleIssues = collectConsoleIssues(page);
 
   await page.addInitScript(() => {
@@ -361,7 +383,9 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
         cursor += part.length;
       }
 
-      return URL.createObjectURL(new Blob([zipBytes], { type: "application/epub+zip" }));
+      return URL.createObjectURL(
+        new Blob([zipBytes], { type: "application/epub+zip" }),
+      );
     }
 
     window.localStorage.setItem("reader:fallback:books", JSON.stringify([book]));
@@ -384,10 +408,21 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
   const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
+  const epubPageInput = page.getByRole("spinbutton", { name: "EPUB page number" });
   await expect(progressSlider).toBeEnabled({
     timeout: 20000,
   });
+  await expect(epubPageInput).toBeEnabled();
   await expect(page.getByText(/Page \d+ \/ \d+/).first()).toBeVisible();
+
+  const initialEpubPageState = await readEpubPageState(page);
+  const targetEpubPage = Math.min(
+    initialEpubPageState.totalPages,
+    Math.max(2, Math.ceil(initialEpubPageState.totalPages / 3)),
+  );
+  await epubPageInput.fill(String(targetEpubPage));
+  await epubPageInput.press("Enter");
+  await expect(epubPageInput).toHaveValue(String(targetEpubPage));
 
   await page.getByRole("button", { name: "Chapter Two" }).click();
   await expect(page.getByRole("button", { name: "Chapter Two" })).toHaveAttribute(
@@ -400,24 +435,37 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   expect(sliderBox).not.toBeNull();
 
   if (sliderBox !== null) {
-    await page.mouse.move(sliderBox.x + sliderBox.width * 0.72, sliderBox.y + sliderBox.height / 2);
+    await page.mouse.move(
+      sliderBox.x + sliderBox.width * 0.72,
+      sliderBox.y + sliderBox.height / 2,
+    );
     await page.mouse.down();
-    await page.mouse.move(sliderBox.x + sliderBox.width * 0.82, sliderBox.y + sliderBox.height / 2);
-    await expect(page.locator(".reader-epub-progress__tooltip")).toContainText(/Page \d+/);
+    await page.mouse.move(
+      sliderBox.x + sliderBox.width * 0.82,
+      sliderBox.y + sliderBox.height / 2,
+    );
+    await expect(page.locator(".reader-epub-progress__tooltip")).toContainText(
+      /Page \d+/,
+    );
     await page.mouse.up();
   }
 
-  await expect.poll(async () => Number(await progressSlider.inputValue())).toBeGreaterThan(
-    beforeSliderValue,
-  );
+  await expect
+    .poll(async () => Number(await progressSlider.inputValue()))
+    .toBeGreaterThan(beforeSliderValue);
 
   const { totalPages } = await readEpubPageState(page);
   expect(totalPages).toBeGreaterThan(2);
 
-  const penultimateSliderValue = Math.round(((totalPages - 2.5) / (totalPages - 1)) * 1000);
+  const penultimateSliderValue = Math.round(
+    ((totalPages - 2.5) / (totalPages - 1)) * 1000,
+  );
   await progressSlider.evaluate((element, value) => {
     const input = element as HTMLInputElement;
-    const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
 
     valueSetter?.call(input, String(value));
     input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -446,9 +494,13 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   expect(epubFrame).not.toBeNull();
 
   if (epubFrame !== null) {
-    await epubFrame.getByText(/generated reading sample paragraph/).first().dblclick();
+    await epubFrame
+      .getByText(/generated reading sample paragraph/)
+      .first()
+      .dblclick();
     const selectedText = await epubIframe.evaluate(
-      (iframe) => (iframe as HTMLIFrameElement).contentWindow?.getSelection()?.toString() ?? "",
+      (iframe) =>
+        (iframe as HTMLIFrameElement).contentWindow?.getSelection()?.toString() ?? "",
     );
     expect(selectedText.length).toBeGreaterThan(0);
   }
@@ -458,11 +510,15 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(reader).toHaveAttribute("data-reader-theme", "dark");
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
-  await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+  await expect(
+    page.getByRole("main", { name: "Ebook Reader bookshelf" }),
+  ).toBeVisible();
   expect(consoleIssues).toEqual([]);
 });
 
-test("opens a generated PDF reader and uses page and zoom controls", async ({ page }) => {
+test("opens a generated PDF reader and uses page and zoom controls", async ({
+  page,
+}) => {
   const consoleIssues = collectConsoleIssues(page);
 
   await page.setViewportSize({
@@ -571,6 +627,27 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({ pa
   await pageInput.press("Enter");
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
+  const pdfProgressSlider = page.getByRole("slider", { name: "PDF reading progress" });
+  await expect(pdfProgressSlider).toBeEnabled();
+  await pdfProgressSlider.evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+
+    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    valueSetter?.call(input, "1000");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  });
+  await expect(page.getByText("Page 3 / 3")).toBeVisible();
+
+  await pageInput.fill("1");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Page 1 / 3")).toBeVisible();
+
   await page.getByRole("button", { name: "Hide contents" }).click();
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
@@ -584,39 +661,45 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({ pa
   await expect.poll(() => firstPdfCanvasHasInk(page), { timeout: 20_000 }).toBe(true);
 
   await page.getByRole("button", { name: "Shelf", exact: true }).click();
-  await expect(page.getByRole("main", { name: "Ebook Reader bookshelf" })).toBeVisible();
+  await expect(
+    page.getByRole("main", { name: "Ebook Reader bookshelf" }),
+  ).toBeVisible();
   expect(
     consoleIssues.filter(
-      (issue) => !issue.includes("Canvas2D: Multiple readback operations using getImageData"),
+      (issue) =>
+        !issue.includes("Canvas2D: Multiple readback operations using getImageData"),
     ),
   ).toEqual([]);
 });
 
 async function firstPdfCanvasHasInk(page: Page): Promise<boolean> {
-  return page.locator(".reader-pdf-canvas").first().evaluate((canvasElement) => {
-    const canvas = canvasElement as HTMLCanvasElement;
+  return page
+    .locator(".reader-pdf-canvas")
+    .first()
+    .evaluate((canvasElement) => {
+      const canvas = canvasElement as HTMLCanvasElement;
 
-    if (canvas.width === 0 || canvas.height === 0) {
-      return false;
-    }
-
-    const context = canvas.getContext("2d");
-
-    if (context === null) {
-      return false;
-    }
-
-    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-
-    for (let index = 0; index < pixels.length; index += 4) {
-      if (
-        pixels[index + 3] !== 0 &&
-        (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)
-      ) {
-        return true;
+      if (canvas.width === 0 || canvas.height === 0) {
+        return false;
       }
-    }
 
-    return false;
-  });
+      const context = canvas.getContext("2d");
+
+      if (context === null) {
+        return false;
+      }
+
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+      for (let index = 0; index < pixels.length; index += 4) {
+        if (
+          pixels[index + 3] !== 0 &&
+          (pixels[index] < 245 || pixels[index + 1] < 245 || pixels[index + 2] < 245)
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    });
 }

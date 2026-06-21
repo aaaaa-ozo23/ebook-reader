@@ -94,7 +94,9 @@ function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
       : "rgba(249, 246, 239, 0.96)",
     "--txt-reader-chrome-border": isDark ? "rgba(240, 232, 215, 0.16)" : "#d9cfbd",
     "--txt-reader-link": isDark ? "#f3bc55" : "#2f5d62",
-    "--txt-reader-meta-background": isDark ? "rgba(240, 232, 215, 0.08)" : "rgba(255, 255, 255, 0.54)",
+    "--txt-reader-meta-background": isDark
+      ? "rgba(240, 232, 215, 0.08)"
+      : "rgba(255, 255, 255, 0.54)",
     "--txt-reader-meta-border": isDark ? "rgba(240, 232, 215, 0.18)" : "#d8cebc",
     "--txt-reader-panel-background": isDark ? "#222a2e" : "#fbfaf7",
     "--txt-reader-panel-text": isDark ? "#f7f2e8" : "#243038",
@@ -186,7 +188,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     useState<ReaderProgress<TxtLocator> | null>(null);
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
-  const [chapterJumpRequest, setChapterJumpRequest] = useState<ChapterJumpRequest | null>(null);
+  const [chapterJumpRequest, setChapterJumpRequest] =
+    useState<ChapterJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
   const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
 
@@ -407,7 +410,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       <section className="reader-main">
         <header className="reader-topbar">
           <div className="reader-title-group">
-            <button type="button" className="reader-link-button" onClick={onBackToLibrary}>
+            <button
+              type="button"
+              className="reader-link-button"
+              onClick={onBackToLibrary}
+            >
               Shelf
             </button>
             <div>
@@ -416,13 +423,25 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             </div>
           </div>
           <div className="reader-toolbar" aria-label="Reader tools">
-            <button type="button" className="reader-tool-button" onClick={toggleSidebar}>
+            <button
+              type="button"
+              className="reader-tool-button"
+              onClick={toggleSidebar}
+            >
               {isSidebarOpen ? "Hide contents" : "Contents"}
             </button>
-            <button type="button" className="reader-tool-button" onClick={toggleThemePanel}>
+            <button
+              type="button"
+              className="reader-tool-button"
+              onClick={toggleThemePanel}
+            >
               Theme
             </button>
-            <button type="button" className="reader-tool-button" onClick={enterFocusMode}>
+            <button
+              type="button"
+              className="reader-tool-button"
+              onClick={enterFocusMode}
+            >
               Focus
             </button>
           </div>
@@ -514,7 +533,11 @@ function ReaderSidebar({
   }, [activeTocItemId]);
 
   return (
-    <aside className="reader-sidebar" aria-label="Table of contents" aria-hidden={!isOpen}>
+    <aside
+      className="reader-sidebar"
+      aria-label="Table of contents"
+      aria-hidden={!isOpen}
+    >
       <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
         Back to shelf
       </button>
@@ -578,7 +601,10 @@ function TxtReaderContent({
   const rafHandleRef = useRef<number | null>(null);
   const scrollIdleTimerRef = useRef<number | null>(null);
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
-  const virtualIndex = useMemo(() => buildVirtualBlockIndex(virtualBlocks), [virtualBlocks]);
+  const virtualIndex = useMemo(
+    () => buildVirtualBlockIndex(virtualBlocks),
+    [virtualBlocks],
+  );
   // TanStack Virtual owns imperative scroll state for this reader surface.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
@@ -599,7 +625,10 @@ function TxtReaderContent({
           start: item.start,
         }))
       : buildEstimatedVirtualItems(virtualBlocks);
-  const totalVirtualSize = Math.max(virtualizer.getTotalSize(), estimateTotalSize(virtualBlocks));
+  const totalVirtualSize = Math.max(
+    virtualizer.getTotalSize(),
+    estimateTotalSize(virtualBlocks),
+  );
 
   useEffect(() => {
     hasRestoredProgressRef.current = false;
@@ -663,14 +692,22 @@ function TxtReaderContent({
       scrollToVirtualIndex(targetIndex);
     }
     hasRestoredProgressRef.current = true;
-  }, [document, initialProgress, isLoading, scrollToVirtualIndex, virtualBlocks, virtualIndex]);
+  }, [
+    document,
+    initialProgress,
+    isLoading,
+    scrollToVirtualIndex,
+    virtualBlocks,
+    virtualIndex,
+  ]);
 
   useEffect(() => {
     if (jumpRequest === null || virtualBlocks.length === 0) {
       return;
     }
 
-    const targetIndex = virtualIndex.chapterHeadingIndexById.get(jumpRequest.chapterId) ?? -1;
+    const targetIndex =
+      virtualIndex.chapterHeadingIndexById.get(jumpRequest.chapterId) ?? -1;
 
     if (targetIndex !== -1) {
       scrollToVirtualIndex(targetIndex);
@@ -714,7 +751,10 @@ function TxtReaderContent({
         rafHandleRef.current = null;
         const nextChapterId = pendingActiveChapterIdRef.current;
 
-        if (nextChapterId !== null && nextChapterId !== lastActiveChapterIdRef.current) {
+        if (
+          nextChapterId !== null &&
+          nextChapterId !== lastActiveChapterIdRef.current
+        ) {
           lastActiveChapterIdRef.current = nextChapterId;
           onActiveChapterChange(nextChapterId);
         }
@@ -757,7 +797,12 @@ function TxtReaderContent({
       scrollIdleTimerRef.current = null;
       flushPendingProgress();
     }, 750);
-  }, [document, flushPendingProgress, getActiveVirtualBlock, scheduleActiveChapterChange]);
+  }, [
+    document,
+    flushPendingProgress,
+    getActiveVirtualBlock,
+    scheduleActiveChapterChange,
+  ]);
 
   if (isLoading) {
     return (
@@ -857,9 +902,13 @@ function EpubReaderContent({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
+  const [pageInput, setPageInput] = useState("1");
   const [position, setPosition] = useState<EpubPosition | null>(null);
-  const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(null);
-  const [requestedSpreadMode, setRequestedSpreadMode] = useState<EpubSpreadMode>("single");
+  const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
+    null,
+  );
+  const [requestedSpreadMode, setRequestedSpreadMode] =
+    useState<EpubSpreadMode>("single");
   const [spreadState, setSpreadState] = useState<EpubSpreadState>({
     requested: "single",
     rendered: "single",
@@ -895,9 +944,11 @@ function EpubReaderContent({
     }
 
     pendingProgressRef.current = null;
-    void saveReadingProgress(book.id, pendingProgress.locator, pendingProgress.progress).catch(
-      () => undefined,
-    );
+    void saveReadingProgress(
+      book.id,
+      pendingProgress.locator,
+      pendingProgress.progress,
+    ).catch(() => undefined);
   }, [book.id]);
 
   useEffect(
@@ -926,6 +977,9 @@ function EpubReaderContent({
     (nextPosition: EpubPosition) => {
       updateActiveTocForHref(nextPosition.locator.href);
       setPosition(nextPosition);
+      if (nextPosition.page !== null) {
+        setPageInput(String(nextPosition.page));
+      }
 
       if (!isDraggingProgressRef.current) {
         setPreviewPosition(null);
@@ -957,6 +1011,7 @@ function EpubReaderContent({
       setError(null);
       setPosition(null);
       setPreviewPosition(null);
+      setPageInput("1");
       setRequestedSpreadMode("single");
       setSpreadState({
         requested: "single",
@@ -1094,8 +1149,49 @@ function EpubReaderContent({
     });
   }, []);
 
+  const commitPageInput = useCallback(() => {
+    const adapter = adapterRef.current;
+    const currentPosition = positionRef.current;
+    const totalPages = currentPosition?.totalPages;
+    const currentPage = currentPosition?.page ?? 1;
+    const page = Number.parseInt(pageInput, 10);
+
+    if (
+      adapter === null ||
+      currentPosition?.locationsReady !== true ||
+      totalPages === null ||
+      totalPages === undefined ||
+      !Number.isFinite(page)
+    ) {
+      setPageInput(String(currentPage));
+      return;
+    }
+
+    const nextPage = normalizeReaderPage(page, totalPages);
+    const nextProgression = pageToProgression(nextPage, totalPages);
+    setPageInput(String(nextPage));
+    setPreviewPosition(null);
+    isDraggingProgressRef.current = false;
+    setIsDraggingProgress(false);
+
+    void adapter.goToProgress(nextProgression).catch((pageError: unknown) => {
+      setPageInput(String(positionRef.current?.page ?? currentPage));
+      setError(getErrorMessage(pageError));
+    });
+  }, [pageInput]);
+
+  const handlePageInputKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === "Enter") {
+        commitPageInput();
+      }
+    },
+    [commitPageInput],
+  );
+
   const activeProgress = previewPosition ?? position;
-  const locationsReady = position?.locationsReady === true && position.totalPages !== null;
+  const locationsReady =
+    position?.locationsReady === true && position.totalPages !== null;
   const activeProgression = locationsReady ? (activeProgress?.progression ?? 0) : 0;
   const sliderValue = Math.round(activeProgression * 1000);
   const progressPercent = Math.round(activeProgression * 100);
@@ -1119,29 +1215,50 @@ function EpubReaderContent({
       : undefined;
 
   return (
-    <section className="reader-viewport reader-viewport--epub" aria-label={`${book.title} content`}>
+    <section
+      className="reader-viewport reader-viewport--epub"
+      aria-label={`${book.title} content`}
+    >
       <article className="reader-page reader-page--epub">
         <div className="reader-epub-frame">
           {isLoading ? (
-            <section className="reader-state reader-state--overlay" aria-label="Loading EPUB book">
+            <section
+              className="reader-state reader-state--overlay"
+              aria-label="Loading EPUB book"
+            >
               <div className="loading-line" aria-hidden="true" />
               <p>Opening EPUB book...</p>
             </section>
           ) : null}
           {error !== null ? (
-            <section className="reader-state reader-state--error reader-state--overlay" role="alert">
+            <section
+              className="reader-state reader-state--error reader-state--overlay"
+              role="alert"
+            >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
+              <button
+                type="button"
+                className="reader-tool-button"
+                onClick={onBackToLibrary}
+              >
                 Back to shelf
               </button>
             </section>
           ) : null}
-          <div ref={hostRef} className="reader-epub-host" aria-hidden={error !== null} />
+          <div
+            ref={hostRef}
+            className="reader-epub-host"
+            aria-hidden={error !== null}
+          />
         </div>
         <div className="reader-epub-controls" aria-label="EPUB navigation">
           <div className="reader-epub-control-row">
-            <button type="button" className="reader-tool-button" onClick={handlePrevious}>
+            <button
+              type="button"
+              className="reader-tool-button"
+              onClick={handlePrevious}
+            >
               Previous
             </button>
             <div className="reader-epub-status" aria-live="polite">
@@ -1177,7 +1294,21 @@ function EpubReaderContent({
           <div className="reader-epub-progress" style={progressControlStyle}>
             <div className="reader-epub-progress__meta">
               <span>{activeChapterTitle}</span>
-              <span>{locationsReady ? pageLabel : "Calculating pages"}</span>
+              <label className="reader-page-field reader-epub-page-field">
+                <span>Page</span>
+                <input
+                  aria-label="EPUB page number"
+                  disabled={!locationsReady}
+                  min={1}
+                  max={totalPages ?? 1}
+                  type="number"
+                  value={pageInput}
+                  onBlur={commitPageInput}
+                  onChange={(event) => setPageInput(event.currentTarget.value)}
+                  onKeyDown={handlePageInputKeyDown}
+                />
+                <span>/ {totalPages ?? "-"}</span>
+              </label>
             </div>
             <div className="reader-epub-progress__track">
               {locationsReady ? (
@@ -1237,8 +1368,10 @@ function PdfReaderContent({
   const frameRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<PdfReaderAdapter | null>(null);
   const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
+  const isDraggingProgressRef = useRef(false);
   const pendingProgressRef = useRef<PendingPdfProgress | null>(null);
   const positionRef = useRef<PdfPosition | null>(null);
+  const previewPositionRef = useRef<PdfPosition | null>(null);
   const progressIdleTimerRef = useRef<number | null>(null);
   const renderSequenceRef = useRef(0);
   const requestedViewModeRef = useRef<PdfViewMode>("single");
@@ -1246,8 +1379,10 @@ function PdfReaderContent({
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
   const [position, setPosition] = useState<PdfPosition | null>(null);
+  const [previewPosition, setPreviewPosition] = useState<PdfPosition | null>(null);
   const [requestedViewMode, setRequestedViewMode] = useState<PdfViewMode>("single");
 
   useEffect(() => {
@@ -1258,6 +1393,14 @@ function PdfReaderContent({
     positionRef.current = position;
   }, [position]);
 
+  useEffect(() => {
+    previewPositionRef.current = previewPosition;
+  }, [previewPosition]);
+
+  useEffect(() => {
+    isDraggingProgressRef.current = isDraggingProgress;
+  }, [isDraggingProgress]);
+
   const flushPendingProgress = useCallback(() => {
     const pendingProgress = pendingProgressRef.current;
 
@@ -1266,9 +1409,11 @@ function PdfReaderContent({
     }
 
     pendingProgressRef.current = null;
-    void saveReadingProgress(book.id, pendingProgress.locator, pendingProgress.progress).catch(
-      () => undefined,
-    );
+    void saveReadingProgress(
+      book.id,
+      pendingProgress.locator,
+      pendingProgress.progress,
+    ).catch(() => undefined);
   }, [book.id]);
 
   useEffect(
@@ -1311,7 +1456,11 @@ function PdfReaderContent({
         }
       }
 
-      for (let index = visiblePages.length; index < canvasRefs.current.length; index += 1) {
+      for (
+        let index = visiblePages.length;
+        index < canvasRefs.current.length;
+        index += 1
+      ) {
         const canvas = canvasRefs.current[index];
 
         if (canvas !== undefined && canvas !== null) {
@@ -1332,7 +1481,14 @@ function PdfReaderContent({
       setPosition(nextPosition);
       setPageInput(String(nextPosition.page));
 
-      const activeTocItemId = findTocItemIdByPdfPage(tocItemsRef.current, nextPosition.page);
+      if (!isDraggingProgressRef.current) {
+        setPreviewPosition(null);
+      }
+
+      const activeTocItemId = findTocItemIdByPdfPage(
+        tocItemsRef.current,
+        nextPosition.page,
+      );
       onActiveTocItemChange(activeTocItemId);
 
       pendingProgressRef.current = {
@@ -1365,6 +1521,8 @@ function PdfReaderContent({
       setIsLoading(true);
       setError(null);
       setPosition(null);
+      setPreviewPosition(null);
+      setIsDraggingProgress(false);
       setPageInput("1");
       setRequestedViewMode("single");
       requestedViewModeRef.current = "single";
@@ -1405,7 +1563,9 @@ function PdfReaderContent({
         }
 
         onTocChange(nextTocItems);
-        onActiveTocItemChange(findTocItemIdByPdfPage(nextTocItems, adapter.getPosition().page));
+        onActiveTocItemChange(
+          findTocItemIdByPdfPage(nextTocItems, adapter.getPosition().page),
+        );
         await renderVisiblePages();
       } catch (openError) {
         if (isCurrent) {
@@ -1428,7 +1588,13 @@ function PdfReaderContent({
       }
       void openedAdapter?.close();
     };
-  }, [book, handlePositionChange, onActiveTocItemChange, onTocChange, renderVisiblePages]);
+  }, [
+    book,
+    handlePositionChange,
+    onActiveTocItemChange,
+    onTocChange,
+    renderVisiblePages,
+  ]);
 
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") {
@@ -1449,7 +1615,10 @@ function PdfReaderContent({
       }
 
       try {
-        const nextPosition = adapter.setViewMode(requestedViewModeRef.current, frame.clientWidth);
+        const nextPosition = adapter.setViewMode(
+          requestedViewModeRef.current,
+          frame.clientWidth,
+        );
         positionRef.current = nextPosition;
         setPosition(nextPosition);
         void renderVisiblePages();
@@ -1515,7 +1684,9 @@ function PdfReaderContent({
     (mode: PdfViewMode) => {
       setRequestedViewMode(mode);
       requestedViewModeRef.current = mode;
-      runPdfAction((adapter) => adapter.setViewMode(mode, frameRef.current?.clientWidth));
+      runPdfAction((adapter) =>
+        adapter.setViewMode(mode, frameRef.current?.clientWidth),
+      );
     },
     [runPdfAction],
   );
@@ -1529,7 +1700,9 @@ function PdfReaderContent({
   }, [runPdfAction]);
 
   const handleFitWidth = useCallback(() => {
-    runPdfAction((adapter) => adapter.fitWidth(getPdfPageSlotWidth(frameRef.current, positionRef.current)));
+    runPdfAction((adapter) =>
+      adapter.fitWidth(getPdfPageSlotWidth(frameRef.current, positionRef.current)),
+    );
   }, [runPdfAction]);
 
   const commitPageInput = useCallback(() => {
@@ -1559,33 +1732,111 @@ function PdfReaderContent({
     [commitPageInput],
   );
 
-  const visiblePageNumbers = position === null ? [] : getPdfVisiblePageNumbers(position);
-  const pageLabel = position === null ? "Pages loading" : getPdfPageLabel(position);
+  const handleProgressPreview = useCallback(
+    (value: string) => {
+      const adapter = adapterRef.current;
+
+      if (adapter === null) {
+        return;
+      }
+
+      try {
+        const nextPreview = adapter.previewProgress(Number(value) / 1000);
+        previewPositionRef.current = nextPreview;
+        setPreviewPosition(nextPreview);
+        setPageInput(String(nextPreview.page));
+        onActiveTocItemChange(
+          findTocItemIdByPdfPage(tocItemsRef.current, nextPreview.page),
+        );
+      } catch {
+        setPreviewPosition(null);
+      }
+    },
+    [onActiveTocItemChange],
+  );
+
+  const handleProgressChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      isDraggingProgressRef.current = true;
+      setIsDraggingProgress(true);
+      handleProgressPreview(event.currentTarget.value);
+    },
+    [handleProgressPreview],
+  );
+
+  const commitProgress = useCallback(() => {
+    const adapter = adapterRef.current;
+    const nextProgression =
+      previewPositionRef.current?.progression ?? positionRef.current?.progression ?? 0;
+
+    isDraggingProgressRef.current = false;
+    setIsDraggingProgress(false);
+
+    if (adapter === null) {
+      setPreviewPosition(null);
+      return;
+    }
+
+    void adapter
+      .goToProgress(nextProgression)
+      .then(renderVisiblePages)
+      .catch((progressError: unknown) => {
+        setPreviewPosition(null);
+        setError(getErrorMessage(progressError));
+      });
+  }, [renderVisiblePages]);
+
+  const activeProgress = previewPosition ?? position;
+  const visiblePageNumbers =
+    position === null ? [] : getPdfVisiblePageNumbers(position);
+  const pageLabel =
+    activeProgress === null ? "Pages loading" : getPdfPageLabel(activeProgress);
   const zoomLabel = position === null ? "100%" : `${Math.round(position.scale * 100)}%`;
   const progressLabel =
-    position === null ? "0%" : `${Math.round(Math.min(Math.max(position.progression, 0), 1) * 100)}%`;
+    activeProgress === null
+      ? "0%"
+      : `${Math.round(Math.min(Math.max(activeProgress.progression, 0), 1) * 100)}%`;
   const activeSectionTitle =
-    position === null ? book.title : (findTocItemByPdfPage(tocItems, position.page)?.title ?? book.title);
+    activeProgress === null
+      ? book.title
+      : (findTocItemByPdfPage(tocItems, activeProgress.page)?.title ?? book.title);
+  const sliderValue = Math.round((activeProgress?.progression ?? 0) * 1000);
+  const progressControlStyle = {
+    "--epub-progress-percent": `${(activeProgress?.progression ?? 0) * 100}%`,
+  } as CSSProperties;
   const renderedModeDescription =
     requestedViewMode === "double" && position?.renderedMode === "single"
       ? "Double view will resume when the window is wide enough."
       : undefined;
 
   return (
-    <section className="reader-viewport reader-viewport--pdf" aria-label={`${book.title} content`}>
+    <section
+      className="reader-viewport reader-viewport--pdf"
+      aria-label={`${book.title} content`}
+    >
       <article className="reader-page reader-page--pdf">
         <div ref={frameRef} className="reader-pdf-frame">
           {isLoading ? (
-            <section className="reader-state reader-state--overlay" aria-label="Loading PDF book">
+            <section
+              className="reader-state reader-state--overlay"
+              aria-label="Loading PDF book"
+            >
               <div className="loading-line" aria-hidden="true" />
               <p>Opening PDF book...</p>
             </section>
           ) : null}
           {error !== null ? (
-            <section className="reader-state reader-state--error reader-state--overlay" role="alert">
+            <section
+              className="reader-state reader-state--error reader-state--overlay"
+              role="alert"
+            >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
+              <button
+                type="button"
+                className="reader-tool-button"
+                onClick={onBackToLibrary}
+              >
                 Back to shelf
               </button>
             </section>
@@ -1615,9 +1866,16 @@ function PdfReaderContent({
             ))}
           </div>
         </div>
-        <div className="reader-epub-controls reader-pdf-controls" aria-label="PDF navigation">
+        <div
+          className="reader-epub-controls reader-pdf-controls"
+          aria-label="PDF navigation"
+        >
           <div className="reader-epub-control-row reader-pdf-control-row">
-            <button type="button" className="reader-tool-button" onClick={handlePrevious}>
+            <button
+              type="button"
+              className="reader-tool-button"
+              onClick={handlePrevious}
+            >
               Previous
             </button>
             <div className="reader-epub-status reader-pdf-status" aria-live="polite">
@@ -1651,31 +1909,80 @@ function PdfReaderContent({
             </div>
           </div>
           <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
-            <label className="reader-pdf-page-field">
-              <span>Page</span>
-              <input
-                aria-label="PDF page number"
-                min={1}
-                max={position?.totalPages ?? 1}
-                type="number"
-                value={pageInput}
-                onBlur={commitPageInput}
-                onChange={(event) => setPageInput(event.currentTarget.value)}
-                onKeyDown={handlePageInputKeyDown}
-              />
-              <span>/ {position?.totalPages ?? "-"}</span>
-            </label>
             <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">
-              <button type="button" className="reader-tool-button" onClick={handleZoomOut}>
+              <button
+                type="button"
+                className="reader-tool-button"
+                onClick={handleZoomOut}
+              >
                 -
               </button>
               <strong>{zoomLabel}</strong>
-              <button type="button" className="reader-tool-button" onClick={handleZoomIn}>
+              <button
+                type="button"
+                className="reader-tool-button"
+                onClick={handleZoomIn}
+              >
                 +
               </button>
-              <button type="button" className="reader-tool-button" onClick={handleFitWidth}>
+              <button
+                type="button"
+                className="reader-tool-button"
+                onClick={handleFitWidth}
+              >
                 Fit width
               </button>
+            </div>
+          </div>
+          <div
+            className="reader-epub-progress reader-pdf-progress"
+            style={progressControlStyle}
+          >
+            <div className="reader-epub-progress__meta">
+              <span>{activeSectionTitle}</span>
+              <label className="reader-page-field reader-pdf-page-field">
+                <span>Page</span>
+                <input
+                  aria-label="PDF page number"
+                  min={1}
+                  max={activeProgress?.totalPages ?? 1}
+                  type="number"
+                  value={pageInput}
+                  onBlur={commitPageInput}
+                  onChange={(event) => setPageInput(event.currentTarget.value)}
+                  onKeyDown={handlePageInputKeyDown}
+                />
+                <span>/ {activeProgress?.totalPages ?? "-"}</span>
+              </label>
+            </div>
+            <div className="reader-epub-progress__track">
+              {activeProgress !== null ? (
+                <span
+                  className={`reader-epub-progress__tooltip ${
+                    isDraggingProgress ? "reader-epub-progress__tooltip--visible" : ""
+                  }`}
+                  aria-hidden="true"
+                >
+                  Page {activeProgress.page}
+                </span>
+              ) : null}
+              <input
+                aria-label="PDF reading progress"
+                className="reader-epub-progress__range"
+                disabled={position === null}
+                max={1000}
+                min={0}
+                step={1}
+                type="range"
+                value={sliderValue}
+                onChange={handleProgressChange}
+                onKeyUp={commitProgress}
+                onPointerDown={() => {
+                  isDraggingProgressRef.current = true;
+                  setIsDraggingProgress(true);
+                }}
+                onPointerUp={commitProgress}
+              />
             </div>
           </div>
         </div>
@@ -1754,27 +2061,29 @@ function ThemePanel({ isOpen, theme, themeError, onThemeChange }: ThemePanelProp
   return (
     <aside className="reader-theme-panel" aria-label="Reader theme">
       <div className="theme-mode-grid" role="group" aria-label="Theme mode">
-        {(["light", "sepia", "green", "dark"] satisfies ReaderThemeMode[]).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            className="theme-mode-button"
-            aria-pressed={theme.mode === mode}
-            onClick={() => handleModeChange(mode)}
-          >
-            <span
-              className="theme-mode-button__swatch"
-              style={{
-                background: THEME_PRESETS[mode].backgroundColor,
-                color: THEME_PRESETS[mode].textColor,
-              }}
-              aria-hidden="true"
+        {(["light", "sepia", "green", "dark"] satisfies ReaderThemeMode[]).map(
+          (mode) => (
+            <button
+              key={mode}
+              type="button"
+              className="theme-mode-button"
+              aria-pressed={theme.mode === mode}
+              onClick={() => handleModeChange(mode)}
             >
-              A
-            </span>
-            {mode}
-          </button>
-        ))}
+              <span
+                className="theme-mode-button__swatch"
+                style={{
+                  background: THEME_PRESETS[mode].backgroundColor,
+                  color: THEME_PRESETS[mode].textColor,
+                }}
+                aria-hidden="true"
+              >
+                A
+              </span>
+              {mode}
+            </button>
+          ),
+        )}
       </div>
       <label className="theme-field">
         <span>Font</span>
@@ -1839,7 +2148,14 @@ function ThemeSlider({ label, max, min, step, value, onChange }: ThemeSliderProp
         {label}
         <strong>{Number.isInteger(value) ? value : value.toFixed(2)}</strong>
       </span>
-      <input max={max} min={min} step={step} type="range" value={value} onChange={onChange} />
+      <input
+        max={max}
+        min={min}
+        step={step}
+        type="range"
+        value={value}
+        onChange={onChange}
+      />
     </label>
   );
 }
@@ -1856,7 +2172,10 @@ function mapTxtChapterToTocItem(chapter: TxtChapter): TocItem {
   };
 }
 
-function flattenTocItems(items: TocItem[], depth = 0): Array<TocItem & { depth: number }> {
+function flattenTocItems(
+  items: TocItem[],
+  depth = 0,
+): Array<TocItem & { depth: number }> {
   return items.flatMap((item) => [
     {
       ...item,
@@ -1938,7 +2257,9 @@ function epubHrefsMatch(firstHref: string, secondHref: string): boolean {
     return false;
   }
 
-  return first === second || first.endsWith(`/${second}`) || second.endsWith(`/${first}`);
+  return (
+    first === second || first.endsWith(`/${second}`) || second.endsWith(`/${first}`)
+  );
 }
 
 function normalizeEpubHref(href: string): string {
@@ -1950,7 +2271,9 @@ function getPdfVisiblePageNumbers(position: PdfPosition): number[] {
     return [position.page];
   }
 
-  return [position.page, position.page + 1].filter((page) => page <= position.totalPages);
+  return [position.page, position.page + 1].filter(
+    (page) => page <= position.totalPages,
+  );
 }
 
 function getPdfPageLabel(position: PdfPosition): string {
@@ -1963,7 +2286,30 @@ function getPdfPageLabel(position: PdfPosition): string {
   return `Page ${position.page} / ${position.totalPages}`;
 }
 
-function getPdfPageSlotWidth(frame: HTMLDivElement | null, position: PdfPosition | null): number {
+function normalizeReaderPage(page: number, totalPages: number): number {
+  if (!Number.isFinite(page)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(1, Math.floor(page)), Math.max(1, Math.floor(totalPages)));
+}
+
+function pageToProgression(page: number, totalPages: number): number {
+  const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
+
+  if (normalizedTotalPages <= 1) {
+    return 0;
+  }
+
+  return (
+    (normalizeReaderPage(page, normalizedTotalPages) - 1) / (normalizedTotalPages - 1)
+  );
+}
+
+function getPdfPageSlotWidth(
+  frame: HTMLDivElement | null,
+  position: PdfPosition | null,
+): number {
   const frameWidth = frame?.clientWidth ?? 760;
   const renderedPages = position?.renderedMode === "double" ? 2 : 1;
   const totalGap = renderedPages === 2 ? 18 : 0;
@@ -2040,12 +2386,22 @@ function buildVirtualBlockIndex(blocks: ReaderVirtualBlock[]): ReaderVirtualInde
   };
 }
 
-function findProgressTargetIndex(index: ReaderVirtualIndex, locator: TxtLocator): number {
-  let targetIndex = findIndexAtOrBeforeCharOffset(index.charOffsetEntries, locator.charOffset);
+function findProgressTargetIndex(
+  index: ReaderVirtualIndex,
+  locator: TxtLocator,
+): number {
+  let targetIndex = findIndexAtOrBeforeCharOffset(
+    index.charOffsetEntries,
+    locator.charOffset,
+  );
 
   if (locator.chapterId !== undefined) {
-    const chapterEntries = index.charOffsetEntriesByChapterId.get(locator.chapterId) ?? [];
-    const sameChapterIndex = findIndexAtOrBeforeCharOffset(chapterEntries, locator.charOffset);
+    const chapterEntries =
+      index.charOffsetEntriesByChapterId.get(locator.chapterId) ?? [];
+    const sameChapterIndex = findIndexAtOrBeforeCharOffset(
+      chapterEntries,
+      locator.charOffset,
+    );
 
     if (sameChapterIndex !== -1) {
       return sameChapterIndex;
@@ -2088,7 +2444,9 @@ function findIndexAtOrBeforeCharOffset(
   return targetIndex;
 }
 
-function buildEstimatedVirtualItems(blocks: ReaderVirtualBlock[]): RenderedVirtualItem[] {
+function buildEstimatedVirtualItems(
+  blocks: ReaderVirtualBlock[],
+): RenderedVirtualItem[] {
   const visibleCount = Math.min(blocks.length, 24);
   const items: RenderedVirtualItem[] = [];
   let offset = 0;
@@ -2104,7 +2462,10 @@ function buildEstimatedVirtualItems(blocks: ReaderVirtualBlock[]): RenderedVirtu
   return items;
 }
 
-function findEstimatedIndexAtOffset(blocks: ReaderVirtualBlock[], targetOffset: number): number {
+function findEstimatedIndexAtOffset(
+  blocks: ReaderVirtualBlock[],
+  targetOffset: number,
+): number {
   let estimatedOffset = 0;
 
   for (const [index, block] of blocks.entries()) {
@@ -2119,7 +2480,10 @@ function findEstimatedIndexAtOffset(blocks: ReaderVirtualBlock[], targetOffset: 
 }
 
 function estimateTotalSize(blocks: ReaderVirtualBlock[]): number {
-  return blocks.reduce((totalSize, block) => totalSize + estimateVirtualBlockSize(block), 0);
+  return blocks.reduce(
+    (totalSize, block) => totalSize + estimateVirtualBlockSize(block),
+    0,
+  );
 }
 
 function estimateVirtualBlockSize(block: ReaderVirtualBlock | undefined): number {

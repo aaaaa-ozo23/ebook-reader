@@ -4,6 +4,7 @@ import {
   normalizePdfPage,
   normalizePdfScale,
   pageToProgress,
+  progressToPdfPage,
   PdfReaderAdapter,
 } from "./PdfReaderAdapter";
 
@@ -38,18 +39,17 @@ const getDocumentMock = vi.hoisted(() =>
   })),
 );
 const getOutlineMock = vi.hoisted(() =>
-  vi.fn(async (): Promise<
-    | Array<{
+  vi.fn(
+    async (): Promise<Array<{
+      title: string;
+      dest: string | unknown[] | null;
+      items?: Array<{
         title: string;
         dest: string | unknown[] | null;
-        items?: Array<{
-          title: string;
-          dest: string | unknown[] | null;
-          items?: unknown[];
-        }>;
-      }>
-    | null
-  > => null),
+        items?: unknown[];
+      }>;
+    }> | null> => null,
+  ),
 );
 const getPageIndexMock = vi.hoisted(() =>
   vi.fn(async (ref: { num: number; gen: number }) => {
@@ -107,7 +107,9 @@ describe("PdfReaderAdapter", () => {
         url: "blob:pdf-book",
         cMapPacked: true,
         cMapUrl: expect.stringContaining("/pdfjs/cmaps/") as string,
-        standardFontDataUrl: expect.stringContaining("/pdfjs/standard_fonts/") as string,
+        standardFontDataUrl: expect.stringContaining(
+          "/pdfjs/standard_fonts/",
+        ) as string,
         useWorkerFetch: true,
       }),
     );
@@ -286,5 +288,49 @@ describe("PdfReaderAdapter", () => {
     expect(normalizePdfScale(0.1)).toBe(0.5);
     expect(normalizePdfScale(6)).toBe(3);
     expect(pageToProgress(6, 11)).toBe(0.5);
+    expect(progressToPdfPage(0.5, 3)).toBe(2);
+    expect(progressToPdfPage(0.75, 3)).toBe(3);
+    expect(progressToPdfPage(Number.NaN, 12)).toBe(1);
+  });
+
+  it("previews and commits PDF progress jumps by page", async () => {
+    const positions: number[] = [];
+    const adapter = new PdfReaderAdapter({
+      bookId: "pdf-book",
+      sourceUrl: "blob:pdf-book",
+      theme: {
+        mode: "light",
+        fontFamily: "serif",
+        fontSize: 18,
+        lineHeight: 1.7,
+        paragraphSpacing: 12,
+        pageMargin: 32,
+        backgroundColor: "#ffffff",
+        textColor: "#111111",
+      },
+      onPositionChange: (position) => {
+        positions.push(position.page);
+      },
+    });
+
+    await adapter.open("pdf-book");
+
+    expect(adapter.previewProgress(0.5)).toEqual(
+      expect.objectContaining({
+        page: 7,
+        progression: 6 / 11,
+      }),
+    );
+    expect(adapter.getPosition().page).toBe(1);
+
+    await adapter.goToProgress(0.5);
+
+    expect(adapter.getPosition()).toEqual(
+      expect.objectContaining({
+        page: 7,
+        progression: 6 / 11,
+      }),
+    );
+    expect(positions.at(-1)).toBe(7);
   });
 });
