@@ -239,6 +239,20 @@
 | 5.4 想法/笔记 | `codex/stage5-notes` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，38 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.5 搜索基础 | `codex/stage5-search-basic` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，41 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 
+### 阶段 5 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd install` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，41 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed |
+| `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` | passed，27 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，5 Chromium smoke tests |
+| Playwright 视觉检查 | passed，桌面和 375x760 TXT Notes/Search 阅读器无 console warning/error；截图见 `D:\tl-temp\ebook-reader-stage5-notes-search-desktop.png` 和 `D:\tl-temp\ebook-reader-stage5-notes-search-mobile-375x760.png` |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，首次旧 release exe 被 PID 16968 锁定，结束进程后重跑通过并生成 MSI/NSIS |
+
 ## 大阶段 6：阅读体验完善与可访问性
 
 目标：将 MVP 从“功能可用”推进到“长时间阅读舒适”，重点处理快捷键、响应式、状态细节和性能。

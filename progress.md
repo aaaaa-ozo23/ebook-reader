@@ -164,6 +164,24 @@
 - 遇到的问题：
   - 首次 desktop build 发现 EPUB/PDF search mock 的空数组返回被 TypeScript 推断为 `never[]`；为 mock 增加显式 Promise 返回类型后通过。
 
+### 阶段 5 最终验收
+- **状态：** complete
+- **分支：** `codex/v0.1.0-mvp-integration`
+- 验证：
+  - `pnpm.cmd install` 通过，workspace already up to date。
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop test` 通过，41 tests。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，27 tests。
+  - `pnpm.cmd --filter @reader/desktop test:e2e` 通过，5 Chromium smoke tests。
+  - Playwright 视觉检查通过：`D:\tl-temp\ebook-reader-stage5-notes-search-desktop.png`、`D:\tl-temp\ebook-reader-stage5-notes-search-mobile-375x760.png`；桌面 viewport 高度 829.7，375x760 viewport 高度 619.9，Notes/Search 可见，无 console warning/error。
+  - `pnpm.cmd --filter @reader/desktop tauri:build` 通过，生成 release exe、MSI、NSIS installer。
+- 遇到的问题：
+  - 临时视觉脚本首次从仓库根运行 Node 无法解析 workspace 内 `@playwright/test`；改在 `apps/desktop` 工作目录执行后继续。
+  - 第二次视觉脚本因中文 stdin 编码和多结果 strict locator 失败；改用 ASCII fixture 并选择首个结果后通过。
+  - 首次 `tauri:build` 因旧 `ebook-reader-desktop.exe` 进程 PID 16968 锁定 release 产物失败；结束该产物进程后重跑通过。
+
 ## 2026-06-21 大阶段 3/4：阅读体验统一调整
 
 ### 状态
