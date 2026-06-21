@@ -104,6 +104,12 @@
 - 阶段 5.2 选区实现确认：EPUB selection 菜单依赖 epub.js CFI range 和当前 `EpubPosition.locator.href`；`handleRelocated` 必须同步更新 position ref，否则 selected 事件紧跟 relocated 时无法生成 locator。
 - 阶段 5.2 PDF text layer 确认：`pdfjs.TextLayer` 可直接从 display API 动态 import 使用；TextLayer 覆盖 canvas 后可产生 DOM selection，rect 通过 `PageViewport.convertToPdfPoint()` 转成 PDF 坐标系。
 - 阶段 5.2 PDF selection 限制：当前仅接受同一个 `.reader-pdf-text-layer` 内的选区；跨页选择暂不显示菜单，符合阶段 5 MVP 的单页 PDF 高亮范围。
+- 阶段 5.3 高亮实现确认：现有 `annotations` 表字段足够承载 MVP 高亮，`locator_json` 存 TXT/EPUB/PDF union locator，未新增 SQLite migration。
+- 阶段 5.3 后端确认：annotations CRUD 复用 `normalize_locator_for_book`，能拒绝格式不匹配 locator；删除 annotation 使用 `deleted_at` 软删除，删除 book 仍通过外键级联移除关联记录。
+- 阶段 5.3 TXT 高亮重放口径：仅重放当前虚拟块内与 `[charOffset, endCharOffset)` 相交的 highlight；跨块 selection 仍由 5.2 选择层拒绝，后续如需跨段高亮可拆多条 locator 或扩展范围模型。
+- 阶段 5.3 EPUB 高亮重放口径：打开书籍后按 annotation CFI 调用 `rendition.annotations.highlight`，颜色由 annotation `color` 提供；删除/更新时用 CFI 集合差异移除旧高亮。
+- 阶段 5.3 PDF 高亮重放口径：保存 PDF 坐标系 rect，重放时用当前缩放下 `PageViewport.convertToViewportRectangle()` 计算 overlay；扫描版 PDF 无 text layer 时不会产生新高亮。
+- 阶段 5.3 UI 确认：selection menu 保留 `Highlight` 默认黄色按钮，并提供黄/绿/蓝/粉色 swatch；EPUB/PDF/TXT 共享创建入口，PDF 保留缩放控件不变。
 
 ## 技术决策
 

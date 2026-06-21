@@ -863,6 +863,21 @@ button:disabled {
   color: #ffffff;
 }
 
+.reader-selection-menu__swatches {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reader-selection-menu .reader-selection-menu__swatch {
+  width: 26px;
+  min-height: 26px;
+  border: 2px solid rgba(247, 242, 232, 0.72);
+  border-radius: 999px;
+  background: var(--reader-highlight-color, #f3bc55);
+  padding: 0;
+}
+
 .reader-viewport {
   min-height: 0;
   overflow: auto;
@@ -881,6 +896,17 @@ button:disabled {
 
 .reader-page--virtual {
   position: relative;
+}
+
+.reader-highlight {
+  border-radius: 3px;
+  background: color-mix(
+    in srgb,
+    var(--reader-highlight-color, #f3bc55) 42%,
+    transparent
+  );
+  color: inherit;
+  padding: 0 1px;
 }
 
 .reader-meta {
@@ -1268,6 +1294,25 @@ button:disabled {
 
 .reader-pdf-text-layer ::selection {
   background: rgba(243, 188, 85, 0.34);
+}
+
+.reader-pdf-highlight-layer {
+  grid-area: 1 / 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.reader-pdf-highlight-rect {
+  position: absolute;
+  border-radius: 2px;
+  background: color-mix(
+    in srgb,
+    var(--reader-highlight-color, #f3bc55) 38%,
+    transparent
+  );
+  mix-blend-mode: multiply;
 }
 
 .reader-pdf-control-row--secondary {

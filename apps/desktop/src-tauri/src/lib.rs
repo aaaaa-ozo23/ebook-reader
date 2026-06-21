@@ -81,6 +81,48 @@ fn delete_bookmark(app: tauri::AppHandle, bookmark_id: String) -> Result<(), Str
     db::delete_bookmark(&app, &bookmark_id).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn list_annotations(app: tauri::AppHandle, book_id: String) -> Result<Vec<db::Annotation>, String> {
+    db::list_annotations(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn create_annotation(
+    app: tauri::AppHandle,
+    book_id: String,
+    annotation_type: db::AnnotationKind,
+    locator: db::Locator,
+    color: Option<String>,
+    selected_text: Option<String>,
+    note: Option<String>,
+) -> Result<db::Annotation, String> {
+    db::create_annotation(
+        &app,
+        &book_id,
+        annotation_type,
+        locator,
+        color,
+        selected_text,
+        note,
+    )
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn update_annotation(
+    app: tauri::AppHandle,
+    annotation_id: String,
+    color: Option<String>,
+    note: Option<String>,
+) -> Result<db::Annotation, String> {
+    db::update_annotation(&app, &annotation_id, color, note).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_annotation(app: tauri::AppHandle, annotation_id: String) -> Result<(), String> {
+    db::delete_annotation(&app, &annotation_id).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -103,7 +145,11 @@ pub fn run() {
             save_reading_progress,
             list_bookmarks,
             create_bookmark,
-            delete_bookmark
+            delete_bookmark,
+            list_annotations,
+            create_annotation,
+            update_annotation,
+            delete_annotation
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -292,7 +292,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return [];
   }
 
-  addHighlight(cfiRange: string): void {
+  addHighlight(cfiRange: string, color = "#f3bc55"): void {
     const rendition = this.requireRendition();
 
     rendition.annotations.highlight(
@@ -301,7 +301,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       undefined,
       "reader-epub-highlight",
       {
-        fill: "#f3bc55",
+        fill: color,
         "fill-opacity": "0.32",
         "mix-blend-mode": "multiply",
       },
