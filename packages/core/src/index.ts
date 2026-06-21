@@ -76,6 +76,7 @@ export interface TxtLocator extends LocatorContext {
   kind: "txt";
   chapterId?: string;
   charOffset: number;
+  endCharOffset?: number;
 }
 
 export interface EpubLocator extends LocatorContext {
@@ -105,6 +106,14 @@ export interface ReaderProgress<TLocator extends Locator = Locator> {
   locator: TLocator;
   progress?: number;
   updatedAt: string;
+}
+
+export interface Bookmark<TLocator extends Locator = Locator> {
+  id: string;
+  bookId: string;
+  locator: TLocator;
+  label?: string;
+  createdAt: string;
 }
 
 export interface Annotation {

@@ -195,6 +195,8 @@ pub struct TxtLocator {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chapter_id: Option<String>,
     pub char_offset: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end_char_offset: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -251,6 +253,17 @@ pub struct ReaderProgress {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<f64>,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Bookmark {
+    pub id: String,
+    pub book_id: String,
+    pub locator: Locator,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone)]
@@ -340,6 +353,26 @@ pub fn save_reading_progress(
 ) -> anyhow::Result<ReaderProgress> {
     let database_path = init_app_database(app)?;
     save_reading_progress_at(&database_path, book_id, locator, progress)
+}
+
+pub fn list_bookmarks(app: &AppHandle, book_id: &str) -> anyhow::Result<Vec<Bookmark>> {
+    let database_path = init_app_database(app)?;
+    list_bookmarks_at(&database_path, book_id)
+}
+
+pub fn create_bookmark(
+    app: &AppHandle,
+    book_id: &str,
+    locator: Locator,
+    label: Option<String>,
+) -> anyhow::Result<Bookmark> {
+    let database_path = init_app_database(app)?;
+    create_bookmark_at(&database_path, book_id, locator, label)
+}
+
+pub fn delete_bookmark(app: &AppHandle, bookmark_id: &str) -> anyhow::Result<()> {
+    let database_path = init_app_database(app)?;
+    delete_bookmark_at(&database_path, bookmark_id)
 }
 
 pub fn init_app_database(app: &AppHandle) -> anyhow::Result<PathBuf> {
@@ -633,6 +666,75 @@ pub fn save_reading_progress_at(
         progress: normalized_progress,
         updated_at: now,
     })
+}
+
+pub fn list_bookmarks_at(database_path: &Path, book_id: &str) -> anyhow::Result<Vec<Bookmark>> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+
+    let mut statement = conn.prepare(
+        "SELECT id, book_id, locator_json, label, created_at
+        FROM bookmarks
+        WHERE book_id = ?1
+        ORDER BY created_at DESC, id ASC",
+    )?;
+
+    let bookmarks = statement
+        .query_map(params![book_id], row_to_bookmark)?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    Ok(bookmarks)
+}
+
+pub fn create_bookmark_at(
+    database_path: &Path,
+    book_id: &str,
+    mut locator: Locator,
+    label: Option<String>,
+) -> anyhow::Result<Bookmark> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    normalize_locator_for_book(book.format, &mut locator)?;
+
+    let bookmark = Bookmark {
+        id: Uuid::new_v4().to_string(),
+        book_id: book_id.to_string(),
+        locator,
+        label: normalize_bookmark_label(label),
+        created_at: current_timestamp(&conn)?,
+    };
+    let locator_json =
+        serde_json::to_string(&bookmark.locator).context("failed to serialize bookmark locator")?;
+
+    conn.execute(
+        "INSERT INTO bookmarks (id, book_id, locator_json, label, created_at)
+        VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            &bookmark.id,
+            &bookmark.book_id,
+            locator_json,
+            bookmark.label.as_deref(),
+            &bookmark.created_at,
+        ],
+    )?;
+
+    Ok(bookmark)
+}
+
+pub fn delete_bookmark_at(database_path: &Path, bookmark_id: &str) -> anyhow::Result<()> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let deleted_count =
+        conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![bookmark_id])?;
+
+    if deleted_count == 0 {
+        bail!("bookmark not found: {}", bookmark_id);
+    }
+
+    Ok(())
 }
 
 fn open_database(database_path: &Path) -> anyhow::Result<Connection> {
@@ -974,8 +1076,11 @@ fn normalize_reader_theme(mut theme: ReaderTheme) -> ReaderTheme {
 
 fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyhow::Result<()> {
     match (format, locator) {
-        (BookFormat::Txt, Locator::Txt(_)) => Ok(()),
-        (BookFormat::Txt, _) => bail!("TXT books can only save txt reading progress"),
+        (BookFormat::Txt, Locator::Txt(txt_locator)) => {
+            normalize_txt_locator(txt_locator);
+            Ok(())
+        }
+        (BookFormat::Txt, _) => bail!("TXT books can only use txt locators"),
         (BookFormat::Epub, Locator::Epub(epub_locator)) => {
             let has_cfi = epub_locator
                 .cfi
@@ -984,7 +1089,7 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
                 .unwrap_or(false);
 
             if epub_locator.href.trim().is_empty() && !has_cfi {
-                bail!("EPUB progress requires an href or cfi");
+                bail!("EPUB locator requires an href or cfi");
             }
 
             epub_locator.progression = epub_locator
@@ -993,7 +1098,7 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
                 .map(|value| value.clamp(0.0, 1.0));
             Ok(())
         }
-        (BookFormat::Epub, _) => bail!("EPUB books can only save epub reading progress"),
+        (BookFormat::Epub, _) => bail!("EPUB books can only use epub locators"),
         (BookFormat::Pdf, Locator::Pdf(pdf_locator)) => {
             pdf_locator.page = pdf_locator.page.max(1);
             pdf_locator.scale = normalize_pdf_scale(pdf_locator.scale);
@@ -1008,8 +1113,20 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
 
             Ok(())
         }
-        (BookFormat::Pdf, _) => bail!("PDF books can only save pdf reading progress"),
+        (BookFormat::Pdf, _) => bail!("PDF books can only use pdf locators"),
     }
+}
+
+fn normalize_txt_locator(locator: &mut TxtLocator) {
+    locator.end_char_offset = locator
+        .end_char_offset
+        .filter(|end_char_offset| *end_char_offset > locator.char_offset);
+}
+
+fn normalize_bookmark_label(label: Option<String>) -> Option<String> {
+    label
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn normalize_progress(progress: Option<f64>) -> Option<f64> {
@@ -1044,6 +1161,21 @@ fn row_to_reader_progress(row: &Row<'_>) -> rusqlite::Result<ReaderProgress> {
         locator,
         progress: row.get(2)?,
         updated_at: row.get(3)?,
+    })
+}
+
+fn row_to_bookmark(row: &Row<'_>) -> rusqlite::Result<Bookmark> {
+    let locator_json: String = row.get(2)?;
+    let locator = serde_json::from_str(&locator_json).map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(2, rusqlite::types::Type::Text, Box::new(error))
+    })?;
+
+    Ok(Bookmark {
+        id: row.get(0)?,
+        book_id: row.get(1)?,
+        locator,
+        label: row.get(3)?,
+        created_at: row.get(4)?,
     })
 }
 
@@ -1198,11 +1330,11 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
-        list_books_at, mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_theme_at,
-        save_reading_progress_at, schema_version, BookFormat, EpubLocator, ImportBookStatus,
-        Locator, PdfLocator, PdfRect, PdfZoomMode, ReaderTheme, ReaderThemeMode, TxtLocator,
-        DB_FILE_NAME,
+        create_bookmark_at, delete_bookmark_at, get_reader_theme_at, get_reading_progress_at,
+        import_book_at, init_database_at, list_bookmarks_at, list_books_at, mark_book_opened_at,
+        open_txt_book_at, remove_book_at, save_reader_theme_at, save_reading_progress_at,
+        schema_version, BookFormat, EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect,
+        PdfZoomMode, ReaderTheme, ReaderThemeMode, TxtLocator, DB_FILE_NAME,
     };
 
     #[test]
@@ -1420,6 +1552,7 @@ mod tests {
             Locator::Txt(TxtLocator {
                 chapter_id: None,
                 char_offset: 3,
+                end_char_offset: None,
             }),
             Some(0.5),
         )
@@ -1452,6 +1585,70 @@ mod tests {
             .expect_err("missing book should fail");
 
         assert!(error.to_string().contains("book not found"));
+    }
+
+    #[test]
+    fn bookmarks_can_be_created_listed_and_deleted_for_a_book() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("bookmark.txt");
+        fs::write(&source_path, "第一章 初见\n正文").expect("write source");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+        let locator = Locator::Txt(TxtLocator {
+            chapter_id: Some("chapter-1-0".to_string()),
+            char_offset: 3,
+            end_char_offset: Some(8),
+        });
+
+        let created = create_bookmark_at(
+            &database_path,
+            &imported.book.id,
+            locator.clone(),
+            Some("  第一章  ".to_string()),
+        )
+        .expect("create bookmark");
+        let bookmarks =
+            list_bookmarks_at(&database_path, &imported.book.id).expect("list bookmarks");
+
+        assert_eq!(created.book_id, imported.book.id);
+        assert_eq!(created.locator, locator);
+        assert_eq!(created.label.as_deref(), Some("第一章"));
+        assert_eq!(bookmarks, vec![created.clone()]);
+
+        delete_bookmark_at(&database_path, &created.id).expect("delete bookmark");
+        let bookmarks_after_delete =
+            list_bookmarks_at(&database_path, &imported.book.id).expect("list after delete");
+
+        assert!(bookmarks_after_delete.is_empty());
+    }
+
+    #[test]
+    fn bookmarks_reject_format_mismatched_locators() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("bookmark-mismatch.txt");
+        fs::write(&source_path, "第一章 初见\n正文").expect("write source");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import txt");
+
+        let error = create_bookmark_at(
+            &database_path,
+            &imported.book.id,
+            Locator::Epub(EpubLocator {
+                href: "OPS/chapter-one.xhtml".to_string(),
+                cfi: None,
+                progression: None,
+            }),
+            None,
+        )
+        .expect_err("txt book should reject epub bookmark locator");
+
+        assert!(error
+            .to_string()
+            .contains("TXT books can only use txt locators"));
     }
 
     #[test]
@@ -1612,6 +1809,7 @@ mod tests {
         let locator = Locator::Txt(TxtLocator {
             chapter_id: Some("chapter-1-0".to_string()),
             char_offset: 6,
+            end_char_offset: None,
         });
 
         let saved = save_reading_progress_at(
@@ -1765,6 +1963,7 @@ mod tests {
             Locator::Txt(TxtLocator {
                 chapter_id: None,
                 char_offset: 0,
+                end_char_offset: None,
             }),
             Some(0.2),
         )
@@ -1786,6 +1985,7 @@ mod tests {
             Locator::Txt(TxtLocator {
                 chapter_id: None,
                 char_offset: 0,
+                end_char_offset: None,
             }),
             Some(0.2),
         )
@@ -1793,16 +1993,16 @@ mod tests {
 
         assert!(txt_book_error
             .to_string()
-            .contains("TXT books can only save txt"));
+            .contains("TXT books can only use txt locators"));
         assert!(epub_book_error
             .to_string()
-            .contains("EPUB books can only save epub"));
+            .contains("EPUB books can only use epub locators"));
         assert!(invalid_epub_error
             .to_string()
-            .contains("requires an href or cfi"));
+            .contains("EPUB locator requires an href or cfi"));
         assert!(pdf_book_error
             .to_string()
-            .contains("PDF books can only save pdf"));
+            .contains("PDF books can only use pdf locators"));
     }
 
     fn insert_test_book(conn: &Connection, id: &str, file_hash: &str) {

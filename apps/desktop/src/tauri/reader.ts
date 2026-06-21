@@ -1,4 +1,5 @@
 import {
+  type Bookmark,
   type Book,
   defaultReaderTheme,
   type EpubLocator,
@@ -14,6 +15,7 @@ const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
 const FALLBACK_EPUB_SOURCES_KEY = "reader:fallback:epubSources";
 const FALLBACK_PDF_SOURCES_KEY = "reader:fallback:pdfSources";
 const FALLBACK_TXT_DOCUMENTS_KEY = "reader:fallback:txtDocuments";
+const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
@@ -129,6 +131,49 @@ export async function saveReadingProgress(
     locator,
     progress,
   });
+}
+
+export async function listBookmarks<TLocator extends Locator = Locator>(
+  bookId: string,
+): Promise<Array<Bookmark<TLocator>>> {
+  if (!hasTauriRuntime()) {
+    return getFallbackBookmarks<TLocator>(bookId);
+  }
+
+  return invokeCommand<Array<Bookmark<TLocator>>>("list_bookmarks", { bookId });
+}
+
+export async function createBookmark<TLocator extends Locator = Locator>(
+  bookId: string,
+  locator: TLocator,
+  label?: string,
+): Promise<Bookmark<TLocator>> {
+  if (!hasTauriRuntime()) {
+    const bookmark: Bookmark<TLocator> = {
+      id: createFallbackId(),
+      bookId,
+      locator,
+      label: normalizeBookmarkLabel(label),
+      createdAt: new Date().toISOString(),
+    };
+    setFallbackBookmarks(bookId, [bookmark, ...getFallbackBookmarks<TLocator>(bookId)]);
+    return bookmark;
+  }
+
+  return invokeCommand<Bookmark<TLocator>>("create_bookmark", {
+    bookId,
+    locator,
+    label,
+  });
+}
+
+export async function deleteBookmark(bookmarkId: string): Promise<void> {
+  if (!hasTauriRuntime()) {
+    deleteFallbackBookmark(bookmarkId);
+    return;
+  }
+
+  return invokeCommand<void>("delete_bookmark", { bookmarkId });
 }
 
 function getFallbackPdfSource(bookId: string): string | null {
@@ -262,4 +307,95 @@ function setFallbackReadingProgress(
 
   progressByBook[bookId] = progress;
   window.localStorage.setItem(FALLBACK_READING_PROGRESS_KEY, JSON.stringify(progressByBook));
+}
+
+function getFallbackBookmarks<TLocator extends Locator>(
+  bookId: string,
+): Array<Bookmark<TLocator>> {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+
+  if (rawBookmarks === null) {
+    return [];
+  }
+
+  try {
+    const bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+      string,
+      Array<Bookmark<TLocator>>
+    >;
+    return bookmarksByBook[bookId] ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function setFallbackBookmarks<TLocator extends Locator>(
+  bookId: string,
+  bookmarks: Array<Bookmark<TLocator>>,
+): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+  let bookmarksByBook: Record<string, Array<Bookmark<Locator>>> = {};
+
+  if (rawBookmarks !== null) {
+    try {
+      bookmarksByBook = JSON.parse(rawBookmarks) as Record<string, Array<Bookmark<Locator>>>;
+    } catch {
+      bookmarksByBook = {};
+    }
+  }
+
+  bookmarksByBook[bookId] = bookmarks as Array<Bookmark<Locator>>;
+  window.localStorage.setItem(FALLBACK_BOOKMARKS_KEY, JSON.stringify(bookmarksByBook));
+}
+
+function deleteFallbackBookmark(bookmarkId: string): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const rawBookmarks = window.localStorage.getItem(FALLBACK_BOOKMARKS_KEY);
+
+  if (rawBookmarks === null) {
+    return;
+  }
+
+  try {
+    const bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+      string,
+      Array<Bookmark<Locator>>
+    >;
+    const nextBookmarksByBook = Object.fromEntries(
+      Object.entries(bookmarksByBook).map(([bookId, bookmarks]) => [
+        bookId,
+        bookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
+      ]),
+    );
+    window.localStorage.setItem(
+      FALLBACK_BOOKMARKS_KEY,
+      JSON.stringify(nextBookmarksByBook),
+    );
+  } catch {
+    window.localStorage.removeItem(FALLBACK_BOOKMARKS_KEY);
+  }
+}
+
+function createFallbackId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `bookmark-${Date.now()}-${Math.round(Math.random() * 100000)}`;
+}
+
+function normalizeBookmarkLabel(label: string | undefined): string | undefined {
+  const normalizedLabel = label?.trim();
+  return normalizedLabel === "" ? undefined : normalizedLabel;
 }

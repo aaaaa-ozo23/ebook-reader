@@ -1,5 +1,56 @@
 # 进度日志
 
+## 2026-06-21 大阶段 5：书签、高亮、想法与检索
+
+### 状态
+- **当前状态：** in_progress
+- **当前分支：** `codex/stage5-bookmarks`
+
+### 执行的操作
+- 读取 `task_plan.md`、`progress.md`、`findings.md` 并运行 session catchup；确认上一轮只有大阶段 5 计划与本轮启动上下文未同步。
+- 确认 `main` 工作区干净并与 `origin/main` 对齐。
+- 执行 `git fetch origin --prune`。
+- 将 `codex/v0.1.0-mvp-integration` 从 `main` 快进到 `db8fde9`。
+- 创建 `codex/stage5-bookmarks`，开始阶段 5.1。
+- 更新 `task_plan.md` 当前阶段和阶段 5 执行记录。
+
+### 待执行
+- 实现书签 core 类型、Rust CRUD、Tauri bridge、浏览器 fallback、ReaderShell 书签 UI 与三格式跳转。
+- 完成 5.1 针对性 Rust/Vitest 验证后合回 `codex/v0.1.0-mvp-integration`。
+
+### 阶段 5.1：书签能力
+- **状态：** complete
+- **分支：** `codex/stage5-bookmarks`
+- 执行的操作：
+  - 在 `@reader/core` 新增 `Bookmark` 类型，并给 `TxtLocator` 增加可选 `endCharOffset`。
+  - 在 Rust `db.rs` 新增 `Bookmark` struct、`list_bookmarks`、`create_bookmark`、`delete_bookmark` 以及 `_at` 测试入口。
+  - 复用现有 `bookmarks` 表，不新增 SQLite migration；创建书签前按书籍格式校验 locator。
+  - 在 Tauri `lib.rs` 注册书签 CRUD 命令。
+  - 在 `tauri/reader.ts` 新增书签 bridge 和浏览器 localStorage fallback。
+  - 扩展 `ReaderShell`：顶部 `Bookmark` 按钮、侧栏 `Contents / Bookmarks / Notes / Search` tabs、书签列表、删除和跳转。
+  - 将 TXT 跳转请求升级为 locator 级跳转，书签可回到保存的字符偏移附近；EPUB/PDF 内容层回传当前 locator 供书签保存。
+  - 增加 Vitest 覆盖 TXT 书签创建和跳转。
+- 创建/修改的文件：
+  - `packages/core/src/index.ts`
+  - `apps/desktop/src-tauri/src/db.rs`
+  - `apps/desktop/src-tauri/src/lib.rs`
+  - `apps/desktop/src/tauri/reader.ts`
+  - `apps/desktop/src/components/ReaderShell.tsx`
+  - `apps/desktop/src/App.css`
+  - `apps/desktop/src/App.test.tsx`
+  - `task_plan.md`
+  - `findings.md`
+  - `progress.md`
+- 验证：
+  - `pnpm.cmd --filter @reader/core build` 通过。
+  - `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` 通过，24 tests。
+  - `pnpm.cmd --filter @reader/desktop test -- App.test.tsx` 通过，32 tests。
+  - `pnpm.cmd --filter @reader/desktop lint` 通过。
+  - `pnpm.cmd --filter @reader/desktop build` 通过。
+- 遇到的问题：
+  - 首次 lint 发现书签加载 effect 中同步 reset state 触发 `react-hooks/set-state-in-effect`；改为带 `bookId` 的派生状态，避免跨书籍复用旧书签/locator。
+  - 新增书签跳转测试中删除按钮 aria-label 与跳转按钮同名匹配；为跳转按钮增加 `Go to bookmark ...` aria-label 后解决。
+
 ## 2026-06-21 大阶段 3/4：阅读体验统一调整
 
 ### 状态
