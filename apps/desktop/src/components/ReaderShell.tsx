@@ -9,9 +9,11 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
+  type Bookmark,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
+  type Locator,
   type PdfLocator,
   type ReaderProgress,
   type ReaderTheme,
@@ -24,10 +26,13 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import {
+  createBookmark,
+  deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
   getReaderTheme,
   getReadingProgress,
+  listBookmarks,
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
@@ -128,8 +133,10 @@ interface ReaderVirtualBlock {
   text: string;
 }
 
-interface ChapterJumpRequest {
-  chapterId: string;
+type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
+
+interface TxtJumpRequest {
+  locator: TxtLocator;
   requestId: number;
 }
 
@@ -187,9 +194,16 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [readingProgress, setReadingProgress] =
     useState<ReaderProgress<TxtLocator> | null>(null);
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
+  const [bookmarks, setBookmarks] = useState<Array<Bookmark<Locator>>>([]);
+  const [bookmarksBookId, setBookmarksBookId] = useState(book.id);
+  const [bookmarkError, setBookmarkError] = useState<string | null>(null);
+  const [currentBookmarkPosition, setCurrentBookmarkPosition] = useState<{
+    bookId: string;
+    locator: Locator;
+  } | null>(null);
+  const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
-  const [chapterJumpRequest, setChapterJumpRequest] =
-    useState<ChapterJumpRequest | null>(null);
+  const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
   const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
 
@@ -220,6 +234,34 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   useEffect(() => {
     let isCurrent = true;
 
+    async function loadBookmarks() {
+      try {
+        const savedBookmarks = await listBookmarks(book.id);
+
+        if (isCurrent) {
+          setBookmarksBookId(book.id);
+          setBookmarks(savedBookmarks);
+          setBookmarkError(null);
+        }
+      } catch (bookmarkLoadError) {
+        if (isCurrent) {
+          setBookmarksBookId(book.id);
+          setBookmarks([]);
+          setBookmarkError(getErrorMessage(bookmarkLoadError));
+        }
+      }
+    }
+
+    void loadBookmarks();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book.id]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
     if (book.format !== "txt") {
       return () => {
         isCurrent = false;
@@ -240,10 +282,21 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
         if (isCurrent) {
           const nextTocItems = openedDocument.chapters.map(mapTxtChapterToTocItem);
+          const initialLocator =
+            savedProgress?.locator ??
+            nextTocItems[0]?.locator ??
+            ({
+              kind: "txt",
+              charOffset: 0,
+            } satisfies TxtLocator);
           setDocument(openedDocument);
           setReadingProgress(savedProgress);
           setTocItems(nextTocItems);
           setActiveTocItemId(openedDocument.chapters[0]?.id ?? null);
+          setCurrentBookmarkPosition({
+            bookId: book.id,
+            locator: initialLocator,
+          });
         }
       } catch (openError) {
         if (isCurrent) {
@@ -279,6 +332,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     const chapters = document?.chapters ?? [];
     return new Map(chapters.map((chapter) => [chapter.id, chapter]));
   }, [document]);
+  const visibleBookmarks = bookmarksBookId === book.id ? bookmarks : [];
+  const visibleBookmarkError = bookmarksBookId === book.id ? bookmarkError : null;
+  const currentBookmarkLocator =
+    currentBookmarkPosition?.bookId === book.id ? currentBookmarkPosition.locator : null;
 
   const toggleSidebar = useCallback(() => {
     setIsSidebarOpen((currentValue) => !currentValue);
@@ -309,6 +366,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   const handleTxtProgressChange = useCallback(
     (locator: TxtLocator, progressValue?: number) => {
+      setCurrentBookmarkPosition({
+        bookId: book.id,
+        locator,
+      });
       setReadingProgress({
         bookId: book.id,
         locator,
@@ -333,19 +394,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         const chapter = chapterById.get(tocItem.id);
 
         if (chapter !== undefined && document !== null) {
-          setChapterJumpRequest((currentRequest) => ({
+          const locator: TxtLocator = {
+            kind: "txt",
             chapterId: chapter.id,
+            charOffset: chapter.startChar,
+          };
+          setTxtJumpRequest((currentRequest) => ({
+            locator,
             requestId: (currentRequest?.requestId ?? 0) + 1,
           }));
           setActiveTocItemId(chapter.id);
-          handleTxtProgressChange(
-            {
-              kind: "txt",
-              chapterId: chapter.id,
-              charOffset: chapter.startChar,
-            },
-            chapter.startChar / Math.max(document.charCount, 1),
-          );
+          handleTxtProgressChange(locator, chapter.startChar / Math.max(document.charCount, 1));
         }
         return;
       }
@@ -375,6 +434,104 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     setActiveTocItemId((currentId) => currentId ?? nextTocItems[0]?.id ?? null);
   }, []);
 
+  const handleCurrentLocatorChange = useCallback(
+    (locator: Locator) => {
+      setCurrentBookmarkPosition({
+        bookId: book.id,
+        locator,
+      });
+    },
+    [book.id],
+  );
+
+  const handleJumpToLocator = useCallback(
+    (locator: Locator) => {
+      if (locator.kind === "txt") {
+        setTxtJumpRequest((currentRequest) => ({
+          locator,
+          requestId: (currentRequest?.requestId ?? 0) + 1,
+        }));
+        if (locator.chapterId !== undefined) {
+          setActiveTocItemId(locator.chapterId);
+        }
+        if (document !== null) {
+          handleTxtProgressChange(
+            locator,
+            locator.charOffset / Math.max(document.charCount, 1),
+          );
+        }
+        return;
+      }
+
+      if (locator.kind === "epub") {
+        setEpubJumpRequest((currentRequest) => ({
+          locator,
+          requestId: (currentRequest?.requestId ?? 0) + 1,
+        }));
+        const tocItemId = findTocItemIdByHref(tocItems, locator.href);
+        setActiveTocItemId(tocItemId);
+        return;
+      }
+
+      setPdfJumpRequest((currentRequest) => ({
+        locator,
+        requestId: (currentRequest?.requestId ?? 0) + 1,
+      }));
+      setActiveTocItemId(findTocItemByPdfPage(tocItems, locator.page)?.id ?? null);
+    },
+    [document, handleTxtProgressChange, tocItems],
+  );
+
+  const handleCreateBookmark = useCallback(() => {
+    const locator = currentBookmarkLocator;
+
+    if (locator === null) {
+      return;
+    }
+
+    const label = getBookmarkLabel(book, tocItems, activeTocItemId, locator);
+    setBookmarkError(null);
+
+    void createBookmark(book.id, locator, label)
+      .then((bookmark) => {
+        setBookmarksBookId(book.id);
+        setBookmarks((currentBookmarks) => [
+          bookmark,
+          ...currentBookmarks.filter(
+            (currentBookmark) => currentBookmark.id !== bookmark.id,
+          ),
+        ]);
+        setSidebarTab("bookmarks");
+        setIsSidebarOpen(true);
+      })
+      .catch((bookmarkCreateError: unknown) => {
+        setBookmarksBookId(book.id);
+        setBookmarkError(getErrorMessage(bookmarkCreateError));
+      });
+  }, [activeTocItemId, book, currentBookmarkLocator, tocItems]);
+
+  const handleJumpToBookmark = useCallback(
+    (bookmark: Bookmark<Locator>) => {
+      handleJumpToLocator(bookmark.locator);
+      setSidebarTab("bookmarks");
+    },
+    [handleJumpToLocator],
+  );
+
+  const handleDeleteBookmark = useCallback((bookmarkId: string) => {
+    setBookmarkError(null);
+
+    void deleteBookmark(bookmarkId)
+      .then(() => {
+        setBookmarks((currentBookmarks) =>
+          currentBookmarks.filter((bookmark) => bookmark.id !== bookmarkId),
+        );
+      })
+      .catch((bookmarkDeleteError: unknown) => {
+        setBookmarkError(getErrorMessage(bookmarkDeleteError));
+      });
+  }, []);
+
   const readerStyle = useMemo(
     () =>
       ({
@@ -401,11 +558,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     >
       <ReaderSidebar
         activeTocItemId={activeTocItemId}
+        activeTab={sidebarTab}
+        bookmarks={visibleBookmarks}
+        bookmarkError={visibleBookmarkError}
         items={tocItems}
         isOpen={isSidebarOpen}
         label={`${formatBookFormat(book.format)} contents`}
         onBackToLibrary={onBackToLibrary}
+        onCreateBookmark={handleCreateBookmark}
+        onDeleteBookmark={handleDeleteBookmark}
+        onJumpToBookmark={handleJumpToBookmark}
         onJumpToItem={handleJumpToTocItem}
+        onTabChange={setSidebarTab}
       />
       <section className="reader-main">
         <header className="reader-topbar">
@@ -429,6 +593,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               onClick={toggleSidebar}
             >
               {isSidebarOpen ? "Hide contents" : "Contents"}
+            </button>
+            <button
+              type="button"
+              className="reader-tool-button"
+              disabled={currentBookmarkLocator === null}
+              onClick={handleCreateBookmark}
+            >
+              Bookmark
             </button>
             <button
               type="button"
@@ -458,7 +630,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             error={error}
             initialProgress={readingProgress}
             isLoading={isLoading}
-            jumpRequest={chapterJumpRequest}
+            jumpRequest={txtJumpRequest}
             onActiveChapterChange={setActiveTocItemId}
             onProgressChange={handleTxtProgressChange}
             onBackToLibrary={onBackToLibrary}
@@ -472,6 +644,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
+            onCurrentLocatorChange={handleCurrentLocatorChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -483,6 +656,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
+            onCurrentLocatorChange={handleCurrentLocatorChange}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -499,20 +673,34 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
 interface ReaderSidebarProps {
   activeTocItemId: string | null;
+  activeTab: ReaderSidebarTab;
+  bookmarks: Array<Bookmark<Locator>>;
+  bookmarkError: string | null;
   items: TocItem[];
   isOpen: boolean;
   label: string;
   onBackToLibrary: () => void;
+  onCreateBookmark: () => void;
+  onDeleteBookmark: (bookmarkId: string) => void;
+  onJumpToBookmark: (bookmark: Bookmark<Locator>) => void;
   onJumpToItem: (itemId: string) => void;
+  onTabChange: (tab: ReaderSidebarTab) => void;
 }
 
 function ReaderSidebar({
   activeTocItemId,
+  activeTab,
+  bookmarks,
+  bookmarkError,
   items,
   isOpen,
   label,
   onBackToLibrary,
+  onCreateBookmark,
+  onDeleteBookmark,
+  onJumpToBookmark,
   onJumpToItem,
+  onTabChange,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
@@ -541,30 +729,105 @@ function ReaderSidebar({
       <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
         Back to shelf
       </button>
-      <h2>Contents</h2>
-      <nav className="reader-toc" aria-label={label}>
-        {flattenedItems.length === 0 ? (
-          <p className="reader-sidebar__empty">Loading chapters...</p>
-        ) : (
-          flattenedItems.map((item) => {
-            const isActive = item.id === activeTocItemId;
-
-            return (
-              <button
-                key={item.id}
-                ref={isActive ? activeItemRef : undefined}
-                type="button"
-                className={`reader-toc__item ${isActive ? "reader-toc__item--active" : ""}`}
-                style={{ paddingLeft: `${12 + item.depth * 14}px` }}
-                aria-current={isActive ? "location" : undefined}
-                onClick={() => handleJump(item.id)}
-              >
-                {item.title}
-              </button>
-            );
-          })
+      <div className="reader-sidebar-tabs" role="tablist" aria-label="Reader sidebar">
+        {(["contents", "bookmarks", "notes", "search"] as ReaderSidebarTab[]).map(
+          (tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab}
+              onClick={() => onTabChange(tab)}
+            >
+              {formatSidebarTab(tab)}
+            </button>
+          ),
         )}
-      </nav>
+      </div>
+      {activeTab === "contents" ? (
+        <>
+          <h2>Contents</h2>
+          <nav className="reader-toc" aria-label={label}>
+            {flattenedItems.length === 0 ? (
+              <p className="reader-sidebar__empty">Loading chapters...</p>
+            ) : (
+              flattenedItems.map((item) => {
+                const isActive = item.id === activeTocItemId;
+
+                return (
+                  <button
+                    key={item.id}
+                    ref={isActive ? activeItemRef : undefined}
+                    type="button"
+                    className={`reader-toc__item ${
+                      isActive ? "reader-toc__item--active" : ""
+                    }`}
+                    style={{ paddingLeft: `${12 + item.depth * 14}px` }}
+                    aria-current={isActive ? "location" : undefined}
+                    onClick={() => handleJump(item.id)}
+                  >
+                    {item.title}
+                  </button>
+                );
+              })
+            )}
+          </nav>
+        </>
+      ) : null}
+      {activeTab === "bookmarks" ? (
+        <section className="reader-sidebar-panel" aria-label="Bookmarks">
+          <div className="reader-sidebar-panel__header">
+            <h2>Bookmarks</h2>
+            <button type="button" className="reader-sidebar__action" onClick={onCreateBookmark}>
+              Add
+            </button>
+          </div>
+          {bookmarkError !== null ? (
+            <p className="reader-sidebar__error" role="alert">
+              {bookmarkError}
+            </p>
+          ) : null}
+          {bookmarks.length === 0 ? (
+            <p className="reader-sidebar__empty">No bookmarks yet.</p>
+          ) : (
+            <div className="reader-bookmarks" role="list">
+              {bookmarks.map((bookmark) => (
+                <div key={bookmark.id} className="reader-bookmark" role="listitem">
+                  <button
+                    type="button"
+                    className="reader-bookmark__jump"
+                    aria-label={`Go to bookmark ${bookmark.label ?? getLocatorLabel(bookmark.locator)}`}
+                    onClick={() => onJumpToBookmark(bookmark)}
+                  >
+                    <span>{bookmark.label ?? getLocatorLabel(bookmark.locator)}</span>
+                    <small>{getLocatorLabel(bookmark.locator)}</small>
+                  </button>
+                  <button
+                    type="button"
+                    className="reader-bookmark__delete"
+                    aria-label={`Delete bookmark ${bookmark.label ?? getLocatorLabel(bookmark.locator)}`}
+                    onClick={() => onDeleteBookmark(bookmark.id)}
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
+      {activeTab === "notes" ? (
+        <section className="reader-sidebar-panel" aria-label="Notes">
+          <h2>Notes</h2>
+          <p className="reader-sidebar__empty">No notes yet.</p>
+        </section>
+      ) : null}
+      {activeTab === "search" ? (
+        <section className="reader-sidebar-panel" aria-label="Search">
+          <h2>Search</h2>
+          <p className="reader-sidebar__empty">Search will be available in stage 5.5.</p>
+        </section>
+      ) : null}
     </aside>
   );
 }
@@ -575,7 +838,7 @@ interface TxtReaderContentProps {
   error: string | null;
   initialProgress: ReaderProgress<TxtLocator> | null;
   isLoading: boolean;
-  jumpRequest: ChapterJumpRequest | null;
+  jumpRequest: TxtJumpRequest | null;
   onActiveChapterChange: (chapterId: string) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onBackToLibrary: () => void;
@@ -706,8 +969,7 @@ function TxtReaderContent({
       return;
     }
 
-    const targetIndex =
-      virtualIndex.chapterHeadingIndexById.get(jumpRequest.chapterId) ?? -1;
+    const targetIndex = findProgressTargetIndex(virtualIndex, jumpRequest.locator);
 
     if (targetIndex !== -1) {
       scrollToVirtualIndex(targetIndex);
@@ -878,6 +1140,7 @@ interface EpubReaderContentProps {
   tocItems: TocItem[];
   onActiveTocItemChange: (tocItemId: string) => void;
   onBackToLibrary: () => void;
+  onCurrentLocatorChange: (locator: EpubLocator) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -888,6 +1151,7 @@ function EpubReaderContent({
   tocItems,
   onActiveTocItemChange,
   onBackToLibrary,
+  onCurrentLocatorChange,
   onTocChange,
 }: EpubReaderContentProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -976,6 +1240,7 @@ function EpubReaderContent({
   const handleRelocated = useCallback(
     (nextPosition: EpubPosition) => {
       updateActiveTocForHref(nextPosition.locator.href);
+      onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
       if (nextPosition.page !== null) {
         setPageInput(String(nextPosition.page));
@@ -999,7 +1264,7 @@ function EpubReaderContent({
         flushPendingProgress();
       }, 750);
     },
-    [flushPendingProgress, updateActiveTocForHref],
+    [flushPendingProgress, onCurrentLocatorChange, updateActiveTocForHref],
   );
 
   useEffect(() => {
@@ -1353,6 +1618,7 @@ interface PdfReaderContentProps {
   tocItems: TocItem[];
   onActiveTocItemChange: (tocItemId: string | null) => void;
   onBackToLibrary: () => void;
+  onCurrentLocatorChange: (locator: PdfLocator) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -1363,6 +1629,7 @@ function PdfReaderContent({
   tocItems,
   onActiveTocItemChange,
   onBackToLibrary,
+  onCurrentLocatorChange,
   onTocChange,
 }: PdfReaderContentProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
@@ -1478,6 +1745,7 @@ function PdfReaderContent({
   const handlePositionChange = useCallback(
     (nextPosition: PdfPosition) => {
       positionRef.current = nextPosition;
+      onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
       setPageInput(String(nextPosition.page));
 
@@ -1505,7 +1773,7 @@ function PdfReaderContent({
         flushPendingProgress();
       }, 750);
     },
-    [flushPendingProgress, onActiveTocItemChange],
+    [flushPendingProgress, onActiveTocItemChange, onCurrentLocatorChange],
   );
 
   useEffect(() => {
@@ -2170,6 +2438,60 @@ function mapTxtChapterToTocItem(chapter: TxtChapter): TocItem {
       charOffset: chapter.startChar,
     },
   };
+}
+
+function formatSidebarTab(tab: ReaderSidebarTab): string {
+  switch (tab) {
+    case "contents":
+      return "Contents";
+    case "bookmarks":
+      return "Bookmarks";
+    case "notes":
+      return "Notes";
+    case "search":
+      return "Search";
+  }
+}
+
+function getBookmarkLabel(
+  book: Book,
+  tocItems: TocItem[],
+  activeTocItemId: string | null,
+  locator: Locator,
+): string {
+  if (activeTocItemId !== null) {
+    const activeTocItem = findTocItemById(tocItems, activeTocItemId);
+
+    if (activeTocItem !== null) {
+      return activeTocItem.title;
+    }
+  }
+
+  if (locator.kind === "txt" && locator.chapterId !== undefined) {
+    const tocItem = findTocItemById(tocItems, locator.chapterId);
+
+    if (tocItem !== null) {
+      return tocItem.title;
+    }
+  }
+
+  if (locator.kind === "pdf") {
+    return `Page ${locator.page}`;
+  }
+
+  return book.title;
+}
+
+function getLocatorLabel(locator: Locator): string {
+  if (locator.kind === "txt") {
+    return `TXT ${locator.charOffset}`;
+  }
+
+  if (locator.kind === "epub") {
+    return "EPUB location";
+  }
+
+  return `Page ${locator.page}`;
 }
 
 function flattenTocItems(

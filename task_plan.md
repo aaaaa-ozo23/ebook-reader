@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 3/4：阅读器体验统一调整已完成全量验收；下一步合回 `main` 并推送。
+大阶段 5：书签、高亮、想法与检索正在实施。当前小阶段为 5.1 `codex/stage5-bookmarks`，目标是先补齐书签类型、Rust/Tauri CRUD、前端 fallback、侧栏展示和三格式跳转。
 
 ## 分支策略
 
@@ -228,6 +228,16 @@
 | 5.3 高亮保存 | `codex/stage5-highlights` | 保存颜色、selectedText、locator、contextBefore/After | 重启后高亮和列表仍存在 |
 | 5.4 想法/笔记 | `codex/stage5-notes` | 支持给高亮添加和编辑笔记；`NotesPanel` 列表按书籍过滤 | 笔记增删改查测试通过 |
 | 5.5 搜索基础 | `codex/stage5-search-basic` | TXT/EPUB 支持书内搜索；PDF 搜索视复杂度择机进入 | 搜索结果可跳转，空结果有明确状态 |
+
+### 阶段 5 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 5.1 书签能力 | `codex/stage5-bookmarks` | complete | `pnpm.cmd --filter @reader/core build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，24 tests；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx`，32 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 5.2 选中菜单 | `codex/stage5-selection-menu` | pending | 待验证 |
+| 5.3 高亮保存 | `codex/stage5-highlights` | pending | 待验证 |
+| 5.4 想法/笔记 | `codex/stage5-notes` | pending | 待验证 |
+| 5.5 搜索基础 | `codex/stage5-search-basic` | pending | 待验证 |
 
 ## 大阶段 6：阅读体验完善与可访问性
 

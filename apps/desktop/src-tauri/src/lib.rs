@@ -61,6 +61,26 @@ fn save_reading_progress(
     db::save_reading_progress(&app, &book_id, locator, progress).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn list_bookmarks(app: tauri::AppHandle, book_id: String) -> Result<Vec<db::Bookmark>, String> {
+    db::list_bookmarks(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn create_bookmark(
+    app: tauri::AppHandle,
+    book_id: String,
+    locator: db::Locator,
+    label: Option<String>,
+) -> Result<db::Bookmark, String> {
+    db::create_bookmark(&app, &book_id, locator, label).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn delete_bookmark(app: tauri::AppHandle, bookmark_id: String) -> Result<(), String> {
+    db::delete_bookmark(&app, &bookmark_id).map_err(|error| error.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -80,7 +100,10 @@ pub fn run() {
             get_reader_theme,
             save_reader_theme,
             get_reading_progress,
-            save_reading_progress
+            save_reading_progress,
+            list_bookmarks,
+            create_bookmark,
+            delete_bookmark
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

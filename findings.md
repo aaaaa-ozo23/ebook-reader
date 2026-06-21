@@ -94,6 +94,12 @@
 - 阶段 3/4 体验统一调整确认：非 Focus 模式底部空白主要来自 reader viewport 底部 padding、正文框与控件 gap、控件内部 padding 和 PDF stage 固定 min-height；本轮只压缩普通模式，Focus 专属规则保持既有行为。
 - 阶段 3/4 视觉验证：Browser 插件可检查本地书架首屏并确认无 console warning/error，但其只读 evaluate 环境没有 `localStorage`，无法注入 EPUB/PDF fixture；阅读器视觉状态改用项目 Playwright 生成无版权 EPUB/PDF Blob。
 - 阶段 3/4 视觉验证结果：EPUB/PDF 桌面和 375x760 视口均无正文/控制区重叠，frame-to-controls gap 为 8px，底部 gap 为 27-28px；PDF canvas 非空，EPUB iframe 存在且 slider/页码输入在 locations ready 后启用。
+- 阶段 5 启动确认：SQLite 初始迁移已包含 `bookmarks` 和 `annotations` 表；当前 Rust/Tauri 层尚未实现书签或标注 CRUD 命令，前端 `tauri/reader.ts` 也只有阅读进度/主题/source 相关 bridge。
+- 阶段 5 启动确认：`packages/core` 已有 `Annotation`、`LocatorContext`、`TxtLocator`、`EpubLocator`、`PdfLocator`；缺少 `Bookmark` 类型，TXT locator 也缺少可表达选区终点的可选字段。
+- 阶段 5 启动确认：EPUB adapter 已有 `onSelected`、`addHighlight`、`removeHighlight` 入口；PDF adapter 仍是 canvas-only，用户可见 PDF 选区/高亮前需要叠加 PDF.js `TextLayer`。
+- 阶段 5.1 书签实现确认：现有 `bookmarks` 表字段足够承载 MVP 书签，`locator_json` 可保存 TXT/EPUB/PDF union locator，因此本阶段未新增 migration。
+- 阶段 5.1 书签实现确认：书签创建复用 `normalize_locator_for_book`，该函数文案已从阅读进度专用改为通用 locator 校验；后续 annotations CRUD 可以复用同一校验入口。
+- 阶段 5.1 书签 UI 确认：ReaderShell 侧栏已扩展为 tabs，但 `Notes` 和 `Search` 先显示空状态；后续 5.4/5.5 在同一侧栏 panel 内填充，不需要另起面板体系。
 
 ## 技术决策
 

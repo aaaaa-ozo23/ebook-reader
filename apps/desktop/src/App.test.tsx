@@ -21,10 +21,13 @@ import {
   removeBook,
 } from "./tauri/library";
 import {
+  createBookmark,
+  deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
   getReaderTheme,
   getReadingProgress,
+  listBookmarks,
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
@@ -167,6 +170,9 @@ const pdfAdapterSetZoomMock = vi.hoisted(() =>
   }),
 );
 const pdfAdapterVisiblePagesMock = vi.hoisted(() => vi.fn(() => [1]));
+const createBookmarkMock = vi.hoisted(() => vi.fn());
+const deleteBookmarkMock = vi.hoisted(() => vi.fn());
+const listBookmarksMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./tauri/library", () => ({
   importBook: vi.fn(),
@@ -177,10 +183,13 @@ vi.mock("./tauri/library", () => ({
 }));
 
 vi.mock("./tauri/reader", () => ({
+  createBookmark: createBookmarkMock,
+  deleteBookmark: deleteBookmarkMock,
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
+  listBookmarks: listBookmarksMock,
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
   saveReadingProgress: vi.fn(),
@@ -319,7 +328,10 @@ const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
+const createBookmarkMocked = vi.mocked(createBookmark);
+const deleteBookmarkMocked = vi.mocked(deleteBookmark);
 const importBookMock = vi.mocked(importBook);
+const listBookmarksMocked = vi.mocked(listBookmarks);
 const listBooksMock = vi.mocked(listBooks);
 const markBookOpenedMock = vi.mocked(markBookOpened);
 const openTxtBookMock = vi.mocked(openTxtBook);
@@ -369,6 +381,15 @@ describe("App", () => {
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
+    listBookmarksMocked.mockResolvedValue([]);
+    createBookmarkMocked.mockImplementation(async (bookId, locator, label) => ({
+      id: "bookmark-created",
+      bookId,
+      locator,
+      label,
+      createdAt: "2026-06-21T10:00:00.000Z",
+    }));
+    deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
     saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
@@ -607,6 +628,60 @@ describe("App", () => {
       await screen.findByRole("main", { name: "Ebook Reader bookshelf" }),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
+  });
+
+  it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "bookmark-txt",
+      title: "Bookmark TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Bookmark TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    const bookmarkButton = within(reader).getByRole("button", { name: "Bookmark" });
+    await waitFor(() => expect(bookmarkButton).toBeEnabled());
+
+    await user.click(bookmarkButton);
+
+    await waitFor(() =>
+      expect(createBookmarkMocked).toHaveBeenCalledWith(
+        "bookmark-txt",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: 0,
+        }),
+        "第一章 初见",
+      ),
+    );
+    expect(screen.getByRole("tab", { name: "Bookmarks" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    await user.click(
+      within(reader).getByRole("button", { name: "Go to bookmark 第一章 初见" }),
+    );
+
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "bookmark-txt",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: 0,
+        }),
+        0,
+      ),
+    );
   });
 
   it("opens an EPUB book in the reader shell", async () => {
