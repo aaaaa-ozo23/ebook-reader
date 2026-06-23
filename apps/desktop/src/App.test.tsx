@@ -65,6 +65,8 @@ const epubAdapterGoToMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterGoToProgressMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterAddHighlightMock = vi.hoisted(() => vi.fn());
 const epubAdapterRemoveHighlightMock = vi.hoisted(() => vi.fn());
+const epubAdapterAddUnderlineMock = vi.hoisted(() => vi.fn());
+const epubAdapterRemoveUnderlineMock = vi.hoisted(() => vi.fn());
 const epubAdapterNextMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
@@ -245,6 +247,7 @@ vi.mock("./epub/EpubReaderAdapter", () => ({
   EpubReaderAdapter: vi.fn(function MockEpubReaderAdapter() {
     return {
       addHighlight: epubAdapterAddHighlightMock,
+      addUnderline: epubAdapterAddUnderlineMock,
       close: epubAdapterCloseMock,
       getToc: epubAdapterGetTocMock,
       goTo: epubAdapterGoToMock,
@@ -254,6 +257,7 @@ vi.mock("./epub/EpubReaderAdapter", () => ({
       previous: epubAdapterPreviousMock,
       previewProgress: epubAdapterPreviewProgressMock,
       removeHighlight: epubAdapterRemoveHighlightMock,
+      removeUnderline: epubAdapterRemoveUnderlineMock,
       search: epubAdapterSearchMock,
       setSpreadMode: epubAdapterSetSpreadModeMock,
       setTheme: epubAdapterSetThemeMock,
@@ -411,6 +415,8 @@ describe("App", () => {
     epubAdapterGoToProgressMock.mockClear();
     epubAdapterAddHighlightMock.mockClear();
     epubAdapterRemoveHighlightMock.mockClear();
+    epubAdapterAddUnderlineMock.mockClear();
+    epubAdapterRemoveUnderlineMock.mockClear();
     epubAdapterNextMock.mockClear();
     epubAdapterOpenMock.mockClear();
     epubAdapterPreviousMock.mockClear();
@@ -872,7 +878,7 @@ describe("App", () => {
     );
   });
 
-  it("creates a note from an EPUB selection and opens the notes panel", async () => {
+  it("creates a note from an EPUB selection through the inline note editor", async () => {
     const user = userEvent.setup();
     const epubBook = createBook({
       id: "epub-note",
@@ -910,6 +916,12 @@ describe("App", () => {
     });
     await user.click(within(selectionActions).getByRole("button", { name: "Note" }));
 
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note for Selected note",
+    });
+    await user.type(noteInput, "inline note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
     await waitFor(() =>
       expect(createAnnotationMocked).toHaveBeenCalledWith(
         "epub-note",
@@ -921,13 +933,145 @@ describe("App", () => {
         }),
         "#f3bc55",
         "Selected note",
+        "inline note",
       ),
     );
     expect(screen.getByRole("tab", { name: "Notes" })).toHaveAttribute(
       "aria-selected",
-      "true",
+      "false",
     );
-    expect(await screen.findByText("Selected note")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: "Note for Selected note" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("updates an existing EPUB highlight color instead of creating a duplicate", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-recolor",
+      title: "Recolor EPUB",
+      format: "epub",
+    });
+    const existingHighlight = createAnnotationRecord({
+      id: "existing-epub-highlight",
+      bookId: "epub-recolor",
+      color: "#f3bc55",
+      locator: {
+        kind: "epub",
+        href: "OPS/chapter-one.xhtml",
+        cfi: "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+        selectedText: "Selected text",
+        contextBefore: "Before",
+        contextAfter: "After",
+      },
+      selectedText: "Selected text",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    listAnnotationsMocked.mockResolvedValueOnce([existingHighlight]);
+    updateAnnotationMock.mockResolvedValueOnce({
+      ...existingHighlight,
+      color: "#7dbb78",
+      updatedAt: "2026-06-21T10:09:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Recolor EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+          onSelected?: (selection: {
+            cfiRange: string;
+            selectedText?: string;
+            contextBefore?: string;
+            contextAfter?: string;
+          }) => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(createEpubPosition());
+    adapterOptions?.onSelected?.({
+      cfiRange: "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+      selectedText: "Selected text",
+      contextBefore: "Before",
+      contextAfter: "After",
+    });
+
+    const selectionActions = await screen.findByRole("toolbar", {
+      name: "Selection actions",
+    });
+    await user.click(
+      within(selectionActions).getByRole("button", { name: "Highlight green" }),
+    );
+
+    await waitFor(() =>
+      expect(updateAnnotationMock).toHaveBeenCalledWith(
+        "existing-epub-highlight",
+        "#7dbb78",
+        undefined,
+      ),
+    );
+    expect(createAnnotationMocked).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(epubAdapterRemoveHighlightMock).toHaveBeenCalledWith(
+        "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+      ),
+    );
+    await waitFor(() =>
+      expect(epubAdapterAddHighlightMock).toHaveBeenCalledWith(
+        "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+        "#7dbb78",
+        expect.any(Function),
+      ),
+    );
+  });
+
+  it("hides EPUB selection UI when the adapter reports a cleared selection", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-clear-selection",
+      title: "Clear EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Clear EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onRelocated?: (position: EpubPosition) => void;
+          onSelected?: (selection: {
+            cfiRange: string;
+            selectedText?: string;
+          }) => void;
+          onSelectionCleared?: () => void;
+        }
+      | undefined;
+    adapterOptions?.onRelocated?.(createEpubPosition());
+    adapterOptions?.onSelected?.({
+      cfiRange: "epubcfi(/6/2[chapter-one]!/4/1:2,/4/1:8)",
+      selectedText: "Selected note",
+    });
+
+    expect(
+      await screen.findByRole("toolbar", { name: "Selection actions" }),
+    ).toBeVisible();
+
+    adapterOptions?.onSelectionCleared?.();
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("toolbar", { name: "Selection actions" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("replays saved TXT highlights in visible text blocks", async () => {
@@ -959,6 +1103,116 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByText("她推开门", { selector: "mark" })).toBeVisible();
+  });
+
+  it("creates one TXT highlight for a selection spanning rendered paragraphs", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "txt-cross-selection",
+      title: "Cross TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createCrossParagraphTxtDocument(txtBook));
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Cross TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const viewport = await screen.findByLabelText("Cross TXT content");
+    const firstParagraphNode = screen.getByText("第一段文字。").firstChild;
+    const secondParagraphNode = screen.getByText("第二段文字。").firstChild;
+
+    if (firstParagraphNode === null || secondParagraphNode === null) {
+      throw new Error("Expected rendered TXT paragraph text nodes.");
+    }
+
+    const range = window.document.createRange();
+    range.setStart(firstParagraphNode, 2);
+    range.setEnd(secondParagraphNode, 2);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(viewport);
+
+    const selectionActions = await screen.findByRole("toolbar", {
+      name: "Selection actions",
+    });
+    await user.click(within(selectionActions).getByRole("button", { name: "Highlight" }));
+
+    await waitFor(() =>
+      expect(createAnnotationMocked).toHaveBeenCalledWith(
+        "txt-cross-selection",
+        "highlight",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-cross-0",
+          charOffset: 9,
+          endCharOffset: 16,
+        }),
+        "#f3bc55",
+        expect.stringContaining("段文字。"),
+      ),
+    );
+  });
+
+  it("opens the inline note editor from annotated TXT text and saves updates", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "txt-inline-note",
+      title: "Inline TXT",
+      format: "txt",
+    });
+    const annotation = createAnnotationRecord({
+      id: "txt-inline-annotation",
+      bookId: "txt-inline-note",
+      note: "old note",
+      selectedText: "她推开门",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+    listAnnotationsMocked.mockResolvedValueOnce([annotation]);
+    updateAnnotationMock.mockResolvedValueOnce({
+      ...annotation,
+      note: "new inline note",
+      updatedAt: "2026-06-21T10:09:00.000Z",
+    });
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Inline TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Edit note for 她推开门" }),
+    );
+
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note for 她推开门",
+    });
+    expect(noteInput).toHaveValue("old note");
+
+    await user.clear(noteInput);
+    await user.type(noteInput, "new inline note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(updateAnnotationMock).toHaveBeenCalledWith(
+        "txt-inline-annotation",
+        "#f3bc55",
+        "new inline note",
+      ),
+    );
+    expect(
+      screen.queryByRole("textbox", { name: "Note for 她推开门" }),
+    ).not.toBeInTheDocument();
   });
 
   it("replays saved EPUB highlights through the adapter", async () => {
@@ -993,6 +1247,7 @@ describe("App", () => {
       expect(epubAdapterAddHighlightMock).toHaveBeenCalledWith(
         "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
         "#7dbb78",
+        expect.any(Function),
       ),
     );
   });
@@ -1049,7 +1304,7 @@ describe("App", () => {
     );
   });
 
-  it("edits, jumps to, and deletes notes from the notes sidebar", async () => {
+  it("shows, jumps to, and deletes notes from the read-only notes sidebar", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({
       id: "notes-txt",
@@ -1072,11 +1327,6 @@ describe("App", () => {
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
     listAnnotationsMocked.mockResolvedValueOnce([annotation]);
-    updateAnnotationMock.mockResolvedValueOnce({
-      ...annotation,
-      note: "new note",
-      updatedAt: "2026-06-21T10:08:00.000Z",
-    });
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Notes TXT" })).toBeVisible();
@@ -1085,20 +1335,11 @@ describe("App", () => {
     const reader = await screen.findByRole("main", { name: "TXT reader" });
     await user.click(within(reader).getByRole("tab", { name: "Notes" }));
 
-    const noteInput = await screen.findByRole("textbox", {
-      name: "Note text for 她推开门",
-    });
-    await user.clear(noteInput);
-    await user.type(noteInput, "new note");
-    await user.click(within(reader).getByRole("button", { name: "Save" }));
-
-    await waitFor(() =>
-      expect(updateAnnotationMock).toHaveBeenCalledWith(
-        "annotation-note",
-        "#f3bc55",
-        "new note",
-      ),
-    );
+    expect(await screen.findByText("old note")).toBeVisible();
+    expect(
+      screen.queryByRole("textbox", { name: "Note text for 她推开门" }),
+    ).not.toBeInTheDocument();
+    expect(updateAnnotationMock).not.toHaveBeenCalled();
 
     await user.click(
       within(reader).getByRole("button", { name: "Go to Highlight 她推开门" }),
@@ -1121,9 +1362,7 @@ describe("App", () => {
       expect(deleteAnnotationMocked).toHaveBeenCalledWith("annotation-note"),
     );
     await waitFor(() =>
-      expect(
-        screen.queryByRole("textbox", { name: "Note text for 她推开门" }),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByText("old note")).not.toBeInTheDocument(),
     );
   });
 
@@ -1903,6 +2142,27 @@ function createTxtDocument(book: Book): TxtDocument {
         startChar: 13,
         endChar: text.length,
         text: "第二章 风起\n灯火亮了。",
+      },
+    ],
+  };
+}
+
+function createCrossParagraphTxtDocument(book: Book): TxtDocument {
+  const text = "第一章 测试\n第一段文字。\n第二段文字。";
+
+  return {
+    book,
+    encoding: "UTF-8",
+    byteLength: text.length * 2,
+    charCount: text.length,
+    lineCount: 3,
+    chapters: [
+      {
+        id: "chapter-cross-0",
+        title: "第一章 测试",
+        startChar: 0,
+        endChar: text.length,
+        text,
       },
     ],
   };

@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 5：书签、高亮、想法与检索已完成小阶段实现；下一步在 `codex/v0.1.0-mvp-integration` 上进行全量验收，随后合回 `main` 并推送。
+大阶段 5：书签、高亮、想法与检索的标注体验优化已在 `codex/stage5-annotation-polish` 完成并通过全量验收；下一步合回集成分支和 `main` 并推送。
 
 ## 分支策略
 
@@ -238,6 +238,7 @@
 | 5.3 高亮保存 | `codex/stage5-highlights` | complete | `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，36 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.4 想法/笔记 | `codex/stage5-notes` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，38 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
 | 5.5 搜索基础 | `codex/stage5-search-basic` | complete | `pnpm.cmd --filter @reader/desktop test -- App.test.tsx PdfReaderAdapter.test.ts`，41 tests；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop build` |
+| 5.x 标注体验优化与 Bug 修复 | `codex/stage5-annotation-polish` | complete | `pnpm.cmd install`；`pnpm.cmd --filter @reader/core build`；`pnpm.cmd --filter @reader/desktop lint`；`pnpm.cmd --filter @reader/desktop test`，45 tests；`pnpm.cmd --filter @reader/desktop build`；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests；`pnpm.cmd --filter @reader/desktop test:e2e`，5 tests；Playwright 视觉截图；`pnpm.cmd --filter @reader/desktop tauri:build` |
 
 ### 阶段 5 最终验收记录
 

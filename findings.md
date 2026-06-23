@@ -114,6 +114,13 @@
 - 阶段 5.4 Notes 跳转确认：列表跳转复用 ReaderShell 的 locator 跳转入口，因此 TXT 会同步保存阅读进度，EPUB/PDF 交给各自 adapter goTo；删除 annotation 后高亮重放会通过前端 state 立即消失。
 - 阶段 5.5 搜索确认：统一 Search 面板由 ReaderShell 管理；TXT 搜索直接扫描已加载文档，EPUB/PDF 在 adapter 打开后注册 search provider，避免父组件持有格式内部 adapter。
 - 阶段 5.5 搜索粒度：TXT 返回字符偏移 locator，EPUB 返回 CFI locator，PDF 返回页级 locator；三格式结果上限均为 100 条，PDF 不做页内定位或 OCR。
+- 阶段 5.x polish 发现：TXT 跨段选区不能依赖 `selectedText` 在单个虚拟块内的 `indexOf`；应遍历当前已渲染 `.reader-virtual-row`，用 DOM Range 交集计算每段起止，再汇总为一个 `[charOffset, endCharOffset)` locator。
+- 阶段 5.x polish 发现：高亮改色必须走 update/upsert 路径；TXT 可用字符范围 overlap，EPUB 优先 exact CFI 并用 `href + selectedText + context` 兜底，PDF 用同页 rect overlap，否则会产生重复 annotation。
+- 阶段 5.x polish 发现：EPUB 高亮重放不能只用 CFI set；需要把 `cfi + color + note + updatedAt + type` 作为 signature，signature 变化时 remove 后重新 add，才能让改色立即反映。
+- 阶段 5.x polish 发现：EPUB selection 菜单需要 iframe 内 Range rect 映射到主窗口坐标；只有依赖默认固定位置时，菜单会离选区过远。iframe 内 selection clear、Esc、跳页和外部点击都要关闭浮层。
+- 阶段 5.x polish 设计确认：Note 编辑从侧栏迁移到正文浮层后，Focus 模式不会再因为新增/编辑 note 强制打开左侧侧栏；Notes 侧栏只负责浏览、跳转和删除。
+- 阶段 5.x polish 可见性确认：note-only annotation 若没有底色必须有独立可见标记；TXT 用 dashed underline span，EPUB 用 `annotations.underline`，PDF 用 dashed rect overlay。
+- 阶段 5.x polish 视觉 QA 发现：窄屏下固定宽度浮层不能只 clamp anchor 中心点，否则 `translateX(-50%)` 会让浮层左侧出屏；Note 浮层需要按实际宽度的一半做 X 轴 clamp。
 
 ## 技术决策
 
