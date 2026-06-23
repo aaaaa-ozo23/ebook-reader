@@ -1217,3 +1217,29 @@
 - `pnpm.cmd --filter @reader/desktop test:e2e`，4 tests
 - Playwright Focus 视觉检查：`D:\tl-temp\ebook-reader-epub-focus-fix.png`，底部间距 18px，iframe 文本非空，无 console warning/error
 - `pnpm.cmd --filter @reader/desktop tauri:build`
+
+## 2026-06-23 阶段 5.x 标注体验优化与 Bug 修复
+
+### 状态
+- **当前状态：** complete
+- **分支：** `codex/stage5-annotation-polish`
+
+### 执行的操作
+- 从最新 `main` 快进同步 `codex/v0.1.0-mvp-integration`，创建 `codex/stage5-annotation-polish`。
+- 修复 TXT selection 捕获：支持跨多个已渲染虚拟段落，用 DOM Range 与 row 的交集计算全局 `charOffset/endCharOffset`，不再依赖 `indexOf(selectedText)`。
+- 高亮颜色改为 upsert：TXT 用字符范围 overlap，EPUB 用 CFI 或文本上下文匹配，PDF 用同页 rect overlap；命中已有高亮时调用 `updateAnnotation` 改色。
+- EPUB selection 增加 iframe range anchor rect，菜单按选区坐标定位；iframe selection clear、跳页、Esc 和外部点击都会关闭菜单/Note 浮层。
+- Note 操作改为正文内浮层编辑：选区点击 `Note` 或点击已标注文字时在文字上方显示 textarea，保存时更新已有 note/highlight 或创建 note-only annotation。
+- Notes 侧栏改为只读列表，只显示带 note 的记录，保留跳转和删除，不再提供 textarea/Save。
+- Note-only 和带 note 的高亮增加可见虚线提示：TXT span、EPUB underline、PDF dashed rect overlay。
+
+### 已通过验证
+- `pnpm.cmd install`
+- `pnpm.cmd --filter @reader/core build`
+- `pnpm.cmd --filter @reader/desktop lint`
+- `pnpm.cmd --filter @reader/desktop test`，45 tests
+- `pnpm.cmd --filter @reader/desktop build`
+- `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests
+- `pnpm.cmd --filter @reader/desktop test:e2e`，5 tests
+- Playwright 视觉检查：桌面 `D:\tl-temp\ebook-reader-stage5-annotation-desktop.png`，移动端 `D:\tl-temp\ebook-reader-stage5-annotation-mobile-375x760.png`，正文 Note 浮层可见且不裁切，Notes 侧栏无 textarea/Save，console 无 warning/error
+- `pnpm.cmd --filter @reader/desktop tauri:build`

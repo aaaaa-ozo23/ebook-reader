@@ -41,6 +41,7 @@ interface EpubReaderAdapterOptions {
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
+  onSelectionCleared?: () => void;
   onSpreadChange?: (state: EpubSpreadState) => void;
 }
 
@@ -49,6 +50,12 @@ export interface EpubSelectionSnapshot {
   selectedText?: string;
   contextBefore?: string;
   contextAfter?: string;
+  anchorRect?: {
+    height: number;
+    left: number;
+    top: number;
+    width: number;
+  };
 }
 
 interface EpubLocationLike {
@@ -89,6 +96,15 @@ type RenderedRendition = Rendition & {
   };
 };
 
+type EpubAnnotationClickHandler = (event: MouseEvent) => void;
+
+interface EpubRenderedView {
+  contents?: {
+    document?: Document;
+  };
+  document?: Document;
+}
+
 export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly bookId: string;
   private readonly sourceUrl: string;
@@ -96,6 +112,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onSelected?: (selection: EpubSelectionSnapshot) => void;
+  private readonly onSelectionCleared?: () => void;
   private readonly onSpreadChange?: (state: EpubSpreadState) => void;
   private book: EpubBook | null = null;
   private locationsPromise: Promise<void> | null = null;
@@ -103,6 +120,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private lastPosition: EpubPosition | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private rendition: Rendition | null = null;
+  private selectionCleanupCallbacks: Array<() => void> = [];
+  private selectionDocuments = new WeakSet<Document>();
   private spreadMode: EpubSpreadMode = "single";
   private spreadState: EpubSpreadState = {
     requested: "single",
@@ -120,6 +139,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
     this.onSelected = options.onSelected;
+    this.onSelectionCleared = options.onSelectionCleared;
     this.onSpreadChange = options.onSpreadChange;
   }
 
@@ -159,6 +179,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
   async close(): Promise<void> {
     this.stopResizeObserver();
+    this.stopSelectionObservers();
     this.locationsPromise = null;
     this.locationsReady = false;
     this.lastPosition = null;
@@ -350,13 +371,17 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return hits;
   }
 
-  addHighlight(cfiRange: string, color = "#f3bc55"): void {
+  addHighlight(
+    cfiRange: string,
+    color = "#f3bc55",
+    onClick?: EpubAnnotationClickHandler,
+  ): void {
     const rendition = this.requireRendition();
 
     rendition.annotations.highlight(
       cfiRange,
       {},
-      undefined,
+      onClick,
       "reader-epub-highlight",
       {
         fill: color,
@@ -372,15 +397,47 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     rendition.annotations.remove(cfiRange, "highlight");
   }
 
+  addUnderline(
+    cfiRange: string,
+    color = "#f3bc55",
+    onClick?: EpubAnnotationClickHandler,
+  ): void {
+    const rendition = this.requireRendition();
+
+    rendition.annotations.underline(
+      cfiRange,
+      {},
+      onClick,
+      "reader-epub-note-underline",
+      {
+        stroke: color,
+        "stroke-dasharray": "3 3",
+        "stroke-opacity": "0.95",
+        "stroke-width": "1.6",
+      },
+    );
+  }
+
+  removeUnderline(cfiRange: string): void {
+    const rendition = this.requireRendition();
+
+    rendition.annotations.remove(cfiRange, "underline");
+  }
+
   private registerRenditionEvents(rendition: Rendition): void {
     rendition.on("relocated", (location: Location) => {
       const position = this.locationToPosition(location);
       this.lastPosition = position;
       this.onRelocated?.(position);
+      this.onSelectionCleared?.();
     });
 
     rendition.on("selected", (cfiRange: string) => {
       void this.captureSelection(cfiRange);
+    });
+
+    rendition.on("rendered", (_section: unknown, view: EpubRenderedView) => {
+      this.observeSelectionDocument(view.document ?? view.contents?.document);
     });
   }
 
@@ -394,8 +451,60 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onSelected?.({
       cfiRange,
       selectedText,
+      anchorRect: getViewportRangeRect(range),
       ...getRangeContext(range),
     });
+  }
+
+  private observeSelectionDocument(document: Document | undefined): void {
+    if (document === undefined || this.selectionDocuments.has(document)) {
+      return;
+    }
+
+    this.selectionDocuments.add(document);
+
+    const notifyIfSelectionEmpty = () => {
+      const selection = document.getSelection();
+
+      if (
+        selection === null ||
+        selection.rangeCount === 0 ||
+        selection.toString().trim() === ""
+      ) {
+        this.onSelectionCleared?.();
+      }
+    };
+
+    const deferredNotifyIfSelectionEmpty = () => {
+      window.setTimeout(notifyIfSelectionEmpty, 0);
+    };
+
+    const handleKeyUp = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        this.onSelectionCleared?.();
+        return;
+      }
+
+      notifyIfSelectionEmpty();
+    };
+
+    document.addEventListener("selectionchange", notifyIfSelectionEmpty);
+    document.addEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
+    document.addEventListener("keyup", handleKeyUp);
+    this.selectionCleanupCallbacks.push(() => {
+      document.removeEventListener("selectionchange", notifyIfSelectionEmpty);
+      document.removeEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
+      document.removeEventListener("keyup", handleKeyUp);
+    });
+  }
+
+  private stopSelectionObservers(): void {
+    for (const cleanup of this.selectionCleanupCallbacks) {
+      cleanup();
+    }
+
+    this.selectionCleanupCallbacks = [];
+    this.selectionDocuments = new WeakSet<Document>();
   }
 
   private async generateLocations(book: EpubBook): Promise<void> {
@@ -768,5 +877,33 @@ function getRangeContext(range: Range | null): Pick<
     contextAfter: containerText
       .slice(selectedIndex + selectedText.length, selectedIndex + selectedText.length + SELECTION_CONTEXT_LENGTH)
       .trim(),
+  };
+}
+
+function getViewportRangeRect(range: Range | null): EpubSelectionSnapshot["anchorRect"] {
+  if (range === null) {
+    return undefined;
+  }
+
+  const rect = range.getBoundingClientRect();
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    return undefined;
+  }
+
+  const frameElement = range.startContainer.ownerDocument?.defaultView?.frameElement;
+  const frameRect =
+    frameElement instanceof HTMLElement
+      ? frameElement.getBoundingClientRect()
+      : ({
+          left: 0,
+          top: 0,
+        } as Pick<DOMRect, "left" | "top">);
+
+  return {
+    height: rect.height,
+    left: frameRect.left + rect.left,
+    top: frameRect.top + rect.top,
+    width: rect.width,
   };
 }
