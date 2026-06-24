@@ -201,6 +201,18 @@
 - 阶段 2 Browser QA 使用 `http://127.0.0.1:1420/` 检查书架首屏：1280x800 桌面布局左侧窄栏、导入按钮、空状态不重叠；约 375x760 窄屏顶部导航、导入按钮、空状态纵向排列正常。
 - 阶段 2 Playwright seeded TXT smoke 验证阅读页可打开长 TXT fixture、主题切换可保存到 UI 状态、返回书架可用，虚拟化段落 DOM 数量低于 80。
 
+## 2026-06-24 阶段 5.x 标注体验二次修复发现
+
+| 发现 | 影响 | 处理 |
+|------|------|------|
+| Notes 侧栏仍按 `annotationHasNote` 过滤，导致高亮-only 不显示 | 用户无法从侧栏浏览纯高亮 | 改为复用 `isVisibleAnnotation`，显示 highlight-only、note-only、highlight+note 三类未删除记录 |
+| TXT/PDF 渲染把所有可见 annotation 都绑定为 button | 点击普通高亮会误打开批注编辑 | 渲染时拆分底色和下划线，只有 note-bearing 范围绑定 click/keyboard |
+| TXT 同范围多条 note 旧实现只能进入单条编辑 | 无法看到或新增更多同范围批注 | 新增 `Saved notes` 浮层，按 locator overlap/CFI/rect 匹配同范围 note 列表，并提供 `Add note` |
+| EPUB `addHighlight` 仍绑定 click handler | 普通高亮在 EPUB 中也会误开批注 | 普通高亮只做视觉 replay，只有 `addUnderline` 绑定 note popover 入口 |
+| EPUB selection 使用整段 `getBoundingClientRect()` | 多行或整段选择时菜单离选中文字偏远 | 改用首个有效 `Range.getClientRects()`，主窗口坐标映射后用 top anchor 贴近浮层 |
+| 本轮未暴露 Browser 插件控制工具 | 视觉检查不能走 Browser 插件 | 使用常规 Playwright 启动 Vite，并生成桌面/375x760 截图验证 |
+| `tauri:build` 首次因 release exe 被占用失败 | Windows 无法删除正在运行的 `ebook-reader-desktop.exe` | 结束该 release 进程后重跑打包成功 |
+
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
