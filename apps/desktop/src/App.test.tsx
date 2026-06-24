@@ -841,6 +841,7 @@ describe("App", () => {
             selectedText?: string;
             contextBefore?: string;
             contextAfter?: string;
+            anchorRect?: { height: number; left: number; top: number; width: number };
           }) => void;
         }
       | undefined;
@@ -850,11 +851,18 @@ describe("App", () => {
       selectedText: "Selected text",
       contextBefore: "Before",
       contextAfter: "After",
+      anchorRect: {
+        height: 18,
+        left: 120,
+        top: 220,
+        width: 40,
+      },
     });
 
     const selectionActions = await screen.findByRole("toolbar", {
       name: "Selection actions",
     });
+    expect(selectionActions).toHaveStyle({ left: "140px", top: "220px" });
     expect(within(selectionActions).getByRole("button", { name: "Highlight" })).toBeVisible();
     expect(within(selectionActions).getByRole("button", { name: "Note" })).toBeVisible();
     expect(within(selectionActions).getByRole("button", { name: "Copy" })).toBeVisible();
@@ -1024,7 +1032,6 @@ describe("App", () => {
       expect(epubAdapterAddHighlightMock).toHaveBeenCalledWith(
         "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
         "#7dbb78",
-        expect.any(Function),
       ),
     );
   });
@@ -1103,6 +1110,9 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(await screen.findByText("她推开门", { selector: "mark" })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Edit note for 她推开门" }),
+    ).not.toBeInTheDocument();
   });
 
   it("creates one TXT highlight for a selection spanning rendered paragraphs", async () => {
@@ -1176,10 +1186,22 @@ describe("App", () => {
         endCharOffset: 11,
       },
     });
+    const secondAnnotation = createAnnotationRecord({
+      id: "txt-inline-annotation-second",
+      bookId: "txt-inline-note",
+      note: "second note",
+      selectedText: "她推开门",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+    });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
-    listAnnotationsMocked.mockResolvedValueOnce([annotation]);
+    listAnnotationsMocked.mockResolvedValueOnce([annotation, secondAnnotation]);
     updateAnnotationMock.mockResolvedValueOnce({
       ...annotation,
       note: "new inline note",
@@ -1192,6 +1214,18 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(
       await screen.findByRole("button", { name: "Edit note for 她推开门" }),
+    );
+
+    const savedNotes = await screen.findByRole("dialog", {
+      name: "Saved notes for 她推开门",
+    });
+    expect(within(savedNotes).getByText("old note")).toBeVisible();
+    expect(within(savedNotes).getByText("second note")).toBeVisible();
+
+    await user.click(
+      within(savedNotes).getByRole("button", {
+        name: "Edit saved note 她推开门: old note",
+      }),
     );
 
     const noteInput = await screen.findByRole("textbox", {
@@ -1213,6 +1247,141 @@ describe("App", () => {
     expect(
       screen.queryByRole("textbox", { name: "Note for 她推开门" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("adds a new TXT note from the saved-note popover", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "txt-add-note",
+      title: "Add Note TXT",
+      format: "txt",
+    });
+    const annotation = createAnnotationRecord({
+      id: "txt-add-note-existing",
+      bookId: "txt-add-note",
+      note: "saved note",
+      selectedText: "她推开门",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+    listAnnotationsMocked.mockResolvedValueOnce([annotation]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Add Note TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Edit note for 她推开门" }),
+    );
+
+    const savedNotes = await screen.findByRole("dialog", {
+      name: "Saved notes for 她推开门",
+    });
+    await user.click(within(savedNotes).getByRole("button", { name: "Add note" }));
+
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note for 她推开门",
+    });
+    expect(noteInput).toHaveValue("");
+
+    await user.type(noteInput, "another saved note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(createAnnotationMocked).toHaveBeenCalledWith(
+        "txt-add-note",
+        "note",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: 7,
+          endCharOffset: 11,
+        }),
+        "#f3bc55",
+        "她推开门",
+        "another saved note",
+      ),
+    );
+    expect(updateAnnotationMock).not.toHaveBeenCalled();
+  });
+
+  it("creates a new TXT note from a selection instead of overwriting a highlight", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "txt-note-new",
+      title: "New Note TXT",
+      format: "txt",
+    });
+    const highlight = createAnnotationRecord({
+      id: "txt-note-existing-highlight",
+      bookId: "txt-note-new",
+      selectedText: "她推开门",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      },
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+    listAnnotationsMocked.mockResolvedValueOnce([highlight]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "New Note TXT" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const viewport = await screen.findByLabelText("New Note TXT content");
+    const highlightedText = await screen.findByText("她推开门", { selector: "mark" });
+    const textNode = highlightedText.firstChild;
+
+    if (textNode === null) {
+      throw new Error("Expected highlighted TXT text node.");
+    }
+
+    const range = window.document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 4);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(viewport);
+
+    const selectionActions = await screen.findByRole("toolbar", {
+      name: "Selection actions",
+    });
+    await user.click(within(selectionActions).getByRole("button", { name: "Note" }));
+
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note for 她推开门",
+    });
+    await user.type(noteInput, "new note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(createAnnotationMocked).toHaveBeenCalledWith(
+        "txt-note-new",
+        "note",
+        expect.objectContaining({
+          kind: "txt",
+          chapterId: "chapter-1-0",
+          charOffset: 7,
+          endCharOffset: 11,
+        }),
+        "#f3bc55",
+        "她推开门",
+        "new note",
+      ),
+    );
+    expect(updateAnnotationMock).not.toHaveBeenCalled();
   });
 
   it("replays saved EPUB highlights through the adapter", async () => {
@@ -1247,9 +1416,62 @@ describe("App", () => {
       expect(epubAdapterAddHighlightMock).toHaveBeenCalledWith(
         "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
         "#7dbb78",
+      ),
+    );
+  });
+
+  it("replays saved EPUB note underlines with a note popover click handler", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-note-underline",
+      title: "Underline EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    listAnnotationsMocked.mockResolvedValueOnce([
+      createAnnotationRecord({
+        id: "epub-note-one",
+        bookId: "epub-note-underline",
+        type: "note",
+        note: "saved epub note",
+        selectedText: "Selected text",
+        locator: {
+          kind: "epub",
+          href: "OPS/chapter-one.xhtml",
+          cfi: "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+          selectedText: "Selected text",
+        },
+      }),
+    ]);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Underline EPUB" })).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+
+    await waitFor(() =>
+      expect(epubAdapterAddUnderlineMock).toHaveBeenCalledWith(
+        "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+        "#f3bc55",
         expect.any(Function),
       ),
     );
+    expect(epubAdapterAddHighlightMock).not.toHaveBeenCalled();
+
+    const onUnderlineClick = epubAdapterAddUnderlineMock.mock.calls[0]?.[2] as
+      | ((event: MouseEvent) => void)
+      | undefined;
+    onUnderlineClick?.({
+      currentTarget: window.document.body,
+      target: window.document.body,
+    } as unknown as MouseEvent);
+
+    const savedNotes = await screen.findByRole("dialog", {
+      name: "Saved notes for Selected text",
+    });
+    expect(within(savedNotes).getByText("saved epub note")).toBeVisible();
   });
 
   it("replays saved PDF highlights as page overlays", async () => {
@@ -1290,6 +1512,9 @@ describe("App", () => {
     await waitFor(() =>
       expect(reader.querySelector(".reader-pdf-highlight-rect")).not.toBeNull(),
     );
+    expect(
+      within(reader).queryByRole("button", { name: "Edit note for PDF text" }),
+    ).not.toBeInTheDocument();
     expect(pdfAdapterPdfRectsToViewportRectsMock).toHaveBeenCalledWith(
       1,
       [
@@ -1323,10 +1548,21 @@ describe("App", () => {
         endCharOffset: 11,
       },
     });
+    const highlightOnly = createAnnotationRecord({
+      id: "annotation-highlight-only",
+      bookId: "notes-txt",
+      selectedText: "灯火亮了",
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-2-13",
+        charOffset: 20,
+        endCharOffset: 24,
+      },
+    });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
-    listAnnotationsMocked.mockResolvedValueOnce([annotation]);
+    listAnnotationsMocked.mockResolvedValueOnce([annotation, highlightOnly]);
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Notes TXT" })).toBeVisible();
@@ -1337,13 +1573,18 @@ describe("App", () => {
 
     expect(await screen.findByText("old note")).toBeVisible();
     expect(
+      within(reader).getByRole("button", { name: "Go to Highlight 灯火亮了" }),
+    ).toBeVisible();
+    expect(
       screen.queryByRole("textbox", { name: "Note text for 她推开门" }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     expect(updateAnnotationMock).not.toHaveBeenCalled();
 
-    await user.click(
-      within(reader).getByRole("button", { name: "Go to Highlight 她推开门" }),
-    );
+    const noteJumpButton = within(reader).getByRole("button", {
+      name: "Go to Highlight 她推开门",
+    });
+    await user.click(noteJumpButton);
     await waitFor(() =>
       expect(saveReadingProgressMock).toHaveBeenCalledWith(
         "notes-txt",
@@ -1356,7 +1597,13 @@ describe("App", () => {
       ),
     );
 
-    await user.click(within(reader).getByRole("button", { name: "Delete" }));
+    const noteItem = noteJumpButton.closest(".reader-note");
+
+    if (!(noteItem instanceof HTMLElement)) {
+      throw new Error("Expected note sidebar item.");
+    }
+
+    await user.click(within(noteItem).getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
       expect(deleteAnnotationMocked).toHaveBeenCalledWith("annotation-note"),

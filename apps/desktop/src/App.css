@@ -997,7 +997,7 @@ button:disabled {
   background: #243438;
   padding: 6px;
   box-shadow: 0 16px 38px rgba(29, 40, 45, 0.24);
-  transform: translateX(-50%);
+  transform: translate(-50%, calc(-100% - 6px));
 }
 
 .reader-selection-menu button {
@@ -1077,6 +1077,88 @@ button:disabled {
 
 .reader-note-editor__actions button[type="submit"] {
   background: #f3bc55;
+  color: #1d282d;
+}
+
+.reader-note-popover {
+  position: fixed;
+  z-index: 9;
+  display: grid;
+  width: min(340px, calc(100vw - 28px));
+  gap: 8px;
+  border: 1px solid rgba(247, 242, 232, 0.2);
+  border-radius: 8px;
+  background: #243438;
+  padding: 8px;
+  box-shadow: 0 18px 44px rgba(29, 40, 45, 0.28);
+  transform: translate(-50%, calc(-100% - 6px));
+}
+
+.reader-note-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #f7f2e8;
+}
+
+.reader-note-popover__header button,
+.reader-note-popover__add,
+.reader-note-popover__item {
+  border: 0;
+  border-radius: 6px;
+  color: #f7f2e8;
+  font-weight: 800;
+}
+
+.reader-note-popover__header button,
+.reader-note-popover__add {
+  min-height: 30px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0 10px;
+}
+
+.reader-note-popover__items {
+  display: grid;
+  gap: 6px;
+  max-height: min(220px, 42vh);
+  overflow: auto;
+}
+
+.reader-note-popover__item {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 8px;
+  text-align: left;
+}
+
+.reader-note-popover__item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-note-popover__item small {
+  color: rgba(247, 242, 232, 0.7);
+}
+
+.reader-note-popover__add {
+  justify-self: end;
+  background: #f3bc55;
+  color: #1d282d;
+}
+
+.reader-note-popover button:hover,
+.reader-note-popover button:focus-visible {
+  background: rgba(243, 188, 85, 0.22);
+  color: #ffffff;
+}
+
+.reader-note-popover__add:hover,
+.reader-note-popover__add:focus-visible {
+  background: #ffd06f;
   color: #1d282d;
 }
 
@@ -1518,8 +1600,7 @@ button:disabled {
 .reader-pdf-highlight-rect {
   position: absolute;
   border-radius: 2px;
-  cursor: pointer;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .reader-pdf-highlight-rect--highlight {
@@ -1533,6 +1614,8 @@ button:disabled {
 
 .reader-pdf-highlight-rect--note {
   border-bottom: 2px dashed var(--reader-highlight-color, #f3bc55);
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .reader-pdf-control-row--secondary {

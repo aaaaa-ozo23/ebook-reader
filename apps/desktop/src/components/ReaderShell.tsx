@@ -244,6 +244,17 @@ interface ReaderNoteEditorState {
   selectedText: string;
 }
 
+interface ReaderNotePopoverState {
+  annotations: Annotation[];
+  color?: string;
+  contextAfter?: string;
+  contextBefore?: string;
+  locator: Locator;
+  menuX: number;
+  menuY: number;
+  selectedText: string;
+}
+
 interface ReaderMenuAnchor {
   menuX: number;
   menuY: number;
@@ -279,8 +290,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [selectionSnapshot, setSelectionSnapshot] =
     useState<ReaderSelectionSnapshot | null>(null);
   const [noteEditor, setNoteEditor] = useState<ReaderNoteEditorState | null>(null);
+  const [notePopover, setNotePopover] = useState<ReaderNotePopoverState | null>(null);
   const selectionMenuRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLFormElement | null>(null);
+  const notePopoverRef = useRef<HTMLDivElement | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
@@ -739,6 +752,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       setSelectionSnapshot(snapshot);
       if (snapshot !== null) {
         setNoteEditor(null);
+        setNotePopover(null);
       }
     },
     [],
@@ -747,6 +761,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const handleClearSelectionUi = useCallback(() => {
     setSelectionSnapshot(null);
     setNoteEditor(null);
+    setNotePopover(null);
   }, []);
 
   useEffect(() => {
@@ -759,19 +774,22 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
       if (
         selectionMenuRef.current?.contains(target) === true ||
-        noteEditorRef.current?.contains(target) === true
+        noteEditorRef.current?.contains(target) === true ||
+        notePopoverRef.current?.contains(target) === true
       ) {
         return;
       }
 
       setSelectionSnapshot(null);
       setNoteEditor(null);
+      setNotePopover(null);
     };
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         setSelectionSnapshot(null);
         setNoteEditor(null);
+        setNotePopover(null);
       }
     };
 
@@ -793,6 +811,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
     void navigator.clipboard?.writeText(selectedText).catch(() => undefined);
     setSelectionSnapshot(null);
+    setNotePopover(null);
   }, [selectionSnapshot]);
 
   const handlePendingHighlight = useCallback(
@@ -805,6 +824,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
       setAnnotationError(null);
       setSelectionSnapshot(null);
+      setNotePopover(null);
 
       const matchingHighlights = findMatchingHighlightAnnotations(
         visibleAnnotations,
@@ -854,25 +874,23 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       return;
     }
 
-    const matchingAnnotation = findBestAnnotationForNote(visibleAnnotations, snapshot);
-
     setSelectionSnapshot(null);
+    setNotePopover(null);
     const noteAnchor = getNoteEditorAnchor(snapshot);
 
     setNoteEditor({
-      annotationId: matchingAnnotation?.id,
-      color: matchingAnnotation?.color ?? DEFAULT_HIGHLIGHT_COLOR,
+      color: DEFAULT_HIGHLIGHT_COLOR,
       contextAfter: snapshot.contextAfter,
       contextBefore: snapshot.contextBefore,
-      draft: matchingAnnotation?.note ?? "",
+      draft: "",
       locator: snapshot.locator,
       menuX: noteAnchor.menuX,
       menuY: noteAnchor.menuY,
       selectedText: snapshot.selectedText,
     });
-  }, [selectionSnapshot, visibleAnnotations]);
+  }, [selectionSnapshot]);
 
-  const handleAnnotationActivate = useCallback(
+  const openNoteEditorForAnnotation = useCallback(
     (annotation: Annotation, anchor: ReaderMenuAnchor) => {
       const noteAnchor = getNoteEditorAnchor(anchor);
       const selectedText =
@@ -881,6 +899,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         getLocatorLabel(annotation.locator);
 
       setSelectionSnapshot(null);
+      setNotePopover(null);
       setNoteEditor({
         annotationId: annotation.id,
         color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
@@ -895,6 +914,76 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     },
     [],
   );
+
+  const handleAnnotationNotesActivate = useCallback(
+    (annotation: Annotation, anchor: ReaderMenuAnchor) => {
+      const matchingNotes = findMatchingNoteAnnotations(visibleAnnotations, annotation);
+
+      if (matchingNotes.length === 0) {
+        return;
+      }
+
+      const popoverAnchor = getNoteEditorAnchor(anchor);
+      const selectedText =
+        annotation.selectedText ??
+        annotation.locator.selectedText ??
+        getLocatorLabel(annotation.locator);
+
+      setSelectionSnapshot(null);
+      setNoteEditor(null);
+      setNotePopover({
+        annotations: matchingNotes,
+        color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+        contextAfter: annotation.locator.contextAfter,
+        contextBefore: annotation.locator.contextBefore,
+        locator: annotation.locator,
+        menuX: popoverAnchor.menuX,
+        menuY: popoverAnchor.menuY,
+        selectedText,
+      });
+    },
+    [visibleAnnotations],
+  );
+
+  const handleEditPopoverAnnotation = useCallback(
+    (annotation: Annotation) => {
+      const currentPopover = notePopover;
+
+      if (currentPopover === null) {
+        return;
+      }
+
+      openNoteEditorForAnnotation(annotation, {
+        menuX: currentPopover.menuX,
+        menuY: currentPopover.menuY,
+      });
+    },
+    [notePopover, openNoteEditorForAnnotation],
+  );
+
+  const handleAddNoteFromPopover = useCallback(() => {
+    const currentPopover = notePopover;
+
+    if (currentPopover === null) {
+      return;
+    }
+
+    setNotePopover(null);
+    setNoteEditor({
+      color: currentPopover.color ?? DEFAULT_HIGHLIGHT_COLOR,
+      contextAfter: currentPopover.contextAfter,
+      contextBefore: currentPopover.contextBefore,
+      draft: "",
+      locator: currentPopover.locator,
+      menuX: currentPopover.menuX,
+      menuY: currentPopover.menuY,
+      selectedText: currentPopover.selectedText,
+    });
+  }, [notePopover]);
+
+  const handleCloseNotePopover = useCallback(() => {
+    setNotePopover(null);
+  }, []);
 
   const handleNoteDraftChange = useCallback((draft: string) => {
     setNoteEditor((currentEditor) =>
@@ -1070,7 +1159,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             isLoading={isLoading}
             jumpRequest={txtJumpRequest}
             onActiveChapterChange={setActiveTocItemId}
-            onAnnotationActivate={handleAnnotationActivate}
+            onAnnotationActivate={handleAnnotationNotesActivate}
             onProgressChange={handleTxtProgressChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
@@ -1085,7 +1174,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
-            onAnnotationActivate={handleAnnotationActivate}
+            onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onSelectionCleared={handleClearSelectionUi}
             onSelectionChange={handleSelectionChange}
@@ -1102,7 +1191,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
-            onAnnotationActivate={handleAnnotationActivate}
+            onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
@@ -1128,6 +1217,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           onCancel={handleCancelNoteEditor}
           onDraftChange={handleNoteDraftChange}
           onSave={handleSaveNoteEditor}
+        />
+        <NotePopover
+          popover={notePopover}
+          popoverRef={notePopoverRef}
+          onAddNote={handleAddNoteFromPopover}
+          onClose={handleCloseNotePopover}
+          onEditAnnotation={handleEditPopoverAnnotation}
         />
       </section>
     </main>
@@ -1190,7 +1286,7 @@ function ReaderSidebar({
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
   const noteAnnotations = useMemo(
-    () => annotations.filter(annotationHasNote),
+    () => annotations.filter(isVisibleAnnotation),
     [annotations],
   );
 
@@ -1535,6 +1631,75 @@ function NoteEditor({
         </button>
       </div>
     </form>
+  );
+}
+
+interface NotePopoverProps {
+  popover: ReaderNotePopoverState | null;
+  popoverRef: RefObject<HTMLDivElement | null>;
+  onAddNote: () => void;
+  onClose: () => void;
+  onEditAnnotation: (annotation: Annotation) => void;
+}
+
+function NotePopover({
+  popover,
+  popoverRef,
+  onAddNote,
+  onClose,
+  onEditAnnotation,
+}: NotePopoverProps) {
+  if (popover === null) {
+    return null;
+  }
+
+  return (
+    <div
+      ref={popoverRef}
+      className="reader-note-popover"
+      role="dialog"
+      aria-label={`Saved notes for ${popover.selectedText}`}
+      style={{
+        left: `${popover.menuX}px`,
+        top: `${popover.menuY}px`,
+      }}
+    >
+      <div className="reader-note-popover__header">
+        <strong>Saved notes</strong>
+        <button type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <div className="reader-note-popover__items" role="list">
+        {popover.annotations.map((annotation) => {
+          const excerpt =
+            annotation.selectedText ??
+            annotation.locator.selectedText ??
+            getLocatorLabel(annotation.locator);
+          const note = annotation.note?.trim() ?? "";
+
+          return (
+            <button
+              key={annotation.id}
+              type="button"
+              className="reader-note-popover__item"
+              aria-label={`Edit saved note ${excerpt}${note === "" ? "" : `: ${note}`}`}
+              onClick={() => onEditAnnotation(annotation)}
+            >
+              <span>{note === "" ? excerpt : note}</span>
+              <small>{formatAnnotationTimestamp(annotation.updatedAt)}</small>
+            </button>
+          );
+        })}
+      </div>
+      <button
+        type="button"
+        className="reader-note-popover__add"
+        onClick={onAddNote}
+      >
+        Add note
+      </button>
+    </div>
   );
 }
 
@@ -2155,13 +2320,7 @@ function EpubReaderContent({
         continue;
       }
 
-      adapter.addHighlight(
-        cfi,
-        annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
-        (event) => {
-          onAnnotationActivate(annotation, getEventMenuAnchor(event));
-        },
-      );
+      adapter.addHighlight(cfi, annotation.color ?? DEFAULT_HIGHLIGHT_COLOR);
     }
 
     appliedEpubHighlightSignaturesRef.current = nextHighlightSignatures;
@@ -3179,49 +3338,63 @@ function PdfReaderContent({
                   className="reader-pdf-text-layer"
                   aria-hidden="true"
                 />
-                <div className="reader-pdf-highlight-layer" aria-hidden="true">
+                <div className="reader-pdf-highlight-layer">
                   {(pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []).map(
-                    (highlight) => (
-                      <span
-                        key={highlight.id}
-                        className={`reader-pdf-highlight-rect ${
-                          highlight.hasHighlight ? "reader-pdf-highlight-rect--highlight" : ""
-                        } ${highlight.hasNote ? "reader-pdf-highlight-rect--note" : ""}`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Edit note for ${
-                          highlight.annotation.selectedText ??
-                          highlight.annotation.locator.selectedText ??
-                          getLocatorLabel(highlight.annotation.locator)
-                        }`}
-                        onClick={(event) => {
-                          onAnnotationActivate(
-                            highlight.annotation,
-                            getElementMenuAnchor(event.currentTarget),
-                          );
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter" && event.key !== " ") {
-                            return;
-                          }
+                    (highlight) => {
+                      const className = `reader-pdf-highlight-rect ${
+                        highlight.hasHighlight ? "reader-pdf-highlight-rect--highlight" : ""
+                      } ${highlight.hasNote ? "reader-pdf-highlight-rect--note" : ""}`;
+                      const style = {
+                        "--reader-highlight-color": highlight.color,
+                        height: `${highlight.height}px`,
+                        left: `${highlight.x}px`,
+                        top: `${highlight.y}px`,
+                        width: `${highlight.width}px`,
+                      } as CSSProperties;
 
-                          event.preventDefault();
-                          onAnnotationActivate(
-                            highlight.annotation,
-                            getElementMenuAnchor(event.currentTarget),
-                          );
-                        }}
-                        style={
-                          {
-                            "--reader-highlight-color": highlight.color,
-                            height: `${highlight.height}px`,
-                            left: `${highlight.x}px`,
-                            top: `${highlight.y}px`,
-                            width: `${highlight.width}px`,
-                          } as CSSProperties
-                        }
-                      />
-                    ),
+                      if (!highlight.hasNote) {
+                        return (
+                          <span
+                            key={highlight.id}
+                            className={className}
+                            aria-hidden="true"
+                            style={style}
+                          />
+                        );
+                      }
+
+                      return (
+                        <span
+                          key={highlight.id}
+                          className={className}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Edit note for ${
+                            highlight.annotation.selectedText ??
+                            highlight.annotation.locator.selectedText ??
+                            getLocatorLabel(highlight.annotation.locator)
+                          }`}
+                          onClick={(event) => {
+                            onAnnotationActivate(
+                              highlight.annotation,
+                              getElementMenuAnchor(event.currentTarget),
+                            );
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter" && event.key !== " ") {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            onAnnotationActivate(
+                              highlight.annotation,
+                              getElementMenuAnchor(event.currentTarget),
+                            );
+                          }}
+                          style={style}
+                        />
+                      );
+                    },
                   )}
                 </div>
               </div>
@@ -3668,7 +3841,7 @@ function renderAnnotatedText(
   annotations: Annotation[],
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void,
 ): ReactNode {
-  const ranges = getTxtVisibleAnnotationRanges(block, annotations);
+  const ranges = getTxtAnnotationSegments(block, annotations);
 
   if (ranges.length === 0) {
     return block.text;
@@ -3687,22 +3860,45 @@ function renderAnnotatedText(
 
     if (end > start) {
       const TagName = range.hasHighlight ? "mark" : "span";
+      const interactiveAnnotation = range.noteAnnotations[0];
+      const className = [
+        interactiveAnnotation === undefined ? "" : "reader-annotation-target",
+        range.hasHighlight ? "reader-highlight" : "",
+        range.hasNote ? "reader-note-target" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const commonProps = {
+        className,
+        style: { "--reader-highlight-color": range.color } as CSSProperties,
+      };
+
+      if (interactiveAnnotation === undefined) {
+        fragments.push(
+          <TagName key={`${range.id}-${index}`} {...commonProps}>
+            {block.text.slice(start, end)}
+          </TagName>,
+        );
+        cursor = Math.max(cursor, end);
+        return;
+      }
+
       fragments.push(
         <TagName
           key={`${range.id}-${index}`}
-          className={`reader-annotation-target ${
-            range.hasHighlight ? "reader-highlight" : ""
-          } ${range.hasNote ? "reader-note-target" : ""}`}
+          {...commonProps}
           role="button"
           tabIndex={0}
           aria-label={`Edit note for ${
-            range.annotation.selectedText ??
-            range.annotation.locator.selectedText ??
-            getLocatorLabel(range.annotation.locator)
+            interactiveAnnotation.selectedText ??
+            interactiveAnnotation.locator.selectedText ??
+            getLocatorLabel(interactiveAnnotation.locator)
           }`}
-          style={{ "--reader-highlight-color": range.color } as CSSProperties}
           onClick={(event) => {
-            onAnnotationActivate(range.annotation, getElementMenuAnchor(event.currentTarget));
+            onAnnotationActivate(
+              interactiveAnnotation,
+              getElementMenuAnchor(event.currentTarget),
+            );
           }}
           onKeyDown={(event) => {
             if (event.key !== "Enter" && event.key !== " ") {
@@ -3710,7 +3906,10 @@ function renderAnnotatedText(
             }
 
             event.preventDefault();
-            onAnnotationActivate(range.annotation, getElementMenuAnchor(event.currentTarget));
+            onAnnotationActivate(
+              interactiveAnnotation,
+              getElementMenuAnchor(event.currentTarget),
+            );
           }}
         >
           {block.text.slice(start, end)}
@@ -3728,22 +3927,22 @@ function renderAnnotatedText(
   return fragments;
 }
 
-function getTxtVisibleAnnotationRanges(
+function getTxtAnnotationSegments(
   block: ReaderVirtualBlock,
   annotations: Annotation[],
 ): Array<{
-  annotation: Annotation;
   color: string;
   hasHighlight: boolean;
   hasNote: boolean;
   id: string;
+  noteAnnotations: Annotation[];
   start: number;
   end: number;
 }> {
   const blockStart = block.charOffset;
   const blockEnd = block.charOffset + block.text.length;
 
-  return annotations
+  const coverages = annotations
     .filter(isVisibleAnnotation)
     .flatMap((annotation) => {
       const locator = annotation.locator;
@@ -3770,18 +3969,67 @@ function getTxtVisibleAnnotationRanges(
           hasNote: annotationHasNote(annotation),
         },
       ];
-    })
-    .sort((firstRange, secondRange) => {
-      if (firstRange.start !== secondRange.start) {
-        return firstRange.start - secondRange.start;
-      }
-
-      if (firstRange.hasHighlight !== secondRange.hasHighlight) {
-        return firstRange.hasHighlight ? -1 : 1;
-      }
-
-      return secondRange.end - firstRange.end;
     });
+
+  if (coverages.length === 0) {
+    return [];
+  }
+
+  const boundaries = Array.from(
+    new Set(coverages.flatMap((coverage) => [coverage.start, coverage.end])),
+  ).sort((firstBoundary, secondBoundary) => firstBoundary - secondBoundary);
+  const segments: Array<{
+    color: string;
+    hasHighlight: boolean;
+    hasNote: boolean;
+    id: string;
+    noteAnnotations: Annotation[];
+    start: number;
+    end: number;
+  }> = [];
+
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+
+    if (start === undefined || end === undefined || end <= start) {
+      continue;
+    }
+
+    const coveringRanges = coverages.filter(
+      (coverage) => coverage.start < end && coverage.end > start,
+    );
+
+    if (coveringRanges.length === 0) {
+      continue;
+    }
+
+    const highlightRange = coveringRanges.find((coverage) => coverage.hasHighlight);
+    const noteAnnotations = coveringRanges
+      .filter((coverage) => coverage.hasNote)
+      .map((coverage) => coverage.annotation)
+      .filter(
+        (annotation, annotationIndex, allAnnotations) =>
+          allAnnotations.findIndex(
+            (currentAnnotation) => currentAnnotation.id === annotation.id,
+          ) === annotationIndex,
+      );
+
+    segments.push({
+      color:
+        highlightRange?.color ??
+        noteAnnotations[0]?.color ??
+        DEFAULT_HIGHLIGHT_COLOR,
+      hasHighlight: highlightRange !== undefined,
+      hasNote: noteAnnotations.length > 0,
+      id: coveringRanges.map((coverage) => coverage.id).join("-"),
+      noteAnnotations,
+      start,
+      end,
+    });
+  }
+
+  return segments;
 }
 
 function getEpubHighlightAnnotations(
@@ -3851,20 +4099,15 @@ function findMatchingHighlightAnnotations(
   );
 }
 
-function findBestAnnotationForNote(
+function findMatchingNoteAnnotations(
   annotations: Annotation[],
-  selection: ReaderSelectionSnapshot,
-): Annotation | undefined {
-  const matchingAnnotations = annotations.filter(
+  referenceAnnotation: Annotation,
+): Annotation[] {
+  return annotations.filter(
     (annotation) =>
       annotation.deletedAt === undefined &&
-      locatorsMatchSelection(annotation.locator, selection),
-  );
-
-  return (
-    matchingAnnotations.find(annotationHasNote) ??
-    matchingAnnotations.find((annotation) => annotation.type === "highlight") ??
-    matchingAnnotations[0]
+      annotationHasNote(annotation) &&
+      locatorsMatchAnnotation(annotation, referenceAnnotation),
   );
 }
 
@@ -3888,6 +4131,32 @@ function locatorsMatchSelection(
 
   if (locator.kind === "pdf" && selectionLocator.kind === "pdf") {
     return pdfLocatorsOverlap(locator, selectionLocator);
+  }
+
+  return false;
+}
+
+function locatorsMatchAnnotation(
+  annotation: Annotation,
+  referenceAnnotation: Annotation,
+): boolean {
+  const locator = annotation.locator;
+  const referenceLocator = referenceAnnotation.locator;
+
+  if (locator.kind !== referenceLocator.kind) {
+    return false;
+  }
+
+  if (locator.kind === "txt" && referenceLocator.kind === "txt") {
+    return txtLocatorsOverlap(locator, referenceLocator);
+  }
+
+  if (locator.kind === "epub" && referenceLocator.kind === "epub") {
+    return epubLocatorsMatchAnnotation(annotation, referenceAnnotation);
+  }
+
+  if (locator.kind === "pdf" && referenceLocator.kind === "pdf") {
+    return pdfLocatorsOverlap(locator, referenceLocator);
   }
 
   return false;
@@ -3928,6 +4197,38 @@ function epubLocatorsMatch(
       normalizeComparableText(selection.contextBefore) &&
     normalizeComparableText(locator.contextAfter) ===
       normalizeComparableText(selection.contextAfter)
+  );
+}
+
+function epubLocatorsMatchAnnotation(
+  annotation: Annotation,
+  referenceAnnotation: Annotation,
+): boolean {
+  const locator = annotation.locator;
+  const referenceLocator = referenceAnnotation.locator;
+
+  if (locator.kind !== "epub" || referenceLocator.kind !== "epub") {
+    return false;
+  }
+
+  if (
+    locator.cfi !== undefined &&
+    referenceLocator.cfi !== undefined &&
+    locator.cfi === referenceLocator.cfi
+  ) {
+    return true;
+  }
+
+  return (
+    locator.href === referenceLocator.href &&
+    normalizeComparableText(annotation.selectedText ?? locator.selectedText) ===
+      normalizeComparableText(
+        referenceAnnotation.selectedText ?? referenceLocator.selectedText,
+      ) &&
+    normalizeComparableText(locator.contextBefore) ===
+      normalizeComparableText(referenceLocator.contextBefore) &&
+    normalizeComparableText(locator.contextAfter) ===
+      normalizeComparableText(referenceLocator.contextAfter)
   );
 }
 
@@ -4011,7 +4312,7 @@ function getSelectionMenuAnchor(
 
   return {
     menuX: clampViewportCoordinate(rect.left + rect.width / 2, 24, 24),
-    menuY: clampViewportCoordinate(rect.top - 48, 72, 96, "height"),
+    menuY: clampViewportCoordinate(rect.top, 72, 24, "height"),
   };
 }
 

@@ -1243,3 +1243,33 @@
 - `pnpm.cmd --filter @reader/desktop test:e2e`，5 tests
 - Playwright 视觉检查：桌面 `D:\tl-temp\ebook-reader-stage5-annotation-desktop.png`，移动端 `D:\tl-temp\ebook-reader-stage5-annotation-mobile-375x760.png`，正文 Note 浮层可见且不裁切，Notes 侧栏无 textarea/Save，console 无 warning/error
 - `pnpm.cmd --filter @reader/desktop tauri:build`
+
+## 2026-06-24 阶段 5.x 标注体验二次修复
+
+### 状态
+- **当前状态：** complete
+- **分支：** `codex/stage5-annotation-followup`
+
+### 执行的操作
+- 从 `main` 创建 `codex/stage5-annotation-followup`，按本轮计划继续修复 TXT/EPUB 标注交互。
+- Notes 侧栏显示规则改为列出所有未删除且有高亮或有批注的 annotation；侧栏继续只负责跳转和删除。
+- TXT/PDF 正文渲染拆分为视觉高亮和可点击下划线：普通高亮不再绑定点击，只有带 note 的范围显示虚线并可打开批注列表。
+- 新增正文 `Saved notes` 浮层：点击下划线后显示同一/重叠范围内所有已保存批注，支持逐条进入编辑，也支持 `Add note` 新增同范围 note。
+- 选区菜单 `Note` 行为改为始终创建新的 note 草稿，不覆盖已有高亮或已有 note；高亮改色仍沿用已有 upsert 逻辑。
+- EPUB 普通高亮重放不再挂 click handler；note-bearing annotation 通过 underline 绑定批注列表入口。
+- EPUB selection anchor 改用 iframe 内 `Range.getClientRects()` 的首个有效 rect，菜单以选区 top 为 anchor 并通过 CSS 贴近文字上方。
+
+### 已通过验证
+- `pnpm.cmd install`
+- `pnpm.cmd --filter @reader/core build`
+- `pnpm.cmd --filter @reader/desktop lint`
+- `pnpm.cmd --filter @reader/desktop test -- --run apps/desktop/src/App.test.tsx`，48 tests
+- `pnpm.cmd --filter @reader/desktop test`，48 tests
+- `pnpm.cmd --filter @reader/desktop build`
+- `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests
+- `pnpm.cmd --filter @reader/desktop test:e2e`，5 tests
+- Playwright 视觉检查：桌面 `D:\tl-temp\ebook-reader-stage5-followup-desktop.png`，移动端 `D:\tl-temp\ebook-reader-stage5-followup-mobile-375x760.png`；普通高亮点击不弹出，note-bearing 下划线打开多批注浮层，`Add note` 可进入新建编辑器，console 无 warning/error
+- `pnpm.cmd --filter @reader/desktop tauri:build`
+
+### 过程问题
+- 首次 `tauri:build` 前端构建通过，但 Rust release exe 因 `ebook-reader-desktop.exe` 进程占用而无法删除；结束该 release 进程后重跑打包通过。

@@ -345,3 +345,11 @@ pnpm.cmd --filter @reader/desktop tauri:build
 - 每完成一个小阶段，应更新本文件对应状态或在阶段表旁追加完成记录。
 - 如果后续从 `main` 创建 `codex/v0.1.0-mvp-integration`，应先确认 `main` 已包含本计划和 `DEVELOPMENT.md`。
 - 阶段 0 已完成并通过完整验收，后续阶段应从最新 `main` 或 `codex/v0.1.0-mvp-integration` 继续拉分支。
+
+## 阶段 5.x 标注体验二次修复追加记录
+
+| 小阶段 | 分支 | 工作内容 | 当前状态 |
+|--------|------|----------|----------|
+| 5.x 二次修复 | `codex/stage5-annotation-followup` | 恢复 Notes 侧栏显示高亮-only；正文点击仅 note-bearing 下划线可打开批注；同范围多条 note 通过浮层列表编辑/新增；EPUB 选区菜单贴近首个 client rect | 完成，全量验收通过 |
+
+本轮保持 SQLite schema 和 core locator 类型不变；多条批注用多条 `annotations` 记录表达，高亮改色仍走已有 upsert 逻辑。

@@ -885,7 +885,10 @@ function getViewportRangeRect(range: Range | null): EpubSelectionSnapshot["ancho
     return undefined;
   }
 
-  const rect = range.getBoundingClientRect();
+  const rect =
+    Array.from(range.getClientRects()).find(
+      (clientRect) => clientRect.width > 0 && clientRect.height > 0,
+    ) ?? range.getBoundingClientRect();
 
   if (rect.width <= 0 || rect.height <= 0) {
     return undefined;
