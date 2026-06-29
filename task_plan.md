@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 5：书签、高亮、想法与检索的标注体验优化已在 `codex/stage5-annotation-polish` 完成并通过全量验收；下一步合回集成分支和 `main` 并推送。
+大阶段 5：`codex/stage5-epub-annotation-render-fix` 已完成 EPUB 选区菜单坐标和批注下划线显示修复，并通过全量验收。
 
 ## 分支策略
 
@@ -353,3 +353,11 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 5.x 二次修复 | `codex/stage5-annotation-followup` | 恢复 Notes 侧栏显示高亮-only；正文点击仅 note-bearing 下划线可打开批注；同范围多条 note 通过浮层列表编辑/新增；EPUB 选区菜单贴近首个 client rect | 完成，全量验收通过 |
 
 本轮保持 SQLite schema 和 core locator 类型不变；多条批注用多条 `annotations` 记录表达，高亮改色仍走已有 upsert 逻辑。
+
+## 阶段 5.x EPUB 标注显示修复追加记录
+
+| 小阶段 | 分支 | 工作内容 | 当前状态 |
+|--------|------|----------|----------|
+| 5.x EPUB 显示修复 | `codex/stage5-epub-annotation-render-fix` | 使用当前可见 rendition Range 计算选区主窗口坐标；把 epub.js note 标记从虚线矩形修正为与 TXT 一致的单条虚线下划线 | complete，全量验收通过 |
+
+验收结果：`pnpm.cmd install`、core build、desktop lint/test/build、27 个 Rust 测试、5 个 Playwright smoke、桌面局部视觉检查和 `tauri:build` 均通过；Vitest 共 50 tests。首次 Tauri build 因旧 release 进程锁定 exe 失败，结束 PID 27020 后重跑通过。

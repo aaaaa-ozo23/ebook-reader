@@ -494,15 +494,101 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   expect(epubFrame).not.toBeNull();
 
   if (epubFrame !== null) {
-    await epubFrame
-      .getByText(/generated reading sample paragraph/)
-      .first()
-      .dblclick();
-    const selectedText = await epubIframe.evaluate(
-      (iframe) =>
-        (iframe as HTMLIFrameElement).contentWindow?.getSelection()?.toString() ?? "",
-    );
+    const selectedText = await epubFrame.evaluate(() => {
+      const paragraph = Array.from(document.querySelectorAll("p")).find((candidate) => {
+        const rect = candidate.getBoundingClientRect();
+        const frameRect = window.frameElement?.getBoundingClientRect();
+
+        if (frameRect === undefined) {
+          return false;
+        }
+
+        const globalLeft = frameRect.left + rect.left;
+        const globalRight = frameRect.left + rect.right;
+        const globalTop = frameRect.top + rect.top;
+        const globalBottom = frameRect.top + rect.bottom;
+
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          globalLeft >= 0 &&
+          globalTop >= 0 &&
+          globalRight <= window.parent.innerWidth &&
+          globalBottom <= window.parent.innerHeight
+        );
+      });
+      const textNode = paragraph?.firstChild;
+      const selection = window.getSelection();
+
+      if (textNode === null || textNode === undefined || selection === null) {
+        return "";
+      }
+
+      const range = document.createRange();
+      range.setStart(textNode, 0);
+      range.setEnd(textNode, Math.min(24, textNode.textContent?.length ?? 0));
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return selection.toString();
+    });
     expect(selectedText.length).toBeGreaterThan(0);
+
+    const selectionMenu = page.locator(".reader-selection-menu");
+    await expect(selectionMenu).toBeVisible();
+    const selectionAnchor = await epubIframe.evaluate((iframe) => {
+      const frame = (iframe as HTMLIFrameElement).getBoundingClientRect();
+      const selection = (iframe as HTMLIFrameElement).contentWindow?.getSelection();
+      const rangeRect = selection?.rangeCount
+        ? selection.getRangeAt(0).getClientRects()[0]
+        : undefined;
+
+      return rangeRect
+        ? {
+            left: frame.left + rangeRect.left,
+            top: frame.top + rangeRect.top,
+            width: rangeRect.width,
+          }
+        : null;
+    });
+    const menuRect = await selectionMenu.boundingBox();
+    expect(selectionAnchor).not.toBeNull();
+    expect(menuRect).not.toBeNull();
+
+    if (selectionAnchor !== null && menuRect !== null) {
+      const menuGap = selectionAnchor.top - (menuRect.y + menuRect.height);
+      expect(menuGap).toBeGreaterThanOrEqual(4);
+      expect(menuGap).toBeLessThanOrEqual(10);
+      expect(
+        Math.abs(selectionAnchor.left + selectionAnchor.width / 2 - (menuRect.x + menuRect.width / 2)),
+      ).toBeLessThanOrEqual(2);
+    }
+
+    await selectionMenu.getByRole("button", { name: "Note" }).click();
+    const noteEditor = page.locator(".reader-note-editor");
+    await expect(noteEditor).toBeVisible();
+    await noteEditor.locator("textarea").fill("EPUB annotation note");
+    await noteEditor.getByRole("button", { name: "Save" }).click();
+
+    const noteUnderline = page.locator("g.reader-epub-note-underline");
+    await expect(noteUnderline).toHaveCount(1);
+    const underlineStyles = await noteUnderline.evaluate((element) => {
+      return {
+        lineDashes: Array.from(element.querySelectorAll("line")).map(
+          (line) => window.getComputedStyle(line).strokeDasharray,
+        ),
+        lineStrokes: Array.from(element.querySelectorAll("line")).map(
+          (line) => window.getComputedStyle(line).stroke,
+        ),
+        rectStrokes: Array.from(element.querySelectorAll("rect")).map(
+          (rect) => window.getComputedStyle(rect).stroke,
+        ),
+      };
+    });
+    expect(underlineStyles.rectStrokes.length).toBeGreaterThan(0);
+    expect(underlineStyles.rectStrokes.every((stroke) => stroke === "none")).toBe(true);
+    expect(underlineStyles.lineStrokes.length).toBeGreaterThan(0);
+    expect(underlineStyles.lineStrokes.every((stroke) => stroke !== "none")).toBe(true);
+    expect(underlineStyles.lineDashes.every((dash) => dash !== "none")).toBe(true);
   }
 
   await page.getByRole("button", { name: "Theme" }).click();

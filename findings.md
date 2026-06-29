@@ -213,6 +213,22 @@
 | 本轮未暴露 Browser 插件控制工具 | 视觉检查不能走 Browser 插件 | 使用常规 Playwright 启动 Vite，并生成桌面/375x760 截图验证 |
 | `tauri:build` 首次因 release exe 被占用失败 | Windows 无法删除正在运行的 `ebook-reader-desktop.exe` | 结束该 release 进程后重跑打包成功 |
 
+## 2026-06-29 EPUB 标注显示修复发现
+
+| 发现 | 影响 | 待处理 |
+|------|------|--------|
+| EPUB 选区菜单在正文中部选择时仍固定靠近阅读区顶部 | iframe 内选区坐标映射使用了错误参考系或遗漏 iframe/内容容器偏移 | 核对 epub.js contents window、iframe rect 与主窗口坐标的组合方式，并以真实渲染坐标回归 |
+| epub.js `annotations.underline` 当前显示为包围文字的虚线矩形 | EPUB 批注提示与 TXT 的单条虚线下划线不一致 | 调整 underline SVG 标注样式/属性，只保留底边虚线并维持点击命中区域 |
+| `book.getRange(cfi)` 返回 spine 章节文档中的 Range，不是当前可见 rendition iframe 的 Range | Range rect 不能可靠表示屏幕坐标，菜单会被 clamp 到阅读区顶部 | 选区几何改用 `rendition.getRange(cfi)`；仅在提取文本/上下文时允许回退 `book.getRange(cfi)` |
+| iframe 中的 `frameElement` 属于 iframe window realm | 用主窗口 `HTMLElement instanceof` 判断会失败并丢失 iframe 偏移 | 直接调用 `frameElement?.getBoundingClientRect()`，避免跨 realm 类型判断 |
+| marks-pane 的 Underline 同时创建透明 `rect` 和底部 `line`，传给父 `g` 的 stroke 会被 rect 继承 | 虚线样式会把透明点击矩形四边也画出来 | 父 `g` 的 stroke-width 设为 0，CSS 只让 line 继承颜色并恢复 2px stroke |
+| 桌面全页截图不易辨认细下划线，375x760 首屏正文位于折叠线下 | 全页截图不足以证明本次视觉细节 | 追加选区菜单与批注标记局部截图；自动断言继续检查菜单 4-10px 间距和 SVG rect/line computed style |
+| EPUB Playwright 首次用 `document.querySelector("p")` 建立选区时选中了分页列中的屏外首段 | 菜单被视口 clamp 到左侧，批注局部截图落在侧栏，视觉证据无效 | 测试应先按 `getBoundingClientRect()` 找到与 iframe viewport 相交的段落，再建立 Range |
+| 分页 EPUB 的 iframe 元素本身可能被横向平移，段落在 iframe viewport 内不等于在主窗口内可见 | 仅检查段落本地 rect 仍会选到主窗口屏外列 | Playwright 应用 `frameElement rect + paragraph rect` 判断主窗口可见性，并增加菜单中心 X 对齐断言 |
+| 可见段落回归截图中菜单已水平居中且与选区保持约 6px 间距 | 原“固定在最上面”问题已消除 | 保留 E2E 的 X 中心误差 <=2px、Y 间距 4-10px 断言 |
+| 下划线局部截图不再显示左右边框，但顶部疑似仍有一条虚线 | 需要排除多个 SVG line 或相邻容器边界 | 检查当前 annotation group 内全部 rect/line 数量、坐标和 computed style 后再定稿 |
+| SVG 诊断确认该 annotation group 只有一个 line 和一个 rect，rect computed stroke 为 none，line 为 `rgb(243, 188, 85)` 且 dash 为 `3px, 3px` | 批注本身只绘制底部虚线，局部图顶部细线来自相邻视觉边界而非矩形标注 | E2E 改为检查所有 rect 无描边、所有 line 有可见虚线，最终视觉与 TXT 的下划线提示一致 |
+
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
