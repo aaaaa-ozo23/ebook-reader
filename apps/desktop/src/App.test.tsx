@@ -597,6 +597,30 @@ describe("App", () => {
     );
   });
 
+  it("shows a dedicated library error and retries loading", async () => {
+    const user = userEvent.setup();
+    const recoveredBook = createBook({
+      id: "recovered-library",
+      title: "Recovered Library",
+    });
+    listBooksMock
+      .mockRejectedValueOnce(new Error("database unavailable"))
+      .mockResolvedValueOnce([recoveredBook]);
+
+    render(<App />);
+
+    const errorState = await screen.findByRole("alert");
+    expect(errorState).toHaveTextContent("Library could not be loaded");
+    expect(errorState).toHaveTextContent("database unavailable");
+    expect(screen.queryByText("Your library is empty")).not.toBeInTheDocument();
+
+    await user.click(within(errorState).getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", { name: "Recovered Library" }),
+    ).toBeVisible();
+    expect(listBooksMock).toHaveBeenCalledTimes(2);
+  });
+
   it("renders the generated fallback background with an HTML book title", async () => {
     const book = createBook({
       id: "fallback-cover",
@@ -795,8 +819,13 @@ describe("App", () => {
 
   it("shows import failures without adding a book", async () => {
     const user = userEvent.setup();
-    pickBookFileMock.mockResolvedValueOnce("D:\\books\\notes.md");
-    importBookMock.mockRejectedValueOnce(new Error("unsupported book format"));
+    const recoveredBook = createBook({ id: "retry-import", title: "Retry Import" });
+    pickBookFileMock
+      .mockResolvedValueOnce("D:\\books\\notes.md")
+      .mockResolvedValueOnce("D:\\books\\retry.epub");
+    importBookMock
+      .mockRejectedValueOnce(new Error("unsupported book format"))
+      .mockResolvedValueOnce(createImportResult("imported", recoveredBook));
 
     render(<App />);
     await screen.findByRole("heading", { name: "Your library is empty" });
@@ -809,6 +838,10 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Import failed");
     expect(screen.getByText("unsupported book format")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Choose another file" }));
+    expect(await screen.findByRole("heading", { name: "Retry Import" })).toBeVisible();
+    expect(importBookMock).toHaveBeenCalledTimes(2);
   });
 
   it("opens a TXT book in the reader shell and returns to the shelf", async () => {
@@ -1065,6 +1098,26 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: "Cached Chapter" })).toBeVisible();
     expect(epubAdapterGetTocMock).not.toHaveBeenCalled();
+  });
+
+  it("retries an EPUB parse failure without returning to the shelf", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "retry-epub",
+      title: "Retry EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    epubAdapterOpenMock.mockRejectedValueOnce(new Error("invalid EPUB package"));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid EPUB package");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
+    expect(epubAdapterOpenMock).toHaveBeenCalledTimes(2);
   });
 
   it("shows selection actions for an EPUB selection", async () => {
@@ -1593,6 +1646,7 @@ describe("App", () => {
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
     listAnnotationsMocked.mockResolvedValueOnce([highlight]);
+    createAnnotationMocked.mockRejectedValueOnce(new Error("database busy"));
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "New Note TXT" })).toBeVisible();
@@ -1625,20 +1679,26 @@ describe("App", () => {
     await user.type(noteInput, "new note");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(createAnnotationMocked).toHaveBeenCalledWith(
-        "txt-note-new",
-        "note",
-        expect.objectContaining({
-          kind: "txt",
-          chapterId: "chapter-1-0",
-          charOffset: 7,
-          endCharOffset: 11,
-        }),
-        "#f3bc55",
-        "她推开门",
-        "new note",
-      ),
+    const noteEditor = await screen.findByRole("form", { name: "Edit note" });
+    expect(await within(noteEditor).findByRole("alert")).toHaveTextContent(
+      "database busy",
+    );
+    expect(noteInput).toHaveValue("new note");
+    await user.click(within(noteEditor).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(createAnnotationMocked).toHaveBeenCalledTimes(2));
+    expect(createAnnotationMocked).toHaveBeenLastCalledWith(
+      "txt-note-new",
+      "note",
+      expect.objectContaining({
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      }),
+      "#f3bc55",
+      "她推开门",
+      "new note",
     );
     expect(updateAnnotationMock).not.toHaveBeenCalled();
   });
@@ -2338,7 +2398,9 @@ describe("App", () => {
     });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
-    openTxtBookMock.mockRejectedValueOnce(new Error("failed to decode TXT file"));
+    openTxtBookMock
+      .mockRejectedValueOnce(new Error("failed to decode TXT file"))
+      .mockResolvedValueOnce(createTxtDocument(txtBook));
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Broken TXT" })).toBeVisible();
@@ -2350,6 +2412,25 @@ describe("App", () => {
       "Book could not be opened",
     );
     expect(screen.getByText("failed to decode TXT file")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "第一章 初见" })).toBeVisible();
+    expect(openTxtBookMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a PDF parse failure without returning to the shelf", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "retry-pdf", title: "Retry PDF", format: "pdf" });
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(pdfBook);
+    pdfAdapterOpenMock.mockRejectedValueOnce(new Error("invalid PDF document"));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid PDF document");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Page 1 / 3")).toBeVisible();
+    expect(pdfAdapterOpenMock).toHaveBeenCalledTimes(2);
   });
 
   it("applies and saves reader theme changes immediately", async () => {

@@ -544,6 +544,12 @@
   line-height: 1.4;
 }
 
+.reader-note-editor p[role="alert"] {
+  margin: 0;
+  color: #ffd0c8;
+  font-size: 0.82rem;
+}
+
 .reader-note-editor__actions {
   display: flex;
   justify-content: flex-end;
@@ -772,6 +778,13 @@
 
 .reader-state--error {
   color: #8d3328;
+}
+
+.reader-state__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .reader-state--overlay {
