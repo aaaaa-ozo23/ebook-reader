@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -31,6 +32,8 @@ import {
 } from "@reader/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import "./ReaderShell.css";
+
 import {
   createAnnotation,
   createBookmark,
@@ -39,6 +42,7 @@ import {
   getEpubBookSource,
   getPdfBookSource,
   getReaderLayoutPreferences,
+  getReaderCache,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
@@ -47,6 +51,7 @@ import {
   saveReaderTheme,
   saveReadingProgress,
   saveReaderLayoutPreferences,
+  saveReaderCache,
   updateAnnotation,
 } from "../tauri/reader";
 import {
@@ -61,6 +66,11 @@ import {
   type PdfPosition,
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
+
+const EPUB_LOCATIONS_CACHE_KEY = "epub_locations_v1";
+const EPUB_TOC_CACHE_KEY = "epub_toc_v1";
+const PDF_TOC_CACHE_KEY = "pdf_toc_v1";
+let pendingFocusFrameId: number | null = null;
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -1284,7 +1294,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           onClick={closeSidebar}
         />
       ) : null}
-      <ReaderSidebar
+      <MemoizedReaderSidebar
         activeTocItemId={activeTocItemId}
         activeTab={sidebarTab}
         annotationError={visibleAnnotationError}
@@ -1372,7 +1382,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           </button>
         ) : null}
         {book.format === "txt" ? (
-          <TxtReaderContent
+          <MemoizedTxtReaderContent
             annotations={visibleAnnotations}
             blocks={blocks}
             document={document}
@@ -1389,7 +1399,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           />
         ) : null}
         {book.format === "epub" ? (
-          <EpubReaderContent
+          <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
             jumpRequest={epubJumpRequest}
@@ -1408,7 +1418,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           />
         ) : null}
         {book.format === "pdf" ? (
-          <PdfReaderContent
+          <MemoizedPdfReaderContent
             annotations={visibleAnnotations}
             book={book}
             jumpRequest={pdfJumpRequest}
@@ -2509,10 +2519,13 @@ function EpubReaderContent({
           throw new Error("EPUB reader viewport is unavailable.");
         }
 
-        const [sourceUrl, savedProgress] = await Promise.all([
-          getEpubBookSource(book),
-          getReadingProgress<EpubLocator>(book.id),
-        ]);
+        const [sourceUrl, savedProgress, cachedLocations, cachedToc] =
+          await Promise.all([
+            getEpubBookSource(book),
+            getReadingProgress<EpubLocator>(book.id),
+            getReaderCache(book, EPUB_LOCATIONS_CACHE_KEY).catch(() => null),
+            getReaderCache(book, EPUB_TOC_CACHE_KEY).catch(() => null),
+          ]);
 
         if (!isCurrent || hostRef.current === null) {
           return;
@@ -2520,12 +2533,20 @@ function EpubReaderContent({
 
         const adapter = new EpubReaderAdapter({
           bookId: book.id,
+          cachedLocations: cachedLocations ?? undefined,
           sourceUrl,
           container: hostRef.current,
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
           onKeyDown: onReaderKeyDown,
+          onLocationsGenerated: (serializedLocations) => {
+            void saveReaderCache(
+              book,
+              EPUB_LOCATIONS_CACHE_KEY,
+              serializedLocations,
+            ).catch(() => undefined);
+          },
           onSelectionCleared,
           onSelected: (selection) => {
             const currentPosition = positionRef.current;
@@ -2565,7 +2586,16 @@ function EpubReaderContent({
         appliedEpubHighlightSignaturesRef.current = new Map();
         appliedEpubUnderlineSignaturesRef.current = new Map();
         setIsAdapterReadyForHighlights(true);
-        const nextTocItems = await adapter.getToc();
+        const cachedTocItems = parseCachedToc(cachedToc);
+        const nextTocItems = cachedTocItems ?? (await adapter.getToc());
+
+        if (cachedTocItems === null) {
+          void saveReaderCache(
+            book,
+            EPUB_TOC_CACHE_KEY,
+            JSON.stringify(nextTocItems),
+          ).catch(() => undefined);
+        }
 
         if (isCurrent) {
           onTocChange(nextTocItems);
@@ -3320,9 +3350,10 @@ function PdfReaderContent({
       onTocChange([]);
 
       try {
-        const [sourceUrl, savedProgress] = await Promise.all([
+        const [sourceUrl, savedProgress, cachedToc] = await Promise.all([
           getPdfBookSource(book),
           getReadingProgress<PdfLocator>(book.id),
+          getReaderCache(book, PDF_TOC_CACHE_KEY).catch(() => null),
         ]);
 
         if (!isCurrent) {
@@ -3351,7 +3382,16 @@ function PdfReaderContent({
             adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
         );
         await adapter.setTheme(themeRef.current);
-        const nextTocItems = await adapter.getToc();
+        const cachedTocItems = parseCachedToc(cachedToc);
+        const nextTocItems = cachedTocItems ?? (await adapter.getToc());
+
+        if (cachedTocItems === null) {
+          void saveReaderCache(
+            book,
+            PDF_TOC_CACHE_KEY,
+            JSON.stringify(nextTocItems),
+          ).catch(() => undefined);
+        }
 
         if (!isCurrent) {
           return;
@@ -5210,7 +5250,12 @@ function formatBookFormat(format: Book["format"]): string {
 function focusElementSoon<TElement extends HTMLElement>(
   ref: RefObject<TElement | null>,
 ): void {
-  window.requestAnimationFrame(() => {
+  if (pendingFocusFrameId !== null) {
+    window.cancelAnimationFrame(pendingFocusFrameId);
+  }
+
+  pendingFocusFrameId = window.requestAnimationFrame(() => {
+    pendingFocusFrameId = null;
     ref.current?.focus();
   });
 }
@@ -5254,3 +5299,36 @@ function getErrorMessage(error: unknown): string {
 
   return "An unexpected error occurred.";
 }
+
+function parseCachedToc(serializedToc: string | null): TocItem[] | null {
+  if (serializedToc === null) {
+    return null;
+  }
+
+  try {
+    const value = JSON.parse(serializedToc) as unknown;
+    return Array.isArray(value) && value.every(isCachedTocItem) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function isCachedTocItem(value: unknown): value is TocItem {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as Partial<TocItem>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.title === "string" &&
+    (item.href === undefined || typeof item.href === "string") &&
+    (item.children === undefined ||
+      (Array.isArray(item.children) && item.children.every(isCachedTocItem)))
+  );
+}
+
+const MemoizedReaderSidebar = memo(ReaderSidebar);
+const MemoizedTxtReaderContent = memo(TxtReaderContent);
+const MemoizedEpubReaderContent = memo(EpubReaderContent);
+const MemoizedPdfReaderContent = memo(PdfReaderContent);

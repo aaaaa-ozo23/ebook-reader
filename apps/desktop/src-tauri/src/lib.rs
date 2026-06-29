@@ -75,6 +75,26 @@ fn save_reader_layout_preferences(
 }
 
 #[tauri::command]
+fn get_reader_cache(
+    app: tauri::AppHandle,
+    book_id: String,
+    cache_key: String,
+) -> Result<Option<String>, String> {
+    db::get_reader_cache(&app, &book_id, &cache_key).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_reader_cache(
+    app: tauri::AppHandle,
+    book_id: String,
+    cache_key: String,
+    value_json: String,
+) -> Result<(), String> {
+    db::save_reader_cache(&app, &book_id, &cache_key, &value_json)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_reading_progress(
     app: tauri::AppHandle,
     book_id: String,
@@ -176,6 +196,8 @@ pub fn run() {
             save_reader_theme,
             get_reader_layout_preferences,
             save_reader_layout_preferences,
+            get_reader_cache,
+            save_reader_cache,
             get_reading_progress,
             save_reading_progress,
             list_bookmarks,

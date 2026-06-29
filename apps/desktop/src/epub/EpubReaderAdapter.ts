@@ -35,12 +35,14 @@ export interface EpubSpreadState {
 
 interface EpubReaderAdapterOptions {
   bookId: string;
+  cachedLocations?: string;
   sourceUrl: string;
   container: HTMLElement;
   initialLocator?: EpubLocator;
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
   onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  onLocationsGenerated?: (serializedLocations: string) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
   onSelectionCleared?: () => void;
   onSpreadChange?: (state: EpubSpreadState) => void;
@@ -108,11 +110,13 @@ interface EpubRenderedView {
 
 export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly bookId: string;
+  private readonly cachedLocations?: string;
   private readonly sourceUrl: string;
   private readonly container: HTMLElement;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  private readonly onLocationsGenerated?: (serializedLocations: string) => void;
   private readonly onSelected?: (selection: EpubSelectionSnapshot) => void;
   private readonly onSelectionCleared?: () => void;
   private readonly onSpreadChange?: (state: EpubSpreadState) => void;
@@ -135,12 +139,14 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
   constructor(options: EpubReaderAdapterOptions) {
     this.bookId = options.bookId;
+    this.cachedLocations = options.cachedLocations;
     this.sourceUrl = options.sourceUrl;
     this.container = options.container;
     this.initialLocator = options.initialLocator;
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
     this.onKeyDown = options.onKeyDown;
+    this.onLocationsGenerated = options.onLocationsGenerated;
     this.onSelected = options.onSelected;
     this.onSelectionCleared = options.onSelectionCleared;
     this.onSpreadChange = options.onSpreadChange;
@@ -528,7 +534,23 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
     this.locationsPromise = (async () => {
       await book.ready;
-      await book.locations.generate(EPUB_LOCATION_CHARS);
+
+      if (this.cachedLocations !== undefined) {
+        try {
+          book.locations.load(this.cachedLocations);
+        } catch {
+          // A stale or malformed cache is regenerated below.
+        }
+      }
+
+      if (book.locations.length() === 0) {
+        await book.locations.generate(EPUB_LOCATION_CHARS);
+        const serializedLocations = book.locations.save();
+
+        if (serializedLocations.length > 0) {
+          this.onLocationsGenerated?.(serializedLocations);
+        }
+      }
 
       if (this.book !== book) {
         return;
