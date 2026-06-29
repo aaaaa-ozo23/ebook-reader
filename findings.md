@@ -232,3 +232,14 @@
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
+
+## 2026-06-29 阶段 6 启动发现
+
+| 发现 | 影响 | 决策 |
+|------|------|------|
+| `ReaderShell` 只有选区浮层的 Escape 监听，EPUB iframe 键盘事件不会冒泡到主文档 | 左右翻页、Ctrl+F 和 Focus/面板关闭无法形成统一规则 | 在阅读壳建立快捷键路由，并由 EPUB adapter 转发 iframe 键盘事件 |
+| 当前移动阅读页把目录和整组工具栏堆在正文上方 | 375px 视口首屏几乎看不到正文，不适合长时间阅读 | 6.2 改为侧滑目录抽屉并压缩窄屏工具栏 |
+| `Book.coverPath`/`books.cover_path` 已存在但导入始终写入空值 | 封面功能可复用现有路径字段，无需破坏性迁移 | 新增幂等状态表和封面保存命令，默认背景只作为共享静态资产 |
+| 当前生产首屏入口为 309.13 kB / 93.63 kB gzip，阅读器代码静态进入入口 | 需要延迟加载整个 ReaderShell，而不只是 epubjs/pdfjs | 6.3 以入口 gzip 不高于约 80 kB 为目标 |
+| React 19 lint 禁止 render 阶段写 ref，但 iframe 回调又必须保持稳定以避免 adapter 重开 | 直接把 UI 状态闭包进快捷键 callback 会让 EPUB effect 反复执行 | 用 effect 同步状态 ref，快捷键 callback 本身保持稳定 |
+| `Document` 和 EPUB iframe target 不一定属于主窗口 realm，也不一定实现 `closest()` | `instanceof` 或可选链比较会误判输入目标 | 使用 tagName/isContentEditable 和显式函数存在性检查 |

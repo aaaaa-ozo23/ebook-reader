@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 5：`codex/stage5-epub-annotation-render-fix` 已完成 EPUB 选区菜单坐标和批注下划线显示修复，并通过全量验收。
+大阶段 6：正在实施阅读体验完善与可访问性；当前小阶段为 6.1 快捷键和焦点管理。
 
 ## 分支策略
 
@@ -265,6 +265,18 @@
 | 6.3 性能优化 | `codex/stage6-performance` | 按需加载 PDF/EPUB 重依赖；避免 React 级联重渲染；缓存解析结果 | 初始包体和阅读交互性能符合预期 |
 | 6.4 错误和空状态 | `codex/stage6-error-states` | 导入失败、文件丢失、解析失败、数据库失败的用户可理解提示 | 常见失败路径有可恢复操作 |
 | 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | 写明本地数据库、书库副本、日志位置；默认不上传数据 | README/docs 可说明数据存放和删除方式 |
+| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | EPUB 内嵌封面、PDF 首页缩略图；无封面时使用 ImageGen 默认背景和代码渲染书名 | 新旧书籍均显示稳定封面，失败不阻塞导入或阅读 |
+
+### 阶段 6 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 6.1 快捷键和输入 | `codex/stage6-keyboard` | complete | `pnpm ... lint`；desktop test 52 tests；desktop build |
+| 6.2 布局响应式 | `codex/stage6-responsive-layout` | pending | 待验证 |
+| 6.3 性能优化 | `codex/stage6-performance` | pending | 待验证 |
+| 6.4 错误和空状态 | `codex/stage6-error-states` | pending | 待验证 |
+| 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | pending | 待验证 |
+| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | pending | 待验证 |
 
 ## 大阶段 7：Windows 打包与首版发布
 

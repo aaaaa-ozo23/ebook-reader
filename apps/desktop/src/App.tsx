@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type MouseEvent,
 } from "react";
 import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/core";
@@ -24,6 +25,7 @@ interface Feedback {
 
 interface BookActionMenuState {
   book: Book;
+  trigger: HTMLElement | null;
   x: number;
   y: number;
 }
@@ -52,6 +54,7 @@ function App() {
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(null);
   const [bookPendingRemoval, setBookPendingRemoval] = useState<Book | null>(null);
   const [removingBookId, setRemovingBookId] = useState<string | null>(null);
+  const lastBookActionTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let isCurrent = true;
@@ -139,16 +142,23 @@ function App() {
   }, []);
 
   const closeBookActionMenu = useCallback(() => {
+    const trigger = bookActionMenu?.trigger ?? null;
     setBookActionMenu(null);
-  }, []);
+    focusElementSoon(trigger);
+  }, [bookActionMenu]);
 
-  const showBookActionMenu = useCallback((book: Book, x: number, y: number) => {
-    setBookActionMenu({
-      book,
-      x,
-      y,
-    });
-  }, []);
+  const showBookActionMenu = useCallback(
+    (book: Book, x: number, y: number, trigger: HTMLElement | null) => {
+      lastBookActionTriggerRef.current = trigger;
+      setBookActionMenu({
+        book,
+        trigger,
+        x,
+        y,
+      });
+    },
+    [],
+  );
 
   const requestBookRemoval = useCallback((book: Book) => {
     setBookActionMenu(null);
@@ -157,6 +167,7 @@ function App() {
 
   const cancelBookRemoval = useCallback(() => {
     setBookPendingRemoval(null);
+    focusElementSoon(lastBookActionTriggerRef.current);
   }, []);
 
   const confirmBookRemoval = useCallback(async () => {
@@ -364,7 +375,7 @@ interface ShelfBodyProps {
   removingBookId: string | null;
   viewMode: ViewMode;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number) => void;
+  onShowBookMenu: (book: Book, x: number, y: number, trigger: HTMLElement | null) => void;
 }
 
 function ShelfBody({
@@ -429,7 +440,7 @@ interface BookCardProps {
   isOpening: boolean;
   isRemoving: boolean;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number) => void;
+  onShowBookMenu: (book: Book, x: number, y: number, trigger: HTMLElement | null) => void;
 }
 
 function BookCard({
@@ -447,7 +458,7 @@ function BookCard({
   const handleContextMenu = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       event.preventDefault();
-      onShowBookMenu(book, event.clientX, event.clientY);
+      onShowBookMenu(book, event.clientX, event.clientY, event.currentTarget);
     },
     [book, onShowBookMenu],
   );
@@ -455,7 +466,7 @@ function BookCard({
   const handleMenuButtonClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
-      onShowBookMenu(book, rect.left, rect.bottom + 8);
+      onShowBookMenu(book, rect.left, rect.bottom + 8, event.currentTarget);
     },
     [book, onShowBookMenu],
   );
@@ -520,7 +531,7 @@ function BookActionMenu({ menu, onClose, onRemove }: BookActionMenuProps) {
       }
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
         onClose();
       }
@@ -528,6 +539,7 @@ function BookActionMenu({ menu, onClose, onRemove }: BookActionMenuProps) {
 
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleKeyDown);
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
 
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
@@ -567,17 +579,52 @@ interface RemoveBookDialogProps {
 }
 
 function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookDialogProps) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+
   if (book === null) {
     return null;
   }
 
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && !isRemoving) {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const buttons = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
+    );
+
+    if (buttons.length === 0) {
+      return;
+    }
+
+    const firstButton = buttons[0];
+    const lastButton = buttons[buttons.length - 1];
+
+    if (event.shiftKey && document.activeElement === firstButton) {
+      event.preventDefault();
+      lastButton?.focus();
+    } else if (!event.shiftKey && document.activeElement === lastButton) {
+      event.preventDefault();
+      firstButton?.focus();
+    }
+  };
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="remove-book-dialog"
         role="alertdialog"
         aria-labelledby="remove-book-title"
         aria-describedby="remove-book-description"
+        onKeyDown={handleDialogKeyDown}
       >
         <h2 id="remove-book-title">Remove from shelf?</h2>
         <p id="remove-book-description">
@@ -585,7 +632,12 @@ function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookD
           you imported will not be deleted.
         </p>
         <div className="remove-book-dialog__actions">
-          <button type="button" className="dialog-button dialog-button--secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="dialog-button dialog-button--secondary"
+            autoFocus
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button
@@ -667,6 +719,16 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "An unexpected error occurred.";
+}
+
+function focusElementSoon(element: HTMLElement | null): void {
+  if (element === null) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    element.focus();
+  });
 }
 
 export default App;
