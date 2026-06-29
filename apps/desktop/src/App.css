@@ -573,10 +573,14 @@ button:disabled {
   display: grid;
   height: 100vh;
   min-height: 100vh;
-  grid-template-columns: minmax(240px, 292px) minmax(0, 1fr);
+  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 292px), 480px) minmax(0, 1fr);
   background: var(--txt-reader-background, #f7f1e3);
   color: var(--txt-reader-text, #25211d);
   overflow: hidden;
+}
+
+.reader-sidebar-backdrop {
+  display: none;
 }
 
 .reader-shell:not(.reader-shell--toc-open) {
@@ -614,6 +618,22 @@ button:disabled {
 .reader-sidebar__back {
   background: #f3bc55;
   color: #1d282d;
+}
+
+.reader-sidebar__actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.reader-sidebar__close {
+  display: none;
+  min-height: 40px;
+  border: 1px solid rgba(247, 242, 232, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-weight: 800;
 }
 
 .reader-sidebar h2 {
@@ -659,6 +679,29 @@ button:disabled {
   border-color: rgba(243, 188, 85, 0.62);
   background: rgba(243, 188, 85, 0.18);
   color: #ffffff;
+}
+
+.reader-sidebar-size {
+  display: grid;
+  gap: 6px;
+  color: rgba(247, 242, 232, 0.76);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.reader-sidebar-size span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.reader-sidebar-size output {
+  color: #ffffff;
+}
+
+.reader-sidebar-size input {
+  width: 100%;
+  accent-color: #f3bc55;
 }
 
 .reader-sidebar-panel {
@@ -887,14 +930,19 @@ button:disabled {
 }
 
 .reader-toc__item {
+  display: block;
   width: 100%;
+  min-width: 0;
   min-height: 36px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: rgba(247, 242, 232, 0.78);
   padding: 8px 10px;
+  overflow: hidden;
   text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reader-toc__item:hover,
@@ -1863,6 +1911,12 @@ button:disabled {
   }
 }
 
+@media (min-width: 761px) and (max-width: 899px) {
+  .reader-shell {
+    grid-template-columns: min(var(--reader-sidebar-width, 292px), 40vw) minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 760px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -1916,37 +1970,77 @@ button:disabled {
 
   .reader-shell,
   .reader-shell.reader-shell--toc-open {
-    height: auto;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
     grid-template-columns: 1fr;
-    overflow: visible;
+    overflow: hidden;
   }
 
   .reader-sidebar {
-    position: static;
-    height: auto;
-    max-height: 42vh;
-    border-right: 0;
-    border-bottom: 1px solid #d5ccb9;
+    position: fixed;
+    z-index: 20;
+    inset: 0 auto 0 0;
+    width: min(86vw, 360px);
+    height: 100dvh;
+    max-height: none;
+    border-right: 1px solid #d5ccb9;
+    border-bottom: 0;
+    box-shadow: 18px 0 48px rgba(18, 28, 31, 0.32);
+    overflow-y: auto;
+  }
+
+  .reader-sidebar-backdrop {
+    position: fixed;
+    z-index: 19;
+    inset: 0;
+    display: block;
+    border: 0;
+    border-radius: 0;
+    background: rgba(18, 28, 31, 0.42);
+  }
+
+  .reader-sidebar__actions {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .reader-sidebar__close {
+    display: inline-grid;
+    place-items: center;
+    padding: 0 12px;
+  }
+
+  .reader-sidebar-size {
+    display: none;
   }
 
   .reader-topbar {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
   }
 
   .reader-main {
-    height: auto;
-    min-height: 100vh;
+    height: 100dvh;
+    min-height: 100dvh;
   }
 
   .reader-shell--theme-open .reader-main {
     padding-right: 0;
   }
 
-  .reader-toolbar,
-  .reader-tool-button {
+  .reader-toolbar {
+    display: grid;
     width: 100%;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .reader-tool-button {
+    width: auto;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0 6px;
+    font-size: 0.78rem;
   }
 
   .reader-viewport {
@@ -1959,11 +2053,11 @@ button:disabled {
   }
 
   .reader-viewport--epub {
-    overflow: visible;
+    overflow: hidden;
   }
 
   .reader-viewport--pdf {
-    overflow: visible;
+    overflow: auto;
   }
 
   .reader-page--epub {
@@ -2051,15 +2145,13 @@ button:disabled {
   }
 
   .reader-theme-panel {
-    position: static;
-    grid-row: 2;
-    width: auto;
-    max-height: none;
-    margin: 12px;
-    box-shadow: none;
-  }
-
-  .reader-viewport {
-    grid-row: 3;
+    position: fixed;
+    z-index: 22;
+    inset: 0 0 0 auto;
+    width: min(92vw, 360px);
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: -18px 0 48px rgba(18, 28, 31, 0.28);
   }
 }

@@ -243,3 +243,5 @@
 | 当前生产首屏入口为 309.13 kB / 93.63 kB gzip，阅读器代码静态进入入口 | 需要延迟加载整个 ReaderShell，而不只是 epubjs/pdfjs | 6.3 以入口 gzip 不高于约 80 kB 为目标 |
 | React 19 lint 禁止 render 阶段写 ref，但 iframe 回调又必须保持稳定以避免 adapter 重开 | 直接把 UI 状态闭包进快捷键 callback 会让 EPUB effect 反复执行 | 用 effect 同步状态 ref，快捷键 callback 本身保持稳定 |
 | `Document` 和 EPUB iframe target 不一定属于主窗口 realm，也不一定实现 `closest()` | `instanceof` 或可选链比较会误判输入目标 | 使用 tagName/isContentEditable 和显式函数存在性检查 |
+| Browser 在 375×760 下测得 body scrollWidth 与 clientWidth 同为 360px，console 无 warning/error | 书架窄屏没有横向溢出，现有移动书架样式可继续复用 | 阅读器抽屉状态交由 seeded Playwright 验证 |
+| 375×760 seeded TXT 截图显示目录为 323px 侧滑层，正文留在遮罩后且目录标题均单行 | 已消除旧版目录占据正文上方 42vh 的问题 | 保留关闭按钮、遮罩与 `Esc` 三种关闭路径 |

@@ -28,6 +28,7 @@ import {
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
+  getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
@@ -35,6 +36,7 @@ import {
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
+  saveReaderLayoutPreferences,
   updateAnnotation,
 } from "./tauri/reader";
 
@@ -233,6 +235,7 @@ vi.mock("./tauri/reader", () => ({
   deleteBookmark: deleteBookmarkMock,
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
+  getReaderLayoutPreferences: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
   listAnnotations: listAnnotationsMock,
@@ -240,6 +243,7 @@ vi.mock("./tauri/reader", () => ({
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
   saveReadingProgress: vi.fn(),
+  saveReaderLayoutPreferences: vi.fn(),
   updateAnnotation: vi.fn(),
 }));
 
@@ -386,6 +390,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
+const getReaderLayoutPreferencesMock = vi.mocked(getReaderLayoutPreferences);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const createAnnotationMocked = vi.mocked(createAnnotation);
@@ -402,6 +407,7 @@ const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
+const saveReaderLayoutPreferencesMock = vi.mocked(saveReaderLayoutPreferences);
 const updateAnnotationMock = vi.mocked(updateAnnotation);
 const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
@@ -454,6 +460,7 @@ describe("App", () => {
     );
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
+    getReaderLayoutPreferencesMock.mockResolvedValue({ sidebarWidth: 292 });
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
     listAnnotationsMocked.mockResolvedValue([]);
@@ -504,6 +511,7 @@ describe("App", () => {
       progress,
       updatedAt: "2026-06-19T12:00:00.000Z",
     }));
+    saveReaderLayoutPreferencesMock.mockImplementation(async (preferences) => preferences);
     pickBookFileMock.mockResolvedValue(null);
     removeBookMock.mockImplementation(async (bookId) => ({
       book: createBook({ id: bookId }),
@@ -790,6 +798,36 @@ describe("App", () => {
       expect(screen.queryByRole("button", { name: "Exit focus" })).not.toBeInTheDocument(),
     );
     expect(screen.getByRole("button", { name: "Focus" })).toHaveFocus();
+  });
+
+  it("restores and persists the global contents width", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "layout-txt",
+      title: "Layout TXT",
+      format: "txt",
+    });
+    getReaderLayoutPreferencesMock.mockResolvedValueOnce({ sidebarWidth: 336 });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    const widthSlider = await screen.findByRole("slider", { name: "Contents width" });
+    await waitFor(() => expect(widthSlider).toHaveValue("336"));
+    expect(reader).toHaveStyle({ "--reader-sidebar-width": "336px" });
+
+    fireEvent.change(widthSlider, { target: { value: "401" } });
+    expect(widthSlider).toHaveValue("400");
+    expect(reader).toHaveStyle({ "--reader-sidebar-width": "400px" });
+    await waitFor(() =>
+      expect(saveReaderLayoutPreferencesMock).toHaveBeenCalledWith({
+        sidebarWidth: 400,
+      }),
+    );
   });
 
   it("forwards EPUB iframe keyboard events to page navigation", async () => {

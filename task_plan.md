@@ -272,7 +272,7 @@
 | 小阶段 | 分支 | 状态 | 验证 |
 |--------|------|------|------|
 | 6.1 快捷键和输入 | `codex/stage6-keyboard` | complete | `pnpm ... lint`；desktop test 52 tests；desktop build |
-| 6.2 布局响应式 | `codex/stage6-responsive-layout` | pending | 待验证 |
+| 6.2 布局响应式 | `codex/stage6-responsive-layout` | complete | Rust 28 tests；Vitest 53 tests；Playwright 5 tests；Browser/视觉检查 |
 | 6.3 性能优化 | `codex/stage6-performance` | pending | 待验证 |
 | 6.4 错误和空状态 | `codex/stage6-error-states` | pending | 待验证 |
 | 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | pending | 待验证 |

@@ -13,12 +13,14 @@ import {
 import {
   type Annotation,
   type Bookmark,
+  defaultReaderLayoutPreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
   type Locator,
   type PdfLocator,
   type ReaderProgress,
+  type ReaderLayoutPreferences,
   type ReaderTheme,
   type ReaderThemeMode,
   type SearchHit,
@@ -36,6 +38,7 @@ import {
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
+  getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
@@ -43,6 +46,7 @@ import {
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
+  saveReaderLayoutPreferences,
   updateAnnotation,
 } from "../tauri/reader";
 import {
@@ -277,6 +281,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
+  const [layoutPreferences, setLayoutPreferences] = useState<ReaderLayoutPreferences>(
+    defaultReaderLayoutPreferences,
+  );
+  const [layoutError, setLayoutError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] =
     useState<ReaderProgress<TxtLocator> | null>(null);
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
@@ -305,6 +313,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const focusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const layoutSaveTimerRef = useRef<number | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
@@ -360,6 +370,36 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       isCurrent = false;
     };
   }, [book.id]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getReaderLayoutPreferences()
+      .then((savedPreferences) => {
+        if (isCurrent) {
+          setLayoutPreferences(savedPreferences);
+          setLayoutError(null);
+        }
+      })
+      .catch((layoutLoadError: unknown) => {
+        if (isCurrent) {
+          setLayoutError(getErrorMessage(layoutLoadError));
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book.id]);
+
+  useEffect(
+    () => () => {
+      if (layoutSaveTimerRef.current !== null) {
+        window.clearTimeout(layoutSaveTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let isCurrent = true;
@@ -501,9 +541,22 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const currentBookmarkLocator =
     currentBookmarkPosition?.bookId === book.id ? currentBookmarkPosition.locator : null;
 
-  const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen((currentValue) => !currentValue);
+  const closeSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+    focusElementSoon(sidebarToggleRef);
   }, []);
+
+  const toggleSidebar = useCallback(() => {
+    if (isSidebarOpen) {
+      closeSidebar();
+      return;
+    }
+
+    setIsSidebarOpen(true);
+    if (window.matchMedia?.("(max-width: 760px)").matches) {
+      focusElementSoon(sidebarCloseButtonRef);
+    }
+  }, [closeSidebar, isSidebarOpen]);
 
   const toggleThemePanel = useCallback(() => {
     setIsThemePanelOpen((currentValue) => !currentValue);
@@ -534,6 +587,27 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     void saveReaderTheme(nextTheme).catch((saveError: unknown) => {
       setThemeError(getErrorMessage(saveError));
     });
+  }, []);
+
+  const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
+    const nextPreferences = {
+      sidebarWidth: Math.min(480, Math.max(240, Math.round(sidebarWidth / 8) * 8)),
+    };
+    setLayoutPreferences(nextPreferences);
+    setLayoutError(null);
+
+    if (layoutSaveTimerRef.current !== null) {
+      window.clearTimeout(layoutSaveTimerRef.current);
+    }
+
+    layoutSaveTimerRef.current = window.setTimeout(() => {
+      layoutSaveTimerRef.current = null;
+      void saveReaderLayoutPreferences(nextPreferences).catch(
+        (layoutSaveError: unknown) => {
+          setLayoutError(getErrorMessage(layoutSaveError));
+        },
+      );
+    }, 250);
   }, []);
 
   const handleTxtProgressChange = useCallback(
@@ -1177,9 +1251,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         "--txt-reader-line-height": theme.lineHeight,
         "--txt-reader-paragraph-spacing": `${theme.paragraphSpacing}px`,
         "--txt-reader-page-margin": `${theme.pageMargin}px`,
+        "--reader-sidebar-width": `${layoutPreferences.sidebarWidth}px`,
         ...getReaderThemeTokens(theme),
       }) as CSSProperties,
-    [theme],
+    [layoutPreferences.sidebarWidth, theme],
   );
 
   return (
@@ -1191,6 +1266,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       data-reader-theme={theme.mode}
       aria-label={`${formatBookFormat(book.format)} reader`}
     >
+      {isSidebarOpen ? (
+        <button
+          type="button"
+          className="reader-sidebar-backdrop"
+          aria-label="Close contents"
+          onClick={closeSidebar}
+        />
+      ) : null}
       <ReaderSidebar
         activeTocItemId={activeTocItemId}
         activeTab={sidebarTab}
@@ -1200,6 +1283,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         bookmarkError={visibleBookmarkError}
         items={tocItems}
         isOpen={isSidebarOpen}
+        layoutError={layoutError}
         label={`${formatBookFormat(book.format)} contents`}
         isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
@@ -1212,7 +1296,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         onJumpToSearchResult={handleJumpToSearchResult}
         onSearchQueryChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
+        onClose={closeSidebar}
+        onSidebarWidthChange={handleSidebarWidthChange}
         onTabChange={setSidebarTab}
+        sidebarCloseButtonRef={sidebarCloseButtonRef}
+        sidebarWidth={layoutPreferences.sidebarWidth}
         searchError={searchError}
         searchInputRef={searchInputRef}
         searchQuery={searchQuery}
@@ -1239,9 +1327,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               ref={focusButtonRef}
               type="button"
               className="reader-tool-button"
+              aria-expanded={isSidebarOpen}
               onClick={toggleSidebar}
             >
-              {isSidebarOpen ? "Hide contents" : "Contents"}
+              Contents
             </button>
             <button
               type="button"
@@ -1367,8 +1456,10 @@ interface ReaderSidebarProps {
   items: TocItem[];
   isOpen: boolean;
   isSearchLoading: boolean;
+  layoutError: string | null;
   label: string;
   onBackToLibrary: () => void;
+  onClose: () => void;
   onCreateBookmark: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
@@ -1378,11 +1469,14 @@ interface ReaderSidebarProps {
   onJumpToSearchResult: (hit: SearchHit<Locator>) => void;
   onSearchQueryChange: (query: string) => void;
   onSearchSubmit: (query: string) => void;
+  onSidebarWidthChange: (width: number) => void;
   onTabChange: (tab: ReaderSidebarTab) => void;
   searchError: string | null;
   searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   searchResults: Array<SearchHit<Locator>>;
+  sidebarCloseButtonRef: RefObject<HTMLButtonElement | null>;
+  sidebarWidth: number;
 }
 
 function ReaderSidebar({
@@ -1395,8 +1489,10 @@ function ReaderSidebar({
   items,
   isOpen,
   isSearchLoading,
+  layoutError,
   label,
   onBackToLibrary,
+  onClose,
   onCreateBookmark,
   onDeleteAnnotation,
   onDeleteBookmark,
@@ -1406,11 +1502,14 @@ function ReaderSidebar({
   onJumpToSearchResult,
   onSearchQueryChange,
   onSearchSubmit,
+  onSidebarWidthChange,
   onTabChange,
   searchError,
   searchInputRef,
   searchQuery,
   searchResults,
+  sidebarCloseButtonRef,
+  sidebarWidth,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
@@ -1440,9 +1539,20 @@ function ReaderSidebar({
       aria-label="Table of contents"
       aria-hidden={!isOpen}
     >
-      <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
-        Back to shelf
-      </button>
+      <div className="reader-sidebar__actions">
+        <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
+          Back to shelf
+        </button>
+        <button
+          ref={sidebarCloseButtonRef}
+          type="button"
+          className="reader-sidebar__close"
+          aria-label="Close contents"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
       <div className="reader-sidebar-tabs" role="tablist" aria-label="Reader sidebar">
         {(["contents", "bookmarks", "notes", "search"] as ReaderSidebarTab[]).map(
           (tab) => (
@@ -1458,6 +1568,25 @@ function ReaderSidebar({
           ),
         )}
       </div>
+      <label className="reader-sidebar-size">
+        <span>
+          Contents width <output>{sidebarWidth}px</output>
+        </span>
+        <input
+          type="range"
+          min="240"
+          max="480"
+          step="8"
+          value={sidebarWidth}
+          aria-label="Contents width"
+          onChange={(event) => onSidebarWidthChange(Number(event.currentTarget.value))}
+        />
+      </label>
+      {layoutError !== null ? (
+        <p className="reader-sidebar__error" role="alert">
+          Layout preference could not be saved. {layoutError}
+        </p>
+      ) : null}
       {activeTab === "contents" ? (
         <>
           <h2>Contents</h2>
@@ -1476,8 +1605,10 @@ function ReaderSidebar({
                     className={`reader-toc__item ${
                       isActive ? "reader-toc__item--active" : ""
                     }`}
-                    style={{ paddingLeft: `${12 + item.depth * 14}px` }}
+                    style={{ paddingLeft: `${12 + Math.min(item.depth, 4) * 14}px` }}
+                    aria-label={item.title}
                     aria-current={isActive ? "location" : undefined}
+                    title={item.title}
                     onClick={() => handleJump(item.id)}
                   >
                     {item.title}

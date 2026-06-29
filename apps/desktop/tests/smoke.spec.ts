@@ -189,6 +189,23 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "style",
     /--txt-reader-heading: #f0e8d7/,
   );
+  await page.getByRole("button", { name: "Theme" }).click();
+
+  const contentsWidth = page.getByRole("slider", { name: "Contents width" });
+  await contentsWidth.fill("400");
+  await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
+    "style",
+    /--reader-sidebar-width: 400px/,
+  );
+  const firstTocItem = page.getByRole("button", { name: "第一章 长文本" });
+  await expect(firstTocItem).toHaveCSS(
+    "white-space",
+    "nowrap",
+  );
+  await expect(firstTocItem).toHaveCSS(
+    "text-overflow",
+    "ellipsis",
+  );
 
   await page.locator(".reader-viewport").evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -198,6 +215,27 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "aria-current",
     "location",
   );
+
+  await page.setViewportSize({ width: 375, height: 760 });
+  await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
+  const narrowLayout = await page.evaluate(() => {
+    const sidebar = document.querySelector<HTMLElement>(".reader-sidebar");
+    const main = document.querySelector<HTMLElement>(".reader-main");
+
+    return {
+      bodyClientWidth: document.body.clientWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      mainLeft: main?.getBoundingClientRect().left ?? -1,
+      sidebarWidth: sidebar?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(narrowLayout.bodyScrollWidth).toBe(narrowLayout.bodyClientWidth);
+  expect(narrowLayout.mainLeft).toBe(0);
+  expect(narrowLayout.sidebarWidth).toBeLessThanOrEqual(360);
+  await page.locator(".reader-sidebar__close").click();
+  await expect(page.locator(".reader-sidebar")).toBeHidden();
+  await page.getByRole("button", { name: "Contents" }).click();
+  await expect(page.locator(".reader-sidebar")).toBeVisible();
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
   await expect(
@@ -734,7 +772,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await pageInput.press("Enter");
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
-  await page.getByRole("button", { name: "Hide contents" }).click();
+  await page.getByRole("button", { name: "Contents" }).click();
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
     "aria-pressed",

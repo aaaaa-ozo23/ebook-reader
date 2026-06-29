@@ -8,6 +8,8 @@ import {
   type Locator,
   type PdfLocator,
   type ReaderProgress,
+  defaultReaderLayoutPreferences,
+  type ReaderLayoutPreferences,
   type ReaderTheme,
   type TxtDocument,
   type TxtLocator,
@@ -20,6 +22,7 @@ const FALLBACK_TXT_DOCUMENTS_KEY = "reader:fallback:txtDocuments";
 const FALLBACK_ANNOTATIONS_KEY = "reader:fallback:annotations";
 const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
+const FALLBACK_READER_LAYOUT_KEY = "reader:fallback:readerLayout";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
 function hasTauriRuntime(): boolean {
@@ -101,6 +104,28 @@ export async function saveReaderTheme(theme: ReaderTheme): Promise<ReaderTheme> 
   }
 
   return invokeCommand<ReaderTheme>("save_reader_theme", { theme });
+}
+
+export async function getReaderLayoutPreferences(): Promise<ReaderLayoutPreferences> {
+  if (!hasTauriRuntime()) {
+    return getFallbackReaderLayoutPreferences();
+  }
+
+  return invokeCommand<ReaderLayoutPreferences>("get_reader_layout_preferences");
+}
+
+export async function saveReaderLayoutPreferences(
+  preferences: ReaderLayoutPreferences,
+): Promise<ReaderLayoutPreferences> {
+  if (!hasTauriRuntime()) {
+    const normalized = normalizeReaderLayoutPreferences(preferences);
+    window.localStorage.setItem(FALLBACK_READER_LAYOUT_KEY, JSON.stringify(normalized));
+    return normalized;
+  }
+
+  return invokeCommand<ReaderLayoutPreferences>("save_reader_layout_preferences", {
+    preferences,
+  });
 }
 
 export async function getReadingProgress<TLocator extends Locator = Locator>(
@@ -323,6 +348,35 @@ function getFallbackReaderTheme(): ReaderTheme {
   } catch {
     return defaultReaderTheme;
   }
+}
+
+function getFallbackReaderLayoutPreferences(): ReaderLayoutPreferences {
+  if (typeof window === "undefined") {
+    return defaultReaderLayoutPreferences;
+  }
+
+  const rawPreferences = window.localStorage.getItem(FALLBACK_READER_LAYOUT_KEY);
+
+  if (rawPreferences === null) {
+    return defaultReaderLayoutPreferences;
+  }
+
+  try {
+    return normalizeReaderLayoutPreferences({
+      ...defaultReaderLayoutPreferences,
+      ...(JSON.parse(rawPreferences) as Partial<ReaderLayoutPreferences>),
+    });
+  } catch {
+    return defaultReaderLayoutPreferences;
+  }
+}
+
+function normalizeReaderLayoutPreferences(
+  preferences: ReaderLayoutPreferences,
+): ReaderLayoutPreferences {
+  return {
+    sidebarWidth: Math.min(480, Math.max(240, Math.round(preferences.sidebarWidth / 8) * 8)),
+  };
 }
 
 function setFallbackReaderTheme(theme: ReaderTheme): void {

@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 const DB_FILE_NAME: &str = "ebook-reader.sqlite3";
 const LIBRARY_DIR_NAME: &str = "library";
+const READER_LAYOUT_SETTING_KEY: &str = "reader_layout";
 const READER_THEME_SETTING_KEY: &str = "reader_theme";
 
 struct Migration {
@@ -187,6 +188,12 @@ pub struct ReaderTheme {
     pub page_margin: f64,
     pub background_color: String,
     pub text_color: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReaderLayoutPreferences {
+    pub sidebar_width: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -394,6 +401,19 @@ pub fn get_reader_theme(app: &AppHandle) -> anyhow::Result<ReaderTheme> {
 pub fn save_reader_theme(app: &AppHandle, theme: ReaderTheme) -> anyhow::Result<ReaderTheme> {
     let database_path = init_app_database(app)?;
     save_reader_theme_at(&database_path, &theme)
+}
+
+pub fn get_reader_layout_preferences(app: &AppHandle) -> anyhow::Result<ReaderLayoutPreferences> {
+    let database_path = init_app_database(app)?;
+    get_reader_layout_preferences_at(&database_path)
+}
+
+pub fn save_reader_layout_preferences(
+    app: &AppHandle,
+    preferences: ReaderLayoutPreferences,
+) -> anyhow::Result<ReaderLayoutPreferences> {
+    let database_path = init_app_database(app)?;
+    save_reader_layout_preferences_at(&database_path, &preferences)
 }
 
 pub fn get_reading_progress(
@@ -713,6 +733,48 @@ pub fn save_reader_theme_at(
     )?;
 
     Ok(theme)
+}
+
+pub fn get_reader_layout_preferences_at(
+    database_path: &Path,
+) -> anyhow::Result<ReaderLayoutPreferences> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let value_json = conn
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key = ?1",
+            params![READER_LAYOUT_SETTING_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    match value_json {
+        Some(value) => serde_json::from_str::<ReaderLayoutPreferences>(&value)
+            .map(normalize_reader_layout_preferences)
+            .context("failed to parse saved reader layout preferences"),
+        None => Ok(default_reader_layout_preferences()),
+    }
+}
+
+pub fn save_reader_layout_preferences_at(
+    database_path: &Path,
+    preferences: &ReaderLayoutPreferences,
+) -> anyhow::Result<ReaderLayoutPreferences> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let preferences = normalize_reader_layout_preferences(preferences.clone());
+    let value_json = serde_json::to_string(&preferences)
+        .context("failed to serialize reader layout preferences")?;
+    let now = current_timestamp(&conn)?;
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+        params![READER_LAYOUT_SETTING_KEY, value_json, now],
+    )?;
+
+    Ok(preferences)
 }
 
 pub fn get_reading_progress_at(
@@ -1297,6 +1359,18 @@ fn default_reader_theme() -> ReaderTheme {
     }
 }
 
+fn default_reader_layout_preferences() -> ReaderLayoutPreferences {
+    ReaderLayoutPreferences { sidebar_width: 292 }
+}
+
+fn normalize_reader_layout_preferences(
+    mut preferences: ReaderLayoutPreferences,
+) -> ReaderLayoutPreferences {
+    preferences.sidebar_width = ((preferences.sidebar_width.clamp(240, 480) + 4) / 8) * 8;
+    preferences.sidebar_width = preferences.sidebar_width.clamp(240, 480);
+    preferences
+}
+
 fn normalize_reader_theme(mut theme: ReaderTheme) -> ReaderTheme {
     theme.font_size = theme.font_size.clamp(14.0, 30.0);
     theme.line_height = theme.line_height.clamp(1.35, 2.4);
@@ -1603,12 +1677,13 @@ mod tests {
 
     use super::{
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
-        get_reader_theme_at, get_reading_progress_at, import_book_at, init_database_at,
-        list_annotations_at, list_bookmarks_at, list_books_at, mark_book_opened_at,
-        open_txt_book_at, remove_book_at, save_reader_theme_at, save_reading_progress_at,
-        schema_version, update_annotation_at, AnnotationKind, BookFormat, EpubLocator,
-        ImportBookStatus, Locator, PdfLocator, PdfRect, PdfZoomMode, ReaderTheme, ReaderThemeMode,
-        TxtLocator, DB_FILE_NAME,
+        get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
+        import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
+        mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_layout_preferences_at,
+        save_reader_theme_at, save_reading_progress_at, schema_version, update_annotation_at,
+        AnnotationKind, BookFormat, EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect,
+        PdfZoomMode, ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TxtLocator,
+        DB_FILE_NAME,
     };
 
     #[test]
@@ -2209,6 +2284,27 @@ mod tests {
         assert_eq!(saved.font_size, 30.0);
         assert_eq!(restored, saved);
         assert_eq!(restored.mode, ReaderThemeMode::Dark);
+    }
+
+    #[test]
+    fn reader_layout_preferences_are_clamped_and_persisted() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+
+        let defaults =
+            get_reader_layout_preferences_at(&database_path).expect("get default layout");
+        assert_eq!(defaults.sidebar_width, 292);
+
+        let saved = save_reader_layout_preferences_at(
+            &database_path,
+            &ReaderLayoutPreferences { sidebar_width: 401 },
+        )
+        .expect("save layout");
+        init_database_at(&database_path).expect("reopen database");
+        let restored = get_reader_layout_preferences_at(&database_path).expect("restore layout");
+
+        assert_eq!(saved.sidebar_width, 400);
+        assert_eq!(restored, saved);
     }
 
     #[test]
