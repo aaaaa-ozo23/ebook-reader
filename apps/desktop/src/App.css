@@ -384,26 +384,61 @@ button:disabled {
 }
 
 .book-card__cover {
-  display: grid;
+  position: relative;
+  display: flex;
+  aspect-ratio: 2 / 3;
   min-height: 116px;
-  place-items: end start;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  overflow: hidden;
   border-radius: 8px;
-  background:
-    linear-gradient(140deg, rgba(47, 93, 98, 0.92), rgba(38, 50, 56, 0.94)), #2f5d62;
+  background-color: #243438;
+  background-position: center;
+  background-size: cover;
   color: #ffffff;
   padding: 12px;
 }
 
 .book-shelf--list .book-card__cover {
-  min-height: 104px;
+  min-height: 123px;
 }
 
 .book-card__cover span {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(17, 31, 33, 0.72);
   padding: 4px 7px;
   font-size: 0.72rem;
   font-weight: 800;
+}
+
+.book-card__cover strong {
+  position: relative;
+  z-index: 1;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(0.92rem, 3vw, 1.28rem);
+  line-height: 1.15;
+  text-wrap: balance;
+  text-shadow: 0 2px 12px rgba(10, 20, 22, 0.86);
+}
+
+.book-card__cover--image {
+  background: #e7e0d2;
+}
+
+.book-card__cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .book-card__body {
@@ -573,7 +608,10 @@ button:disabled {
   display: grid;
   height: 100vh;
   min-height: 100vh;
-  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 292px), 480px) minmax(0, 1fr);
+  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 292px), 480px) minmax(
+      0,
+      1fr
+    );
   background: var(--txt-reader-background, #f7f1e3);
   color: var(--txt-reader-text, #25211d);
   overflow: hidden;

@@ -26,6 +26,22 @@ fn remove_book(app: tauri::AppHandle, book_id: String) -> Result<db::RemoveBookR
 }
 
 #[tauri::command]
+fn save_book_cover(
+    app: tauri::AppHandle,
+    book_id: String,
+    image_bytes: Vec<u8>,
+    image_format: String,
+) -> Result<db::Book, String> {
+    db::save_book_cover(&app, &book_id, image_bytes, &image_format)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn mark_book_cover_fallback(app: tauri::AppHandle, book_id: String) -> Result<db::Book, String> {
+    db::mark_book_cover_fallback(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn open_txt_book(app: tauri::AppHandle, book_id: String) -> Result<db::TxtDocument, String> {
     db::open_txt_book(&app, &book_id).map_err(|error| error.to_string())
 }
@@ -153,6 +169,8 @@ pub fn run() {
             import_book,
             mark_book_opened,
             remove_book,
+            save_book_cover,
+            mark_book_cover_fallback,
             open_txt_book,
             get_reader_theme,
             save_reader_theme,

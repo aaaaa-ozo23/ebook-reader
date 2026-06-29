@@ -20,6 +20,8 @@ use uuid::Uuid;
 
 const DB_FILE_NAME: &str = "ebook-reader.sqlite3";
 const LIBRARY_DIR_NAME: &str = "library";
+const COVER_DIR_NAME: &str = "covers";
+const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
 const READER_LAYOUT_SETTING_KEY: &str = "reader_layout";
 const READER_THEME_SETTING_KEY: &str = "reader_theme";
 
@@ -40,6 +42,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "unique_books_file_hash",
         sql: include_str!("../migrations/0002_unique_books_file_hash.sql"),
     },
+    Migration {
+        version: 3,
+        name: "reader_experience",
+        sql: include_str!("../migrations/0003_reader_experience.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -55,6 +62,40 @@ pub enum BookFormat {
     Epub,
     Txt,
     Pdf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BookCoverStatus {
+    Pending,
+    Ready,
+    Fallback,
+}
+
+impl BookCoverStatus {
+    fn from_database(value: &str) -> rusqlite::Result<Self> {
+        match value {
+            "pending" => Ok(Self::Pending),
+            "ready" => Ok(Self::Ready),
+            "fallback" => Ok(Self::Fallback),
+            _ => Err(rusqlite::Error::FromSqlConversionFailure(
+                11,
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("invalid book cover status: {value}"),
+                )),
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Ready => "ready",
+            Self::Fallback => "fallback",
+        }
+    }
 }
 
 impl BookFormat {
@@ -120,6 +161,7 @@ pub struct Book {
     pub file_hash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<String>,
+    pub cover_status: BookCoverStatus,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -131,6 +173,7 @@ pub struct Book {
 pub enum ImportBookStatus {
     Imported,
     Duplicate,
+    Repaired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -388,6 +431,31 @@ pub fn remove_book(app: &AppHandle, book_id: &str) -> anyhow::Result<RemoveBookR
     )
 }
 
+pub fn save_book_cover(
+    app: &AppHandle,
+    book_id: &str,
+    image_bytes: Vec<u8>,
+    image_format: &str,
+) -> anyhow::Result<Book> {
+    let storage_paths = init_app_storage(app)?;
+    save_book_cover_at(
+        &storage_paths.database_path,
+        &storage_paths.library_dir,
+        book_id,
+        &image_bytes,
+        image_format,
+    )
+}
+
+pub fn mark_book_cover_fallback(app: &AppHandle, book_id: &str) -> anyhow::Result<Book> {
+    let storage_paths = init_app_storage(app)?;
+    mark_book_cover_fallback_at(
+        &storage_paths.database_path,
+        &storage_paths.library_dir,
+        book_id,
+    )
+}
+
 pub fn open_txt_book(app: &AppHandle, book_id: &str) -> anyhow::Result<TxtDocument> {
     let database_path = init_app_database(app)?;
     open_txt_book_at(&database_path, book_id)
@@ -566,9 +634,39 @@ pub fn import_book_at<P: AsRef<Path>>(
 
     let mut conn = open_database(database_path)?;
     if let Some(book) = find_book_by_hash(&conn, &file_hash)? {
+        if Path::new(&book.library_path).is_file() {
+            return Ok(ImportBookResult {
+                status: ImportBookStatus::Duplicate,
+                book,
+            });
+        }
+
+        fs::create_dir_all(library_dir).with_context(|| {
+            format!(
+                "failed to create library directory {}",
+                library_dir.display()
+            )
+        })?;
+        let repaired_library_path = library_dir.join(format!("{}.{}", file_hash, format.as_str()));
+        copy_file_to_library(&source_path, &repaired_library_path)?;
+        let now = current_timestamp(&conn)?;
+        conn.execute(
+            "UPDATE books
+             SET source_path = ?1, library_path = ?2, updated_at = ?3
+             WHERE id = ?4",
+            params![
+                path_to_string(&source_path),
+                path_to_string(&repaired_library_path),
+                now,
+                book.id
+            ],
+        )?;
+        let repaired_book = find_book_by_id(&conn, &book.id)?
+            .with_context(|| format!("book not found after repair: {}", book.id))?;
+
         return Ok(ImportBookResult {
-            status: ImportBookStatus::Duplicate,
-            book,
+            status: ImportBookStatus::Repaired,
+            book: repaired_book,
         });
     }
 
@@ -582,6 +680,11 @@ pub fn import_book_at<P: AsRef<Path>>(
     copy_file_to_library(&source_path, &library_path)?;
 
     let now = current_timestamp(&conn)?;
+    let cover_status = if format == BookFormat::Txt {
+        BookCoverStatus::Fallback
+    } else {
+        BookCoverStatus::Pending
+    };
     let book = Book {
         id: Uuid::new_v4().to_string(),
         title: title_from_path(&source_path),
@@ -591,6 +694,7 @@ pub fn import_book_at<P: AsRef<Path>>(
         library_path: path_to_string(&library_path),
         file_hash,
         cover_path: None,
+        cover_status,
         created_at: now.clone(),
         updated_at: now,
         last_opened_at: None,
@@ -607,6 +711,13 @@ pub fn import_book_at<P: AsRef<Path>>(
 pub fn mark_book_opened_at(database_path: &Path, book_id: &str) -> anyhow::Result<Book> {
     init_database_at(database_path)?;
     let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+
+    if !Path::new(&book.library_path).is_file() {
+        bail!("library copy is missing; re-import the original file to repair this book");
+    }
+
     let now = current_timestamp(&conn)?;
 
     let updated_count = conn.execute(
@@ -649,6 +760,15 @@ pub fn remove_book_at(
                 library_path.display()
             )
         })?;
+    }
+
+    if let Some(cover_path) = book.cover_path.as_deref().map(PathBuf::from) {
+        if cover_path.exists() {
+            assert_library_file_is_within_dir(&cover_path, library_dir)?;
+            fs::remove_file(&cover_path).with_context(|| {
+                format!("failed to delete cached cover at {}", cover_path.display())
+            })?;
+        }
     }
 
     let deleted_count = conn.execute("DELETE FROM books WHERE id = ?1", params![book_id])?;
@@ -1560,6 +1680,17 @@ fn insert_book(conn: &mut Connection, book: &Book) -> anyhow::Result<()> {
         ],
     )?;
 
+    transaction.execute(
+        "INSERT INTO book_cover_state (book_id, status, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(book_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at",
+        params![
+            &book.id,
+            book.cover_status.as_str(),
+            &book.updated_at,
+        ],
+    )?;
+
     transaction.commit()?;
 
     Ok(())
@@ -1578,7 +1709,11 @@ fn select_books(conn: &Connection) -> anyhow::Result<Vec<Book>> {
             cover_path,
             created_at,
             updated_at,
-            last_opened_at
+            last_opened_at,
+            COALESCE(
+                (SELECT status FROM book_cover_state WHERE book_id = books.id),
+                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+            )
         FROM books
         ORDER BY COALESCE(last_opened_at, created_at) DESC, created_at DESC, id ASC",
     )?;
@@ -1603,7 +1738,11 @@ fn find_book_by_hash(conn: &Connection, file_hash: &str) -> rusqlite::Result<Opt
             cover_path,
             created_at,
             updated_at,
-            last_opened_at
+            last_opened_at,
+            COALESCE(
+                (SELECT status FROM book_cover_state WHERE book_id = books.id),
+                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+            )
         FROM books
         WHERE file_hash = ?1",
         params![file_hash],
@@ -1625,7 +1764,11 @@ fn find_book_by_id(conn: &Connection, book_id: &str) -> rusqlite::Result<Option<
             cover_path,
             created_at,
             updated_at,
-            last_opened_at
+            last_opened_at,
+            COALESCE(
+                (SELECT status FROM book_cover_state WHERE book_id = books.id),
+                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+            )
         FROM books
         WHERE id = ?1",
         params![book_id],
@@ -1663,7 +1806,130 @@ fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
         last_opened_at: row.get(10)?,
+        cover_status: BookCoverStatus::from_database(&row.get::<_, String>(11)?)?,
     })
+}
+
+fn validate_cover_image(image_bytes: &[u8], image_format: &str) -> anyhow::Result<&'static str> {
+    match image_format.trim().to_ascii_lowercase().as_str() {
+        "webp"
+            if image_bytes.len() >= 12
+                && &image_bytes[0..4] == b"RIFF"
+                && &image_bytes[8..12] == b"WEBP" =>
+        {
+            Ok("webp")
+        }
+        "png" if image_bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) => {
+            Ok("png")
+        }
+        "jpg" | "jpeg"
+            if image_bytes.len() >= 3
+                && image_bytes[0] == 0xff
+                && image_bytes[1] == 0xd8
+                && image_bytes[2] == 0xff =>
+        {
+            Ok("jpg")
+        }
+        _ => bail!("cover image format or signature is invalid"),
+    }
+}
+
+pub fn save_book_cover_at(
+    database_path: &Path,
+    library_dir: &Path,
+    book_id: &str,
+    image_bytes: &[u8],
+    image_format: &str,
+) -> anyhow::Result<Book> {
+    init_database_at(database_path)?;
+
+    if image_bytes.is_empty() || image_bytes.len() > MAX_COVER_BYTES {
+        bail!("cover image must be between 1 byte and {MAX_COVER_BYTES} bytes");
+    }
+
+    let extension = validate_cover_image(image_bytes, image_format)?;
+    fs::create_dir_all(library_dir)?;
+    let cover_dir = library_dir.join(COVER_DIR_NAME);
+    fs::create_dir_all(&cover_dir)
+        .with_context(|| format!("failed to create cover directory {}", cover_dir.display()))?;
+
+    let mut conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let cover_path = cover_dir.join(format!("{}.{}", book.file_hash, extension));
+    let temporary_path = cover_dir.join(format!("{}.{}.tmp", book.file_hash, extension));
+
+    fs::write(&temporary_path, image_bytes).with_context(|| {
+        format!(
+            "failed to write temporary cover {}",
+            temporary_path.display()
+        )
+    })?;
+    if cover_path.exists() {
+        fs::remove_file(&cover_path)?;
+    }
+    fs::rename(&temporary_path, &cover_path)
+        .with_context(|| format!("failed to finalize cover {}", cover_path.display()))?;
+
+    if let Some(previous_cover_path) = book.cover_path.as_deref().map(PathBuf::from) {
+        if previous_cover_path != cover_path && previous_cover_path.exists() {
+            assert_library_file_is_within_dir(&previous_cover_path, library_dir)?;
+            fs::remove_file(previous_cover_path)?;
+        }
+    }
+
+    let now = current_timestamp(&conn)?;
+    let transaction = conn.transaction()?;
+    transaction.execute(
+        "UPDATE books SET cover_path = ?1, updated_at = ?2 WHERE id = ?3",
+        params![path_to_string(&cover_path), now, book_id],
+    )?;
+    transaction.execute(
+        "INSERT INTO book_cover_state (book_id, status, updated_at)
+         VALUES (?1, 'ready', ?2)
+         ON CONFLICT(book_id) DO UPDATE SET status = 'ready', updated_at = excluded.updated_at",
+        params![book_id, now],
+    )?;
+    transaction.commit()?;
+
+    find_book_by_id(&conn, book_id)?
+        .with_context(|| format!("book not found after cover save: {book_id}"))
+}
+
+pub fn mark_book_cover_fallback_at(
+    database_path: &Path,
+    library_dir: &Path,
+    book_id: &str,
+) -> anyhow::Result<Book> {
+    init_database_at(database_path)?;
+    fs::create_dir_all(library_dir)?;
+    let mut conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+
+    if let Some(cover_path) = book.cover_path.as_deref().map(PathBuf::from) {
+        if cover_path.exists() {
+            assert_library_file_is_within_dir(&cover_path, library_dir)?;
+            fs::remove_file(cover_path)?;
+        }
+    }
+
+    let now = current_timestamp(&conn)?;
+    let transaction = conn.transaction()?;
+    transaction.execute(
+        "UPDATE books SET cover_path = NULL, updated_at = ?1 WHERE id = ?2",
+        params![now, book_id],
+    )?;
+    transaction.execute(
+        "INSERT INTO book_cover_state (book_id, status, updated_at)
+         VALUES (?1, 'fallback', ?2)
+         ON CONFLICT(book_id) DO UPDATE SET status = 'fallback', updated_at = excluded.updated_at",
+        params![book_id, now],
+    )?;
+    transaction.commit()?;
+
+    find_book_by_id(&conn, book_id)?
+        .with_context(|| format!("book not found after cover fallback: {book_id}"))
 }
 
 #[cfg(test)]
@@ -1679,15 +1945,16 @@ mod tests {
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
         get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
         import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
-        mark_book_opened_at, open_txt_book_at, remove_book_at, save_reader_layout_preferences_at,
-        save_reader_theme_at, save_reading_progress_at, schema_version, update_annotation_at,
-        AnnotationKind, BookFormat, EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect,
+        mark_book_cover_fallback_at, mark_book_opened_at, open_txt_book_at, remove_book_at,
+        save_book_cover_at, save_reader_layout_preferences_at, save_reader_theme_at,
+        save_reading_progress_at, schema_version, update_annotation_at, AnnotationKind,
+        BookCoverStatus, BookFormat, EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect,
         PdfZoomMode, ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TxtLocator,
         DB_FILE_NAME,
     };
 
     #[test]
-    fn migration_v2_creates_expected_tables_and_is_idempotent() {
+    fn migration_v3_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -1703,7 +1970,9 @@ mod tests {
                     'reading_progress',
                     'bookmarks',
                     'annotations',
-                    'app_settings'
+                    'app_settings',
+                    'book_cover_state',
+                    'reader_cache'
                 )",
                 [],
                 |row| row.get(0),
@@ -1715,9 +1984,9 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 6);
-        assert_eq!(migration_count, 2);
-        assert_eq!(schema_version(&conn).expect("schema version"), 2);
+        assert_eq!(table_count, 8);
+        assert_eq!(migration_count, 3);
+        assert_eq!(schema_version(&conn).expect("schema version"), 3);
     }
 
     #[test]
@@ -1775,6 +2044,7 @@ mod tests {
         assert_eq!(result.status, ImportBookStatus::Imported);
         assert_eq!(result.book.title, "sample");
         assert_eq!(result.book.format, BookFormat::Txt);
+        assert_eq!(result.book.cover_status, BookCoverStatus::Fallback);
         assert!(Uuid::parse_str(&result.book.id).is_ok());
         let canonical_source = source_path.canonicalize().expect("canonical source");
         assert_eq!(
@@ -1824,6 +2094,94 @@ mod tests {
         assert_eq!(second.status, ImportBookStatus::Duplicate);
         assert_eq!(first.book.id, second.book.id);
         assert_eq!(book_count, 1);
+    }
+
+    #[test]
+    fn duplicate_import_repairs_a_missing_library_copy() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("repair.txt");
+        fs::write(&source_path, "repairable content").expect("write source file");
+
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("first import");
+        fs::remove_file(&imported.book.library_path).expect("remove library copy");
+
+        let repaired =
+            import_book_at(&database_path, &library_dir, &source_path).expect("repair import");
+
+        assert_eq!(repaired.status, ImportBookStatus::Repaired);
+        assert_eq!(repaired.book.id, imported.book.id);
+        assert!(PathBuf::from(repaired.book.library_path).is_file());
+    }
+
+    #[test]
+    fn covers_are_validated_persisted_fallbacked_and_removed() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("covered.txt");
+        fs::write(&source_path, "covered content").expect("write source file");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import book");
+        let webp = b"RIFF\x04\x00\x00\x00WEBPVP8 ";
+
+        let invalid = save_book_cover_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            b"not an image",
+            "webp",
+        )
+        .expect_err("reject invalid cover signature");
+        assert!(invalid.to_string().contains("signature"));
+
+        let oversized = vec![0_u8; 2 * 1024 * 1024 + 1];
+        let oversized_error = save_book_cover_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            &oversized,
+            "webp",
+        )
+        .expect_err("reject oversized cover");
+        assert!(oversized_error.to_string().contains("between 1 byte"));
+
+        let covered = save_book_cover_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            webp,
+            "webp",
+        )
+        .expect("save cover");
+        let cover_path = PathBuf::from(covered.cover_path.as_deref().expect("cover path"));
+        assert_eq!(covered.cover_status, BookCoverStatus::Ready);
+        assert!(cover_path.is_file());
+
+        let fallback = mark_book_cover_fallback_at(&database_path, &library_dir, &imported.book.id)
+            .expect("fallback cover");
+        assert_eq!(fallback.cover_status, BookCoverStatus::Fallback);
+        assert!(fallback.cover_path.is_none());
+        assert!(!cover_path.exists());
+
+        let covered_again = save_book_cover_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            webp,
+            "webp",
+        )
+        .expect("save cover again");
+        let second_cover_path = PathBuf::from(
+            covered_again
+                .cover_path
+                .as_deref()
+                .expect("second cover path"),
+        );
+        remove_book_at(&database_path, &library_dir, &imported.book.id).expect("remove book");
+        assert!(!second_cover_path.exists());
     }
 
     #[test]
