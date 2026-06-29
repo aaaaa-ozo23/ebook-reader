@@ -1273,3 +1273,35 @@
 
 ### 过程问题
 - 首次 `tauri:build` 前端构建通过，但 Rust release exe 因 `ebook-reader-desktop.exe` 进程占用而无法删除；结束该 release 进程后重跑打包通过。
+
+## 2026-06-29 阶段 5.x EPUB 标注显示修复
+
+### 状态
+- **当前状态：** complete
+- **当前分支：** `codex/stage5-epub-annotation-render-fix`
+
+### 执行的操作
+- 将 EPUB 选区几何从 `book.getRange(cfi)` 改为优先读取当前可见 `rendition.getRange(cfi)`；章节 document Range 只作为文本与上下文回退。
+- 移除跨 iframe realm 不可靠的 `frameElement instanceof HTMLElement` 判断，直接读取 iframe 主窗口 rect 并叠加选区 rect。
+- 调整 epub.js/marks-pane underline：父标记 stroke width 设为 0 隐藏点击 rect 四边，CSS 仅让底部 line 继承批注颜色并显示 2px 虚线。
+- 新增 adapter 单测，覆盖可见 rendition Range、iframe 偏移和 underline 样式参数。
+- 扩展 EPUB Playwright smoke：选择主窗口可见段落，断言菜单 X 中心误差不超过 2px、Y 间距为 4-10px；保存 note 后断言所有 SVG rect 无描边、line 为可见虚线。
+- 使用应用内 Browser 检查 `http://127.0.0.1:1420/` 页面身份、非空渲染和 console；因 Browser 只读环境不能注入 EPUB localStorage fixture，目标 EPUB 交互用项目 Playwright fixture 验证。
+
+### 已通过验证
+- `pnpm.cmd install`
+- `pnpm.cmd --filter @reader/core build`
+- `pnpm.cmd --filter @reader/desktop lint`
+- `pnpm.cmd --filter @reader/desktop test`，50 tests
+- `pnpm.cmd --filter @reader/desktop build`
+- `cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml`，27 tests
+- `pnpm.cmd --filter @reader/desktop test:e2e`，5 tests
+- 视觉检查：`D:\tl-temp\ebook-reader-epub-menu-fix-closeup.png`、`D:\tl-temp\ebook-reader-epub-underline-fix-closeup.png`
+- `pnpm.cmd --filter @reader/desktop tauri:build`，生成 MSI 和 NSIS installer
+
+### 过程问题
+- 首次用相对路径 glob 搜索 pnpm 包源码时 PowerShell/Windows 路径不接受通配符；改为先定位 `.pnpm` 实际目录再用 `rg`。
+- EPUB E2E 初版双击虽产生选区但未稳定触发 epub.js selection lifecycle；改为在 iframe 内建立真实 DOM Range。
+- DOM Range 初版选中了分页横向列中的屏外首段；改为用 `frameElement rect + paragraph rect` 找主窗口可见段落，并增加 X/Y 像素断言。
+- Codex 内置 pnpm 使用 Node 24，低于仓库 engine；最终验收改用用户级 `C:\Users\许涵予xhy\AppData\Roaming\npm\pnpm.CMD` 和系统 Node 26.1.0。desktop test 脚本内部再次调用裸 `pnpm` 时仍显示该环境 warning，但 50 tests 全部通过。
+- 首次 `tauri:build` 因旧 release `ebook-reader-desktop.exe` PID 27020 锁定产物失败；仅结束该生成产物进程后重跑通过。
