@@ -1343,3 +1343,16 @@
 - **过程问题：** 首次 E2E 因工具栏文案统一为 `Contents`，PDF smoke 仍查找旧的 `Hide contents` 而超时；同步更新既有断言后重跑全套。
 - **视觉检查：** `D:\tl-temp\ebook-reader-stage6-responsive-txt.png` 显示 375×760 下目录为 323px 侧滑层，正文不再被目录推到首屏下方，TOC 标题单行显示。
 - **最终验证：** core build、desktop lint/build、Vitest 53 tests、Rust 28 tests、Playwright 5 tests 全部通过。
+
+### 阶段 6.6：书架封面
+- **状态：** complete
+- **分支：** `codex/stage6-bookshelf-covers`
+- **ImageGen：** 使用内置工具生成青绿/炭黑/琥珀纸张层叠风格、无文字的 2:3 默认封面背景。
+- **资产：** 原图位于 Codex generated_images；项目资产优化为 `apps/desktop/src/assets/default-book-cover.jpg`（720×1080，119 KB）。
+- **实现：** 新增 `BookCoverStatus`、`repaired` 导入状态和幂等迁移 `0003_reader_experience.sql`；旧 EPUB/PDF 默认为 pending，TXT 默认为 fallback。
+- **实现：** EPUB 动态读取内嵌封面，PDF 动态渲染首页，统一通过 Canvas 输出 480×720 WebP；Rust 校验格式/签名/2 MiB 上限并原子保存到 `library/covers/`。
+- **实现：** 书架使用串行后台队列处理新旧 pending 记录；真实封面失败和提取失败均回退共享背景，书名继续由 HTML/CSS 渲染；删除书籍同时删除封面缓存。
+- **实现：** 同哈希文件的书库副本丢失时重新导入会修复副本并返回 `repaired`，打开前会检查书库副本存在。
+- **过程问题：** React StrictMode 的 effect 探测清理曾把 mounted ref 永久留在 false，导致 PDF 封面已保存但书架 state 不刷新；effect setup 显式恢复 true 后真实 PDF 首页 E2E 通过。
+- **过程问题：** 首次从仓库根目录直接运行 `cargo fmt/test` 找不到 Cargo.toml；改在 `apps/desktop/src-tauri` 执行。
+- **验证：** core build、desktop lint/build、Vitest 60 tests、Rust 30 tests，以及默认封面长书名/PDF 首页缩略图 Playwright 均通过。

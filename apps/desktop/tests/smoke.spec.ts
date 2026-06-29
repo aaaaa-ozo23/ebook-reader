@@ -50,6 +50,33 @@ test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await expect(page.getByText("Desktop shell initialized.")).toHaveCount(0);
 });
 
+test("renders the shared default cover with a long HTML title", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "reader:fallback:books",
+      JSON.stringify([
+        {
+          id: "e2e-default-cover",
+          title:
+            "A Deliberately Long Book Title Rendered Above the Shared Cover Background",
+          format: "txt",
+          libraryPath: "D:\\library\\default-cover.txt",
+          fileHash: "default-cover-hash",
+          coverStatus: "fallback",
+          createdAt: "2026-06-29T08:00:00.000Z",
+          updatedAt: "2026-06-29T08:00:00.000Z",
+        },
+      ]),
+    );
+  });
+
+  await page.goto("/");
+
+  const cover = page.locator(".book-card__cover");
+  await expect(cover.locator("strong")).toHaveText(/A Deliberately Long Book Title/);
+  await expect(cover).toHaveCSS("background-image", /default-book-cover/);
+});
+
 test("removes a seeded book through the right-click actions menu", async ({ page }) => {
   await page.addInitScript(() => {
     const book = {
@@ -198,14 +225,8 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     /--reader-sidebar-width: 400px/,
   );
   const firstTocItem = page.getByRole("button", { name: "第一章 长文本" });
-  await expect(firstTocItem).toHaveCSS(
-    "white-space",
-    "nowrap",
-  );
-  await expect(firstTocItem).toHaveCSS(
-    "text-overflow",
-    "ellipsis",
-  );
+  await expect(firstTocItem).toHaveCSS("white-space", "nowrap");
+  await expect(firstTocItem).toHaveCSS("text-overflow", "ellipsis");
 
   await page.locator(".reader-viewport").evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -597,7 +618,11 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       expect(menuGap).toBeGreaterThanOrEqual(4);
       expect(menuGap).toBeLessThanOrEqual(10);
       expect(
-        Math.abs(selectionAnchor.left + selectionAnchor.width / 2 - (menuRect.x + menuRect.width / 2)),
+        Math.abs(
+          selectionAnchor.left +
+            selectionAnchor.width / 2 -
+            (menuRect.x + menuRect.width / 2),
+        ),
       ).toBeLessThanOrEqual(2);
     }
 
@@ -657,6 +682,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
       sourcePath: "D:\\books\\generated.pdf",
       libraryPath: "D:\\library\\generated.pdf",
       fileHash: "generated-pdf-hash",
+      coverStatus: "pending",
       createdAt: "2026-06-20T08:00:00.000Z",
       updatedAt: "2026-06-20T08:00:00.000Z",
     };
@@ -730,6 +756,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Generated PDF" })).toBeVisible();
+  await expect(page.locator(".book-card__cover img")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Continue" }).click();
 
   const reader = page.getByRole("main", { name: "PDF reader" });

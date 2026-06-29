@@ -148,7 +148,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
   async open(bookId: string): Promise<void> {
     if (bookId !== this.bookId) {
-      throw new Error(`EPUB adapter was initialized for ${this.bookId}, not ${bookId}.`);
+      throw new Error(
+        `EPUB adapter was initialized for ${this.bookId}, not ${bookId}.`,
+      );
     }
 
     await this.close();
@@ -261,7 +263,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     const nextProgression = clampProgressValue(progression);
     const cfi = book.locations.cfiFromPercentage(nextProgression);
     const page = progressionToEpubPage(nextProgression, totalPages);
-    const href = getSectionHrefForCfi(book, cfi) ?? this.lastPosition?.locator.href ?? "";
+    const href =
+      getSectionHrefForCfi(book, cfi) ?? this.lastPosition?.locator.href ?? "";
 
     return {
       locator: {
@@ -285,7 +288,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       throw new Error("EPUB locations are not ready.");
     }
 
-    await rendition.display(book.locations.cfiFromPercentage(clampProgressValue(progression)));
+    await rendition.display(
+      book.locations.cfiFromPercentage(clampProgressValue(progression)),
+    );
   }
 
   private async goToLocationIndex(locationIndex: number): Promise<void> {
@@ -297,7 +302,10 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       return;
     }
 
-    const clampedIndex = Math.min(totalPages - 1, Math.max(0, Math.floor(locationIndex)));
+    const clampedIndex = Math.min(
+      totalPages - 1,
+      Math.max(0, Math.floor(locationIndex)),
+    );
     const cfi = book.locations.cfiFromLocation(clampedIndex) as unknown;
 
     if (typeof cfi !== "string" || cfi.length === 0 || cfi === "-1") {
@@ -381,17 +389,11 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   ): void {
     const rendition = this.requireRendition();
 
-    rendition.annotations.highlight(
-      cfiRange,
-      {},
-      onClick,
-      "reader-epub-highlight",
-      {
-        fill: color,
-        "fill-opacity": "0.32",
-        "mix-blend-mode": "multiply",
-      },
-    );
+    rendition.annotations.highlight(cfiRange, {}, onClick, "reader-epub-highlight", {
+      fill: color,
+      "fill-opacity": "0.32",
+      "mix-blend-mode": "multiply",
+    });
   }
 
   removeHighlight(cfiRange: string): void {
@@ -607,7 +609,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   }
 
   private calculateSpreadState(): EpubSpreadState {
-    const width = this.container.clientWidth || this.container.getBoundingClientRect().width || 0;
+    const width =
+      this.container.clientWidth || this.container.getBoundingClientRect().width || 0;
     const canRenderDouble = width >= EPUB_MIN_SPREAD_WIDTH;
 
     return {
@@ -626,7 +629,10 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.spreadState = nextState;
 
     if (this.rendition !== null) {
-      this.rendition.spread(nextState.rendered === "double" ? "auto" : "none", EPUB_MIN_SPREAD_WIDTH);
+      this.rendition.spread(
+        nextState.rendered === "double" ? "auto" : "none",
+        EPUB_MIN_SPREAD_WIDTH,
+      );
       const width = Math.floor(this.container.clientWidth);
       const height = Math.floor(this.container.clientHeight);
       const renderedRendition = this.rendition as RenderedRendition;
@@ -723,7 +729,9 @@ function getEpubSearchSections(book: EpubBook): EpubSearchSection[] {
 }
 
 function getLocationStart(location: Location | EpubLocationLike): EpubLocationLike {
-  return "start" in location && location.start !== undefined ? location.start : location;
+  return "start" in location && location.start !== undefined
+    ? location.start
+    : location;
 }
 
 function getLocationIndex(book: EpubBook, start: EpubLocationLike): number | null {
@@ -737,7 +745,9 @@ function getLocationIndex(book: EpubBook, start: EpubLocationLike): number | nul
 
   const index = book.locations.locationFromCfi(start.cfi) as unknown;
 
-  return typeof index === "number" && Number.isFinite(index) && index >= 0 ? index : null;
+  return typeof index === "number" && Number.isFinite(index) && index >= 0
+    ? index
+    : null;
 }
 
 function getSectionHrefForCfi(book: EpubBook, cfi: string | undefined): string | null {
@@ -781,13 +791,23 @@ function resolveProgression(
 
 export function progressionToEpubPage(progression: number, totalPages: number): number {
   const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
-  const pageIndex = Math.ceil((normalizedTotalPages - 1) * clampProgressValue(progression));
+  const pageIndex = Math.ceil(
+    (normalizedTotalPages - 1) * clampProgressValue(progression),
+  );
 
   return Math.min(normalizedTotalPages, Math.max(1, pageIndex + 1));
 }
 
-export function nextEpubLocationIndex(page: number | null, totalPages: number | null): number | null {
-  if (page === null || totalPages === null || !Number.isFinite(page) || !Number.isFinite(totalPages)) {
+export function nextEpubLocationIndex(
+  page: number | null,
+  totalPages: number | null,
+): number | null {
+  if (
+    page === null ||
+    totalPages === null ||
+    !Number.isFinite(page) ||
+    !Number.isFinite(totalPages)
+  ) {
     return null;
   }
 
@@ -822,7 +842,9 @@ function clampProgressValue(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-export function buildEpubThemeRules(theme: ReaderTheme): Record<string, Record<string, string>> {
+export function buildEpubThemeRules(
+  theme: ReaderTheme,
+): Record<string, Record<string, string>> {
   return {
     html: {
       background: `${theme.backgroundColor} !important`,
@@ -866,10 +888,9 @@ export function buildEpubThemeRules(theme: ReaderTheme): Record<string, Record<s
   };
 }
 
-function getRangeContext(range: Range | null): Pick<
-  EpubSelectionSnapshot,
-  "contextBefore" | "contextAfter"
-> {
+function getRangeContext(
+  range: Range | null,
+): Pick<EpubSelectionSnapshot, "contextBefore" | "contextAfter"> {
   if (range === null) {
     return {};
   }
@@ -887,12 +908,17 @@ function getRangeContext(range: Range | null): Pick<
       .slice(Math.max(0, selectedIndex - SELECTION_CONTEXT_LENGTH), selectedIndex)
       .trim(),
     contextAfter: containerText
-      .slice(selectedIndex + selectedText.length, selectedIndex + selectedText.length + SELECTION_CONTEXT_LENGTH)
+      .slice(
+        selectedIndex + selectedText.length,
+        selectedIndex + selectedText.length + SELECTION_CONTEXT_LENGTH,
+      )
       .trim(),
   };
 }
 
-function getViewportRangeRect(range: Range | null): EpubSelectionSnapshot["anchorRect"] {
+function getViewportRangeRect(
+  range: Range | null,
+): EpubSelectionSnapshot["anchorRect"] {
   if (range === null) {
     return undefined;
   }

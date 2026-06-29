@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 6：正在实施阅读体验完善与可访问性；当前小阶段为 6.1 快捷键和焦点管理。
+大阶段 6：正在实施阅读体验完善与可访问性；当前小阶段为 6.6 书架封面。
 
 ## 分支策略
 
@@ -276,7 +276,7 @@
 | 6.3 性能优化 | `codex/stage6-performance` | pending | 待验证 |
 | 6.4 错误和空状态 | `codex/stage6-error-states` | pending | 待验证 |
 | 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | pending | 待验证 |
-| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | pending | 待验证 |
+| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | complete | Rust 30 tests；Vitest 60 tests；PDF/default-cover Playwright；desktop lint/build |
 
 ## 大阶段 7：Windows 打包与首版发布
 

@@ -245,3 +245,7 @@
 | `Document` 和 EPUB iframe target 不一定属于主窗口 realm，也不一定实现 `closest()` | `instanceof` 或可选链比较会误判输入目标 | 使用 tagName/isContentEditable 和显式函数存在性检查 |
 | Browser 在 375×760 下测得 body scrollWidth 与 clientWidth 同为 360px，console 无 warning/error | 书架窄屏没有横向溢出，现有移动书架样式可继续复用 | 阅读器抽屉状态交由 seeded Playwright 验证 |
 | 375×760 seeded TXT 截图显示目录为 323px 侧滑层，正文留在遮罩后且目录标题均单行 | 已消除旧版目录占据正文上方 42vh 的问题 | 保留关闭按钮、遮罩与 `Esc` 三种关闭路径 |
+| ImageGen 默认封面原图为 1024×1536、2.89 MB PNG | 直接进入书架会抵消首屏性能优化 | 保留生成原图于 Codex 目录，项目内缩放为 720×1080、119 KB JPEG |
+| React StrictMode 会执行一次 effect setup/cleanup 探测 | 只在初始化 ref 时设 true 会让异步封面 worker 的 state 更新被永久丢弃 | mounted effect 每次 setup 都显式设 true，cleanup 再设 false |
+| PDF 首页封面可直接复用按需加载的 pdfjs-dist worker | 不必让完整 PDF 阅读器进入书架首屏 chunk | 封面模块只静态引用 worker URL，pdfjs 本体在 pending PDF 处理时动态 import |
+| 阶段 6.6 首次在仓库根运行 Cargo 命令找不到 Cargo.toml | 前端验证已通过但 Rust 串联命令中断 | 后续统一在 `apps/desktop/src-tauri` 运行或传 `--manifest-path` |

@@ -397,7 +397,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     scale = this.scale,
   ): Promise<PdfLocator["rects"]> {
     const document = this.requireDocument();
-    const page = await document.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const page = await document.getPage(
+      normalizePdfPage(pageNumber, document.numPages),
+    );
     const viewport = page.getViewport({ scale: normalizePdfScale(scale) });
 
     return rects
@@ -426,7 +428,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     scale = this.scale,
   ): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
     const document = this.requireDocument();
-    const page = await document.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const page = await document.getPage(
+      normalizePdfPage(pageNumber, document.numPages),
+    );
     const viewport = page.getViewport({ scale: normalizePdfScale(scale) });
 
     return rects
@@ -669,7 +673,11 @@ function isPdfTextItem(item: unknown): item is { str: string } {
   );
 }
 
-function buildSearchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+function buildSearchExcerpt(
+  text: string,
+  matchIndex: number,
+  queryLength: number,
+): string {
   const excerptStart = Math.max(0, matchIndex - 48);
   const excerptEnd = Math.min(text.length, matchIndex + queryLength + 72);
   const prefix = excerptStart > 0 ? "..." : "";

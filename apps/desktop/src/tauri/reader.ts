@@ -29,7 +29,10 @@ function hasTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
 
   return invoke<T>(command, args);
@@ -135,7 +138,9 @@ export async function getReadingProgress<TLocator extends Locator = Locator>(
     return getFallbackReadingProgress<TLocator>(bookId);
   }
 
-  return invokeCommand<ReaderProgress<TLocator> | null>("get_reading_progress", { bookId });
+  return invokeCommand<ReaderProgress<TLocator> | null>("get_reading_progress", {
+    bookId,
+  });
 }
 
 export async function saveReadingProgress(
@@ -375,7 +380,10 @@ function normalizeReaderLayoutPreferences(
   preferences: ReaderLayoutPreferences,
 ): ReaderLayoutPreferences {
   return {
-    sidebarWidth: Math.min(480, Math.max(240, Math.round(preferences.sidebarWidth / 8) * 8)),
+    sidebarWidth: Math.min(
+      480,
+      Math.max(240, Math.round(preferences.sidebarWidth / 8) * 8),
+    ),
   };
 }
 
@@ -401,7 +409,10 @@ function getFallbackReadingProgress<TLocator extends Locator>(
   }
 
   try {
-    const progressByBook = JSON.parse(rawProgress) as Record<string, ReaderProgress<TLocator>>;
+    const progressByBook = JSON.parse(rawProgress) as Record<
+      string,
+      ReaderProgress<TLocator>
+    >;
     return progressByBook[bookId] ?? null;
   } catch {
     return null;
@@ -417,7 +428,10 @@ function setFallbackReadingProgress(
   }
 
   const rawProgress = window.localStorage.getItem(FALLBACK_READING_PROGRESS_KEY);
-  let progressByBook: Record<string, ReaderProgress<TxtLocator | EpubLocator | PdfLocator>> = {};
+  let progressByBook: Record<
+    string,
+    ReaderProgress<TxtLocator | EpubLocator | PdfLocator>
+  > = {};
 
   if (rawProgress !== null) {
     try {
@@ -431,7 +445,10 @@ function setFallbackReadingProgress(
   }
 
   progressByBook[bookId] = progress;
-  window.localStorage.setItem(FALLBACK_READING_PROGRESS_KEY, JSON.stringify(progressByBook));
+  window.localStorage.setItem(
+    FALLBACK_READING_PROGRESS_KEY,
+    JSON.stringify(progressByBook),
+  );
 }
 
 function getFallbackBookmarks<TLocator extends Locator>(
@@ -471,7 +488,10 @@ function setFallbackBookmarks<TLocator extends Locator>(
 
   if (rawBookmarks !== null) {
     try {
-      bookmarksByBook = JSON.parse(rawBookmarks) as Record<string, Array<Bookmark<Locator>>>;
+      bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+        string,
+        Array<Bookmark<Locator>>
+      >;
     } catch {
       bookmarksByBook = {};
     }
@@ -553,7 +573,10 @@ function setFallbackAnnotations(bookId: string, annotations: Annotation[]): void
   }
 
   annotationsByBook[bookId] = annotations;
-  window.localStorage.setItem(FALLBACK_ANNOTATIONS_KEY, JSON.stringify(annotationsByBook));
+  window.localStorage.setItem(
+    FALLBACK_ANNOTATIONS_KEY,
+    JSON.stringify(annotationsByBook),
+  );
 }
 
 function updateFallbackAnnotation(
@@ -575,7 +598,8 @@ function updateFallbackAnnotation(
 
   for (const [bookId, annotations] of Object.entries(annotationsByBook)) {
     const annotationIndex = annotations.findIndex(
-      (annotation) => annotation.id === annotationId && annotation.deletedAt === undefined,
+      (annotation) =>
+        annotation.id === annotationId && annotation.deletedAt === undefined,
     );
 
     if (annotationIndex === -1) {

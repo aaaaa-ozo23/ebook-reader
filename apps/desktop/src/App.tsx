@@ -11,8 +11,17 @@ import {
 import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/core";
 
 import "./App.css";
+import defaultBookCover from "./assets/default-book-cover.jpg";
 import { ReaderShell } from "./components/ReaderShell";
-import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
+import { prepareBookCover } from "./covers/bookCovers";
+import {
+  getBookCoverSource,
+  importBook,
+  listBooks,
+  markBookOpened,
+  pickBookFile,
+  removeBook,
+} from "./tauri/library";
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
@@ -51,10 +60,58 @@ function App() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [readerBook, setReaderBook] = useState<Book | null>(null);
-  const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(null);
+  const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
+    null,
+  );
   const [bookPendingRemoval, setBookPendingRemoval] = useState<Book | null>(null);
   const [removingBookId, setRemovingBookId] = useState<string | null>(null);
   const lastBookActionTriggerRef = useRef<HTMLElement | null>(null);
+  const coverQueueRef = useRef<Book[]>([]);
+  const queuedCoverIdsRef = useRef(new Set<string>());
+  const isCoverWorkerActiveRef = useRef(false);
+  const isAppMountedRef = useRef(true);
+
+  const processCoverQueue = useCallback(async () => {
+    if (isCoverWorkerActiveRef.current) {
+      return;
+    }
+
+    isCoverWorkerActiveRef.current = true;
+
+    try {
+      while (coverQueueRef.current.length > 0) {
+        const queuedBook = coverQueueRef.current.shift();
+
+        if (queuedBook === undefined) {
+          continue;
+        }
+
+        try {
+          const updatedBook = await prepareBookCover(queuedBook);
+
+          if (isAppMountedRef.current) {
+            setBooks((currentBooks) =>
+              currentBooks.some((book) => book.id === updatedBook.id)
+                ? upsertBook(currentBooks, updatedBook)
+                : currentBooks,
+            );
+          }
+        } finally {
+          queuedCoverIdsRef.current.delete(queuedBook.id);
+        }
+      }
+    } finally {
+      isCoverWorkerActiveRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    isAppMountedRef.current = true;
+
+    return () => {
+      isAppMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -87,6 +144,25 @@ function App() {
       isCurrent = false;
     };
   }, []);
+
+  useEffect(() => {
+    for (const book of books) {
+      if (book.coverStatus !== "pending" || queuedCoverIdsRef.current.has(book.id)) {
+        continue;
+      }
+
+      queuedCoverIdsRef.current.add(book.id);
+      coverQueueRef.current.push(book);
+    }
+
+    if (coverQueueRef.current.length > 0) {
+      const timeoutId = window.setTimeout(() => {
+        void processCoverQueue();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [books, processCoverQueue]);
 
   const sortedBooks = useMemo(() => sortBooksForShelf(books), [books]);
 
@@ -217,7 +293,11 @@ function App() {
   }
 
   return (
-    <main className="app-shell" style={readerThemeStyle} aria-label="Ebook Reader bookshelf">
+    <main
+      className="app-shell"
+      style={readerThemeStyle}
+      aria-label="Ebook Reader bookshelf"
+    >
       <LibraryRail bookCount={sortedBooks.length} />
       <section className="library-workspace" aria-labelledby="library-title">
         <LibraryHeader
@@ -375,7 +455,12 @@ interface ShelfBodyProps {
   removingBookId: string | null;
   viewMode: ViewMode;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number, trigger: HTMLElement | null) => void;
+  onShowBookMenu: (
+    book: Book,
+    x: number,
+    y: number,
+    trigger: HTMLElement | null,
+  ) => void;
 }
 
 function ShelfBody({
@@ -440,7 +525,12 @@ interface BookCardProps {
   isOpening: boolean;
   isRemoving: boolean;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number, trigger: HTMLElement | null) => void;
+  onShowBookMenu: (
+    book: Book,
+    x: number,
+    y: number,
+    trigger: HTMLElement | null,
+  ) => void;
 }
 
 function BookCard({
@@ -472,10 +562,12 @@ function BookCard({
   );
 
   return (
-    <article className="book-card" aria-label={`${book.title} book`} onContextMenu={handleContextMenu}>
-      <div className="book-card__cover" aria-hidden="true">
-        <span>{formatBookFormat(book.format)}</span>
-      </div>
+    <article
+      className="book-card"
+      aria-label={`${book.title} book`}
+      onContextMenu={handleContextMenu}
+    >
+      <BookCover book={book} />
       <div className="book-card__body">
         <div className="book-card__top">
           <div className="book-card__copy">
@@ -504,6 +596,52 @@ function BookCard({
         </button>
       </div>
     </article>
+  );
+}
+
+function BookCover({ book }: { book: Book }) {
+  const [source, setSource] = useState<string | null>(null);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getBookCoverSource(book).then(
+      (nextSource) => {
+        if (isCurrent) {
+          setSource(nextSource);
+        }
+      },
+      () => {
+        if (isCurrent) {
+          setSource(null);
+        }
+      },
+    );
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book]);
+
+  const showsExtractedCover = source !== null && source !== failedSource;
+  const fallbackStyle = {
+    backgroundImage: `linear-gradient(180deg, rgba(17, 31, 33, 0.04), rgba(17, 31, 33, 0.5)), url(${defaultBookCover})`,
+  } as CSSProperties;
+
+  return (
+    <div
+      className={`book-card__cover${showsExtractedCover ? " book-card__cover--image" : ""}`}
+      style={showsExtractedCover ? undefined : fallbackStyle}
+      aria-hidden="true"
+    >
+      {showsExtractedCover ? (
+        <img src={source} alt="" onError={() => setFailedSource(source)} />
+      ) : (
+        <strong title={book.title}>{book.title}</strong>
+      )}
+      <span>{formatBookFormat(book.format)}</span>
+    </div>
   );
 }
 
@@ -578,7 +716,12 @@ interface RemoveBookDialogProps {
   onConfirm: () => void;
 }
 
-function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookDialogProps) {
+function RemoveBookDialog({
+  book,
+  isRemoving,
+  onCancel,
+  onConfirm,
+}: RemoveBookDialogProps) {
   const dialogRef = useRef<HTMLElement | null>(null);
 
   if (book === null) {
@@ -597,7 +740,8 @@ function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookD
     }
 
     const buttons = Array.from(
-      dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [],
+      dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ??
+        [],
     );
 
     if (buttons.length === 0) {
@@ -628,8 +772,8 @@ function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookD
       >
         <h2 id="remove-book-title">Remove from shelf?</h2>
         <p id="remove-book-description">
-          This removes {book.title} from this app and deletes its library copy. The original file
-          you imported will not be deleted.
+          This removes {book.title} from this app and deletes its library copy. The
+          original file you imported will not be deleted.
         </p>
         <div className="remove-book-dialog__actions">
           <button
@@ -660,6 +804,14 @@ function getImportFeedback(result: ImportBookResult): Feedback {
       kind: "info",
       title: "Already in library",
       message: `${result.book.title} is already on this shelf.`,
+    };
+  }
+
+  if (result.status === "repaired") {
+    return {
+      kind: "success",
+      title: "Library copy repaired",
+      message: `${result.book.title} is available again.`,
     };
   }
 
@@ -700,9 +852,13 @@ function getRecentTime(book: Book): number {
 }
 
 function getBookActivityLabel(book: Book): string {
-  const activityDate = dateFormatter.format(new Date(book.lastOpenedAt ?? book.createdAt));
+  const activityDate = dateFormatter.format(
+    new Date(book.lastOpenedAt ?? book.createdAt),
+  );
 
-  return book.lastOpenedAt === undefined ? `Added ${activityDate}` : `Opened ${activityDate}`;
+  return book.lastOpenedAt === undefined
+    ? `Added ${activityDate}`
+    : `Opened ${activityDate}`;
 }
 
 function formatBookFormat(format: Book["format"]): string {

@@ -536,10 +536,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     () => (annotationsBookId === book.id ? annotations : []),
     [annotations, annotationsBookId, book.id],
   );
-  const visibleAnnotationError =
-    annotationsBookId === book.id ? annotationError : null;
+  const visibleAnnotationError = annotationsBookId === book.id ? annotationError : null;
   const currentBookmarkLocator =
-    currentBookmarkPosition?.bookId === book.id ? currentBookmarkPosition.locator : null;
+    currentBookmarkPosition?.bookId === book.id
+      ? currentBookmarkPosition.locator
+      : null;
 
   const closeSidebar = useCallback(() => {
     setIsSidebarOpen(false);
@@ -650,7 +651,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             requestId: (currentRequest?.requestId ?? 0) + 1,
           }));
           setActiveTocItemId(chapter.id);
-          handleTxtProgressChange(locator, chapter.startChar / Math.max(document.charCount, 1));
+          handleTxtProgressChange(
+            locator,
+            chapter.startChar / Math.max(document.charCount, 1),
+          );
         }
         return;
       }
@@ -1043,7 +1047,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      void createAnnotation(book.id, "highlight", snapshot.locator, color, snapshot.selectedText)
+      void createAnnotation(
+        book.id,
+        "highlight",
+        snapshot.locator,
+        color,
+        snapshot.selectedText,
+      )
         .then((annotation) => {
           setAnnotationsBookId(book.id);
           setAnnotations((currentAnnotations) => [
@@ -1540,7 +1550,11 @@ function ReaderSidebar({
       aria-hidden={!isOpen}
     >
       <div className="reader-sidebar__actions">
-        <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
+        <button
+          type="button"
+          className="reader-sidebar__back"
+          onClick={onBackToLibrary}
+        >
           Back to shelf
         </button>
         <button
@@ -1623,7 +1637,11 @@ function ReaderSidebar({
         <section className="reader-sidebar-panel" aria-label="Bookmarks">
           <div className="reader-sidebar-panel__header">
             <h2>Bookmarks</h2>
-            <button type="button" className="reader-sidebar__action" onClick={onCreateBookmark}>
+            <button
+              type="button"
+              className="reader-sidebar__action"
+              onClick={onCreateBookmark}
+            >
               Add
             </button>
           </div>
@@ -1713,7 +1731,9 @@ function ReaderSidebar({
               {searchError}
             </p>
           ) : null}
-          {searchQuery.trim() !== "" && !isSearchLoading && searchResults.length === 0 ? (
+          {searchQuery.trim() !== "" &&
+          !isSearchLoading &&
+          searchResults.length === 0 ? (
             <p className="reader-sidebar__empty">No results.</p>
           ) : null}
           {searchResults.length > 0 ? (
@@ -1745,11 +1765,7 @@ interface ReaderNoteItemProps {
   onJump: (annotation: Annotation) => void;
 }
 
-function ReaderNoteItem({
-  annotation,
-  onDelete,
-  onJump,
-}: ReaderNoteItemProps) {
+function ReaderNoteItem({ annotation, onDelete, onJump }: ReaderNoteItemProps) {
   const excerpt =
     annotation.selectedText ??
     annotation.locator.selectedText ??
@@ -1763,8 +1779,7 @@ function ReaderNoteItem({
           className="reader-note__swatch"
           style={
             {
-              "--reader-highlight-color":
-                annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+              "--reader-highlight-color": annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
             } as CSSProperties
           }
           aria-hidden="true"
@@ -1953,11 +1968,7 @@ function NotePopover({
           );
         })}
       </div>
-      <button
-        type="button"
-        className="reader-note-popover__add"
-        onClick={onAddNote}
-      >
+      <button type="button" className="reader-note-popover__add" onClick={onAddNote}>
         Add note
       </button>
     </div>
@@ -2307,7 +2318,9 @@ function TxtReaderContent({
                 }}
               >
                 {block.kind === "heading" ? (
-                  <h2>{renderAnnotatedText(block, annotations, onAnnotationActivate)}</h2>
+                  <h2>
+                    {renderAnnotatedText(block, annotations, onAnnotationActivate)}
+                  </h2>
                 ) : (
                   <p>{renderAnnotatedText(block, annotations, onAnnotationActivate)}</p>
                 )}
@@ -2370,8 +2383,7 @@ function EpubReaderContent({
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
-  const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] =
-    useState(false);
+  const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] = useState(false);
   const [position, setPosition] = useState<EpubPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
@@ -2546,8 +2558,9 @@ function EpubReaderContent({
         adapterRef.current = adapter;
 
         await adapter.open(book.id);
-        onSearchProviderChange((searchQuery) =>
-          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        onSearchProviderChange(
+          (searchQuery) =>
+            adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
         );
         appliedEpubHighlightSignaturesRef.current = new Map();
         appliedEpubUnderlineSignaturesRef.current = new Map();
@@ -3333,8 +3346,9 @@ function PdfReaderContent({
         }
 
         adapterRef.current = adapter;
-        onSearchProviderChange((searchQuery) =>
-          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        onSearchProviderChange(
+          (searchQuery) =>
+            adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
         );
         await adapter.setTheme(themeRef.current);
         const nextTocItems = await adapter.getToc();
@@ -3669,7 +3683,9 @@ function PdfReaderContent({
                   {(pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []).map(
                     (highlight) => {
                       const className = `reader-pdf-highlight-rect ${
-                        highlight.hasHighlight ? "reader-pdf-highlight-rect--highlight" : ""
+                        highlight.hasHighlight
+                          ? "reader-pdf-highlight-rect--highlight"
+                          : ""
                       } ${highlight.hasNote ? "reader-pdf-highlight-rect--note" : ""}`;
                       const style = {
                         "--reader-highlight-color": highlight.color,
@@ -4154,7 +4170,11 @@ function searchTxtDocument(
   return hits;
 }
 
-function buildSearchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+function buildSearchExcerpt(
+  text: string,
+  matchIndex: number,
+  queryLength: number,
+): string {
   const excerptStart = Math.max(0, matchIndex - 28);
   const excerptEnd = Math.min(text.length, matchIndex + queryLength + 48);
   const prefix = excerptStart > 0 ? "..." : "";
@@ -4269,34 +4289,32 @@ function getTxtAnnotationSegments(
   const blockStart = block.charOffset;
   const blockEnd = block.charOffset + block.text.length;
 
-  const coverages = annotations
-    .filter(isVisibleAnnotation)
-    .flatMap((annotation) => {
-      const locator = annotation.locator;
+  const coverages = annotations.filter(isVisibleAnnotation).flatMap((annotation) => {
+    const locator = annotation.locator;
 
-      if (locator.kind !== "txt" || locator.endCharOffset === undefined) {
-        return [];
-      }
+    if (locator.kind !== "txt" || locator.endCharOffset === undefined) {
+      return [];
+    }
 
-      const highlightStart = Math.max(blockStart, locator.charOffset);
-      const highlightEnd = Math.min(blockEnd, locator.endCharOffset);
+    const highlightStart = Math.max(blockStart, locator.charOffset);
+    const highlightEnd = Math.min(blockEnd, locator.endCharOffset);
 
-      if (highlightEnd <= highlightStart) {
-        return [];
-      }
+    if (highlightEnd <= highlightStart) {
+      return [];
+    }
 
-      return [
-        {
-          id: annotation.id,
-          annotation,
-          start: highlightStart - blockStart,
-          end: highlightEnd - blockStart,
-          color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
-          hasHighlight: annotation.type === "highlight",
-          hasNote: annotationHasNote(annotation),
-        },
-      ];
-    });
+    return [
+      {
+        id: annotation.id,
+        annotation,
+        start: highlightStart - blockStart,
+        end: highlightEnd - blockStart,
+        color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+        hasHighlight: annotation.type === "highlight",
+        hasNote: annotationHasNote(annotation),
+      },
+    ];
+  });
 
   if (coverages.length === 0) {
     return [];
@@ -4344,9 +4362,7 @@ function getTxtAnnotationSegments(
 
     segments.push({
       color:
-        highlightRange?.color ??
-        noteAnnotations[0]?.color ??
-        DEFAULT_HIGHLIGHT_COLOR,
+        highlightRange?.color ?? noteAnnotations[0]?.color ?? DEFAULT_HIGHLIGHT_COLOR,
       hasHighlight: highlightRange !== undefined,
       hasNote: noteAnnotations.length > 0,
       id: coveringRanges.map((coverage) => coverage.id).join("-"),
@@ -4489,7 +4505,10 @@ function locatorsMatchAnnotation(
   return false;
 }
 
-function txtLocatorsOverlap(firstLocator: TxtLocator, secondLocator: TxtLocator): boolean {
+function txtLocatorsOverlap(
+  firstLocator: TxtLocator,
+  secondLocator: TxtLocator,
+): boolean {
   if (
     firstLocator.endCharOffset === undefined ||
     secondLocator.endCharOffset === undefined
@@ -4559,7 +4578,10 @@ function epubLocatorsMatchAnnotation(
   );
 }
 
-function pdfLocatorsOverlap(firstLocator: PdfLocator, secondLocator: PdfLocator): boolean {
+function pdfLocatorsOverlap(
+  firstLocator: PdfLocator,
+  secondLocator: PdfLocator,
+): boolean {
   if (firstLocator.page !== secondLocator.page) {
     return false;
   }
@@ -4626,9 +4648,7 @@ function getEpubAnnotationSignature(annotation: Annotation): string {
 }
 
 function getSelectionMenuAnchor(
-  rect:
-    | Pick<DOMRect, "height" | "left" | "top" | "width">
-    | undefined,
+  rect: Pick<DOMRect, "height" | "left" | "top" | "width"> | undefined,
 ): ReaderMenuAnchor {
   if (rect === undefined) {
     return {
@@ -4738,10 +4758,7 @@ function captureTxtSelection(): ReaderSelectionSnapshot | null {
         Math.max(0, firstSegment.start - 80),
         firstSegment.start,
       ),
-      contextAfter: lastSegment.blockText.slice(
-        lastSegment.end,
-        lastSegment.end + 80,
-      ),
+      contextAfter: lastSegment.blockText.slice(lastSegment.end, lastSegment.end + 80),
     },
     selectedText,
     contextBefore: firstSegment.blockText.slice(
@@ -4766,7 +4783,9 @@ function getTxtSelectionRowSegments(range: Range): Array<{
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
   const viewport = ancestor?.closest(".reader-viewport") ?? document;
-  const rows = Array.from(viewport.querySelectorAll<HTMLElement>(".reader-virtual-row"));
+  const rows = Array.from(
+    viewport.querySelectorAll<HTMLElement>(".reader-virtual-row"),
+  );
   const segments: Array<{
     blockCharOffset: number;
     blockText: string;
