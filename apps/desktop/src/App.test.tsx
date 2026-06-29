@@ -736,6 +736,90 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
   });
 
+  it("routes reader shortcuts without hijacking editable controls", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "keyboard-txt",
+      title: "Keyboard TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    const viewport = await screen.findByLabelText("Keyboard TXT content");
+    const scrollBy = vi.fn();
+    Object.defineProperty(viewport, "clientHeight", {
+      configurable: true,
+      value: 600,
+    });
+    Object.defineProperty(viewport, "scrollBy", {
+      configurable: true,
+      value: scrollBy,
+    });
+
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "smooth", top: 540 });
+
+    fireEvent.keyDown(document, { ctrlKey: true, key: "f" });
+    const searchInput = await screen.findByRole("textbox", {
+      name: "Search in book",
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    expect(screen.getByRole("tab", { name: "Search" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.keyDown(searchInput, { key: "ArrowRight" });
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByLabelText("Table of contents")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Focus" }));
+    expect(screen.getByRole("button", { name: "Exit focus" })).toBeVisible();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Exit focus" })).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Focus" })).toHaveFocus();
+  });
+
+  it("forwards EPUB iframe keyboard events to page navigation", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "keyboard-epub",
+      title: "Keyboard EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(EpubReaderAdapterMock).toHaveBeenCalled());
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as {
+      onKeyDown?: (event: KeyboardEvent) => void;
+    };
+    const nextEvent = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "ArrowRight",
+    });
+    adapterOptions.onKeyDown?.(nextEvent);
+
+    expect(nextEvent.defaultPrevented).toBe(true);
+    expect(epubAdapterNextMock).toHaveBeenCalledTimes(1);
+  });
+
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({

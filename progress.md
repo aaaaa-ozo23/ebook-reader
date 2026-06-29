@@ -1305,3 +1305,28 @@
 - DOM Range 初版选中了分页横向列中的屏外首段；改为用 `frameElement rect + paragraph rect` 找主窗口可见段落，并增加 X/Y 像素断言。
 - Codex 内置 pnpm 使用 Node 24，低于仓库 engine；最终验收改用用户级 `C:\Users\许涵予xhy\AppData\Roaming\npm\pnpm.CMD` 和系统 Node 26.1.0。desktop test 脚本内部再次调用裸 `pnpm` 时仍显示该环境 warning，但 50 tests 全部通过。
 - 首次 `tauri:build` 因旧 release `ebook-reader-desktop.exe` PID 27020 锁定产物失败；仅结束该生成产物进程后重跑通过。
+
+## 2026-06-29 大阶段 6：阅读体验完善与可访问性
+
+### 状态
+- **当前状态：** in_progress
+- **集成分支：** `codex/v0.1.0-mvp-integration`
+- **当前分支：** `codex/stage6-keyboard`
+
+### 已执行
+- 读取并恢复 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 5 已完成且工作区干净。
+- 将集成分支从 `cdee2ca` 快进到 `main` 的 `f04c7b9`。
+- 确认阶段 6 产品决策：EPUB 内嵌封面 + PDF 首页缩略图、目录宽度全局持久化、窄屏侧滑抽屉。
+- 使用现有构建记录首屏基线：入口 309.13 kB / 93.63 kB gzip。
+
+### 阶段 6.1：快捷键和输入
+- **状态：** complete
+- **分支：** `codex/stage6-keyboard`
+- **过程问题：** 首次 lint 拒绝在 render 中写入 `shortcutStateRef.current`；改为 effect 同步快捷键状态，保持事件处理函数稳定且符合 React 19 refs 规则。
+- **过程问题：** 新增快捷键测试首次发现 `Document` target 没有 `closest()` 时被误判为可编辑；改为仅在 `closest` 存在时检查 `contenteditable`。
+- **过程问题：** 对话框引入 React `KeyboardEvent` 类型后遮蔽了窗口原生类型，首次 build 在菜单 window listener 报类型不匹配；窗口监听显式改用 `globalThis.KeyboardEvent`。
+- **实现：** 左右方向键统一驱动 TXT 视口翻页和 EPUB/PDF adapter；EPUB iframe keydown 转发到阅读壳。
+- **实现：** `Ctrl+F` 打开 Search tab 并聚焦输入；`Esc` 依次关闭选区/批注浮层、主题、目录和 Focus 模式。
+- **实现：** 输入、按钮、链接和 contenteditable 不触发翻页；菜单/移除对话框增加初始焦点、Escape、焦点回环和关闭后恢复。
+- **实现：** 添加统一 `focus-visible` 与 `prefers-reduced-motion` 样式。
+- **验证：** desktop lint 通过；Vitest 52 tests 通过；desktop build 通过。

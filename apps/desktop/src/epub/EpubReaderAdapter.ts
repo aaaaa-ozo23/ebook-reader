@@ -40,6 +40,7 @@ interface EpubReaderAdapterOptions {
   initialLocator?: EpubLocator;
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
+  onKeyDown?: (event: globalThis.KeyboardEvent) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
   onSelectionCleared?: () => void;
   onSpreadChange?: (state: EpubSpreadState) => void;
@@ -111,6 +112,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly container: HTMLElement;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
+  private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
   private readonly onSelected?: (selection: EpubSelectionSnapshot) => void;
   private readonly onSelectionCleared?: () => void;
   private readonly onSpreadChange?: (state: EpubSpreadState) => void;
@@ -138,6 +140,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.initialLocator = options.initialLocator;
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
+    this.onKeyDown = options.onKeyDown;
     this.onSelected = options.onSelected;
     this.onSelectionCleared = options.onSelectionCleared;
     this.onSpreadChange = options.onSpreadChange;
@@ -491,13 +494,19 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       notifyIfSelectionEmpty();
     };
 
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      this.onKeyDown?.(event);
+    };
+
     document.addEventListener("selectionchange", notifyIfSelectionEmpty);
     document.addEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
     document.addEventListener("keyup", handleKeyUp);
+    document.addEventListener("keydown", handleKeyDown);
     this.selectionCleanupCallbacks.push(() => {
       document.removeEventListener("selectionchange", notifyIfSelectionEmpty);
       document.removeEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
       document.removeEventListener("keyup", handleKeyUp);
+      document.removeEventListener("keydown", handleKeyDown);
     });
   }
 

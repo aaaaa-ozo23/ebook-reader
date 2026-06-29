@@ -260,6 +260,13 @@ interface ReaderMenuAnchor {
   menuY: number;
 }
 
+interface ReaderNavigationActions {
+  next: () => void;
+  previous: () => void;
+}
+
+type ReaderNavigationRegistration = (actions: ReaderNavigationActions | null) => void;
+
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
@@ -294,11 +301,41 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const selectionMenuRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLFormElement | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
+  const navigationActionsRef = useRef<ReaderNavigationActions | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
+  const focusButtonRef = useRef<HTMLButtonElement | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
   const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
+  const shortcutStateRef = useRef({
+    isChromeHidden,
+    isSidebarOpen,
+    isThemePanelOpen,
+    noteEditor,
+    notePopover,
+    selectionSnapshot,
+  });
+
+  useEffect(() => {
+    shortcutStateRef.current = {
+      isChromeHidden,
+      isSidebarOpen,
+      isThemePanelOpen,
+      noteEditor,
+      notePopover,
+      selectionSnapshot,
+    };
+  }, [
+    isChromeHidden,
+    isSidebarOpen,
+    isThemePanelOpen,
+    noteEditor,
+    notePopover,
+    selectionSnapshot,
+  ]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -480,7 +517,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   const exitFocusMode = useCallback(() => {
     setIsChromeHidden(false);
+    focusElementSoon(focusButtonRef);
   }, []);
+
+  const handleNavigationActionsChange = useCallback<ReaderNavigationRegistration>(
+    (actions) => {
+      navigationActionsRef.current = actions;
+    },
+    [],
+  );
 
   const handleThemeChange = useCallback((nextTheme: ReaderTheme) => {
     setTheme(nextTheme);
@@ -785,22 +830,97 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       setNotePopover(null);
     };
 
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSelectionSnapshot(null);
-        setNoteEditor(null);
-        setNotePopover(null);
-      }
-    };
-
     window.document.addEventListener("pointerdown", handlePointerDown);
-    window.document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.document.removeEventListener("pointerdown", handlePointerDown);
-      window.document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  const handleReaderKeyDown = useCallback((event: globalThis.KeyboardEvent) => {
+    const shortcutState = shortcutStateRef.current;
+    const normalizedKey = event.key.toLocaleLowerCase();
+
+    if ((event.ctrlKey || event.metaKey) && normalizedKey === "f") {
+      event.preventDefault();
+      setIsChromeHidden(false);
+      setIsThemePanelOpen(false);
+      setIsSidebarOpen(true);
+      setSidebarTab("search");
+      focusElementSoon(searchInputRef);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (
+        shortcutState.selectionSnapshot !== null ||
+        shortcutState.noteEditor !== null ||
+        shortcutState.notePopover !== null
+      ) {
+        event.preventDefault();
+        setSelectionSnapshot(null);
+        setNoteEditor(null);
+        setNotePopover(null);
+        return;
+      }
+
+      if (shortcutState.isThemePanelOpen) {
+        event.preventDefault();
+        setIsThemePanelOpen(false);
+        return;
+      }
+
+      if (shortcutState.isSidebarOpen) {
+        event.preventDefault();
+        setIsSidebarOpen(false);
+        focusElementSoon(sidebarToggleRef);
+        return;
+      }
+
+      if (shortcutState.isChromeHidden) {
+        event.preventDefault();
+        setIsChromeHidden(false);
+        focusElementSoon(focusButtonRef);
+      }
+      return;
+    }
+
+    if (
+      (event.key !== "ArrowLeft" && event.key !== "ArrowRight") ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      isEditableKeyboardTarget(event.target)
+    ) {
+      return;
+    }
+
+    const navigationActions = navigationActionsRef.current;
+
+    if (navigationActions === null) {
+      return;
+    }
+
+    event.preventDefault();
+    setSelectionSnapshot(null);
+    setNoteEditor(null);
+    setNotePopover(null);
+
+    if (event.key === "ArrowLeft") {
+      navigationActions.previous();
+    } else {
+      navigationActions.next();
+    }
+  }, []);
+
+  useEffect(() => {
+    window.document.addEventListener("keydown", handleReaderKeyDown);
+
+    return () => {
+      window.document.removeEventListener("keydown", handleReaderKeyDown);
+    };
+  }, [handleReaderKeyDown]);
 
   const handleCopySelection = useCallback(() => {
     const selectedText = selectionSnapshot?.selectedText;
@@ -1094,6 +1214,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         onSearchSubmit={handleSearchSubmit}
         onTabChange={setSidebarTab}
         searchError={searchError}
+        searchInputRef={searchInputRef}
         searchQuery={searchQuery}
         searchResults={searchResults}
       />
@@ -1101,6 +1222,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <header className="reader-topbar">
           <div className="reader-title-group">
             <button
+              ref={sidebarToggleRef}
               type="button"
               className="reader-link-button"
               onClick={onBackToLibrary}
@@ -1114,6 +1236,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           </div>
           <div className="reader-toolbar" aria-label="Reader tools">
             <button
+              ref={focusButtonRef}
               type="button"
               className="reader-tool-button"
               onClick={toggleSidebar}
@@ -1161,6 +1284,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onActiveChapterChange={setActiveTocItemId}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onProgressChange={handleTxtProgressChange}
+            onNavigationActionsChange={handleNavigationActionsChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
           />
@@ -1176,6 +1300,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onNavigationActionsChange={handleNavigationActionsChange}
+            onReaderKeyDown={handleReaderKeyDown}
             onSelectionCleared={handleClearSelectionUi}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
@@ -1193,6 +1319,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onNavigationActionsChange={handleNavigationActionsChange}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
@@ -1253,6 +1380,7 @@ interface ReaderSidebarProps {
   onSearchSubmit: (query: string) => void;
   onTabChange: (tab: ReaderSidebarTab) => void;
   searchError: string | null;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   searchResults: Array<SearchHit<Locator>>;
 }
@@ -1280,6 +1408,7 @@ function ReaderSidebar({
   onSearchSubmit,
   onTabChange,
   searchError,
+  searchInputRef,
   searchQuery,
   searchResults,
 }: ReaderSidebarProps) {
@@ -1438,6 +1567,7 @@ function ReaderSidebar({
             <label>
               <span>Search in book</span>
               <input
+                ref={searchInputRef}
                 aria-label="Search in book"
                 value={searchQuery}
                 onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
@@ -1713,6 +1843,7 @@ interface TxtReaderContentProps {
   jumpRequest: TxtJumpRequest | null;
   onActiveChapterChange: (chapterId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onBackToLibrary: () => void;
@@ -1728,6 +1859,7 @@ function TxtReaderContent({
   jumpRequest,
   onActiveChapterChange,
   onAnnotationActivate,
+  onNavigationActionsChange,
   onProgressChange,
   onSelectionChange,
   onBackToLibrary,
@@ -1788,6 +1920,40 @@ function TxtReaderContent({
     pendingProgressRef.current = null;
     onProgressChange(pendingProgress.locator, pendingProgress.progress);
   }, [onProgressChange]);
+
+  const scrollByPage = useCallback((direction: -1 | 1) => {
+    const viewport = viewportRef.current;
+
+    if (viewport === null) {
+      return;
+    }
+
+    const delta = Math.max(viewport.clientHeight * 0.9, 1) * direction;
+    const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+
+    if (typeof viewport.scrollBy === "function") {
+      viewport.scrollBy({
+        behavior,
+        top: delta,
+      });
+      return;
+    }
+
+    viewport.scrollTop += delta;
+  }, []);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: () => scrollByPage(1),
+      previous: () => scrollByPage(-1),
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [onNavigationActionsChange, scrollByPage]);
 
   useEffect(
     () => () => {
@@ -2033,6 +2199,8 @@ interface EpubReaderContentProps {
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: EpubLocator) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
+  onReaderKeyDown: (event: globalThis.KeyboardEvent) => void;
   onSelectionCleared: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
@@ -2049,6 +2217,8 @@ function EpubReaderContent({
   onAnnotationActivate,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onNavigationActionsChange,
+  onReaderKeyDown,
   onSelectionCleared,
   onSelectionChange,
   onSearchProviderChange,
@@ -2212,6 +2382,7 @@ function EpubReaderContent({
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
+          onKeyDown: onReaderKeyDown,
           onSelectionCleared,
           onSelected: (selection) => {
             const currentPosition = positionRef.current;
@@ -2283,6 +2454,7 @@ function EpubReaderContent({
     book,
     handleRelocated,
     onSearchProviderChange,
+    onReaderKeyDown,
     onSelectionChange,
     onSelectionCleared,
     onTocChange,
@@ -2379,6 +2551,17 @@ function EpubReaderContent({
     setPreviewPosition(null);
     void adapterRef.current?.next();
   }, []);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: handleNext,
+      previous: handlePrevious,
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
   const handleSpreadModeChange = useCallback((mode: EpubSpreadMode) => {
     setRequestedSpreadMode(mode);
@@ -2644,6 +2827,7 @@ interface PdfReaderContentProps {
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
@@ -2659,6 +2843,7 @@ function PdfReaderContent({
   onAnnotationActivate,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onNavigationActionsChange,
   onSelectionChange,
   onSearchProviderChange,
   onTocChange,
@@ -3146,6 +3331,17 @@ function PdfReaderContent({
   const handleNext = useCallback(() => {
     runPdfAction((adapter) => adapter.next());
   }, [runPdfAction]);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: handleNext,
+      previous: handlePrevious,
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
   const handleViewModeChange = useCallback(
     (mode: PdfViewMode) => {
@@ -4859,6 +5055,42 @@ function estimateVirtualBlockSize(block: ReaderVirtualBlock | undefined): number
 
 function formatBookFormat(format: Book["format"]): string {
   return format.toUpperCase();
+}
+
+function focusElementSoon<TElement extends HTMLElement>(
+  ref: RefObject<TElement | null>,
+): void {
+  window.requestAnimationFrame(() => {
+    ref.current?.focus();
+  });
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (target === null || typeof target !== "object") {
+    return false;
+  }
+
+  const element = target as {
+    closest?: (selector: string) => Element | null;
+    isContentEditable?: boolean;
+    tagName?: string;
+  };
+  const tagName = element.tagName?.toLocaleLowerCase();
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    tagName === "button" ||
+    tagName === "a" ||
+    element.isContentEditable === true
+  ) {
+    return true;
+  }
+
+  return typeof element.closest === "function"
+    ? element.closest("[contenteditable='true']") !== null
+    : false;
 }
 
 function getErrorMessage(error: unknown): string {
