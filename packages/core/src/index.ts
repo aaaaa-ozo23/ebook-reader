@@ -66,6 +66,14 @@ export interface ReaderTheme {
   textColor: string;
 }
 
+export interface ReaderLayoutPreferences {
+  sidebarWidth: number;
+}
+
+export const defaultReaderLayoutPreferences: ReaderLayoutPreferences = {
+  sidebarWidth: 292,
+};
+
 export interface LocatorContext {
   selectedText?: string;
   contextBefore?: string;

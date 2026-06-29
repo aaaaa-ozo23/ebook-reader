@@ -44,6 +44,21 @@ fn save_reader_theme(
 }
 
 #[tauri::command]
+fn get_reader_layout_preferences(
+    app: tauri::AppHandle,
+) -> Result<db::ReaderLayoutPreferences, String> {
+    db::get_reader_layout_preferences(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_reader_layout_preferences(
+    app: tauri::AppHandle,
+    preferences: db::ReaderLayoutPreferences,
+) -> Result<db::ReaderLayoutPreferences, String> {
+    db::save_reader_layout_preferences(&app, preferences).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_reading_progress(
     app: tauri::AppHandle,
     book_id: String,
@@ -141,6 +156,8 @@ pub fn run() {
             open_txt_book,
             get_reader_theme,
             save_reader_theme,
+            get_reader_layout_preferences,
+            save_reader_layout_preferences,
             get_reading_progress,
             save_reading_progress,
             list_bookmarks,

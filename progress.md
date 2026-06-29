@@ -1330,3 +1330,16 @@
 - **实现：** 输入、按钮、链接和 contenteditable 不触发翻页；菜单/移除对话框增加初始焦点、Escape、焦点回环和关闭后恢复。
 - **实现：** 添加统一 `focus-visible` 与 `prefers-reduced-motion` 样式。
 - **验证：** desktop lint 通过；Vitest 52 tests 通过；desktop build 通过。
+
+### 阶段 6.2：布局响应式
+- **状态：** complete
+- **分支：** `codex/stage6-responsive-layout`
+- **实现：** 新增共享 `ReaderLayoutPreferences`，前端和 Rust 将目录宽度归一到 240–480px、8px 步长，并通过 `app_settings` 持久化。
+- **实现：** 目录宽度滑杆即时更新 CSS variable，250ms 防抖保存；窄屏隐藏滑杆并使用侧滑抽屉、遮罩和关闭按钮。
+- **实现：** TOC 标题强制单行省略，保留完整 title/aria-label；深层缩进上限为 4 层。
+- **实现：** Tauri 最小窗口宽度从 900px 调整为 640px。
+- **验证：** Rust 28 tests、Vitest 53 tests、core build、desktop lint/build 已通过。
+- **Browser QA：** 375×760 书架 body 无横向溢出，console 无 warning/error；阅读器状态将用 seeded Playwright 验证。
+- **过程问题：** 首次 E2E 因工具栏文案统一为 `Contents`，PDF smoke 仍查找旧的 `Hide contents` 而超时；同步更新既有断言后重跑全套。
+- **视觉检查：** `D:\tl-temp\ebook-reader-stage6-responsive-txt.png` 显示 375×760 下目录为 323px 侧滑层，正文不再被目录推到首屏下方，TOC 标题单行显示。
+- **最终验证：** core build、desktop lint/build、Vitest 53 tests、Rust 28 tests、Playwright 5 tests 全部通过。
