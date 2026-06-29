@@ -23,6 +23,7 @@ const FALLBACK_ANNOTATIONS_KEY = "reader:fallback:annotations";
 const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
 const FALLBACK_READER_LAYOUT_KEY = "reader:fallback:readerLayout";
+const FALLBACK_READER_CACHE_KEY = "reader:fallback:readerCache";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
 function hasTauriRuntime(): boolean {
@@ -128,6 +129,45 @@ export async function saveReaderLayoutPreferences(
 
   return invokeCommand<ReaderLayoutPreferences>("save_reader_layout_preferences", {
     preferences,
+  });
+}
+
+export async function getReaderCache(
+  book: Book,
+  cacheKey: string,
+): Promise<string | null> {
+  if (!hasTauriRuntime()) {
+    const cache = getFallbackReaderCache();
+    const entry = cache[`${book.id}:${cacheKey}`];
+
+    return entry?.sourceHash === book.fileHash ? entry.valueJson : null;
+  }
+
+  return invokeCommand<string | null>("get_reader_cache", {
+    bookId: book.id,
+    cacheKey,
+  });
+}
+
+export async function saveReaderCache(
+  book: Book,
+  cacheKey: string,
+  valueJson: string,
+): Promise<void> {
+  if (!hasTauriRuntime()) {
+    const cache = getFallbackReaderCache();
+    cache[`${book.id}:${cacheKey}`] = {
+      sourceHash: book.fileHash,
+      valueJson,
+    };
+    window.localStorage.setItem(FALLBACK_READER_CACHE_KEY, JSON.stringify(cache));
+    return;
+  }
+
+  return invokeCommand<void>("save_reader_cache", {
+    bookId: book.id,
+    cacheKey,
+    valueJson,
   });
 }
 
@@ -373,6 +413,29 @@ function getFallbackReaderLayoutPreferences(): ReaderLayoutPreferences {
     });
   } catch {
     return defaultReaderLayoutPreferences;
+  }
+}
+
+interface FallbackReaderCacheEntry {
+  sourceHash: string;
+  valueJson: string;
+}
+
+function getFallbackReaderCache(): Record<string, FallbackReaderCacheEntry> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const rawCache = window.localStorage.getItem(FALLBACK_READER_CACHE_KEY);
+
+  if (rawCache === null) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawCache) as Record<string, FallbackReaderCacheEntry>;
+  } catch {
+    return {};
   }
 }
 

@@ -48,6 +48,16 @@ test("renders the bookshelf-first desktop UI", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("Sorted by Recent reading")).toBeVisible();
   await expect(page.getByText("Desktop shell initialized.")).toHaveCount(0);
+  const shelfResources = await page.evaluate(() =>
+    performance.getEntriesByType("resource").map((entry) => entry.name),
+  );
+  expect(shelfResources.some((resource) => resource.includes("ReaderShell"))).toBe(
+    false,
+  );
+  expect(shelfResources.some((resource) => resource.includes("epubjs"))).toBe(false);
+  expect(
+    shelfResources.some((resource) => resource.includes("pdfjs-dist/build/pdf.mjs")),
+  ).toBe(false);
 });
 
 test("renders the shared default cover with a long HTML title", async ({ page }) => {
@@ -189,6 +199,13 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("main", { name: "TXT reader" })).toBeVisible();
+  const txtResources = await page.evaluate(() =>
+    performance.getEntriesByType("resource").map((entry) => entry.name),
+  );
+  expect(txtResources.some((resource) => resource.includes("epubjs"))).toBe(false);
+  expect(
+    txtResources.some((resource) => resource.includes("pdfjs-dist/build/pdf.mjs")),
+  ).toBe(false);
   await expect(page.getByRole("button", { name: "Theme" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "第一章 长文本" })).toBeVisible();
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");

@@ -30,6 +30,7 @@ import {
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
+  getReaderCache,
   getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
@@ -37,6 +38,7 @@ import {
   listBookmarks,
   openTxtBook,
   saveReaderTheme,
+  saveReaderCache,
   saveReadingProgress,
   saveReaderLayoutPreferences,
   updateAnnotation,
@@ -245,6 +247,7 @@ vi.mock("./tauri/reader", () => ({
   deleteBookmark: deleteBookmarkMock,
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
+  getReaderCache: vi.fn(),
   getReaderLayoutPreferences: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
@@ -252,6 +255,7 @@ vi.mock("./tauri/reader", () => ({
   listBookmarks: listBookmarksMock,
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
+  saveReaderCache: vi.fn(),
   saveReadingProgress: vi.fn(),
   saveReaderLayoutPreferences: vi.fn(),
   updateAnnotation: vi.fn(),
@@ -400,6 +404,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
+const getReaderCacheMock = vi.mocked(getReaderCache);
 const getReaderLayoutPreferencesMock = vi.mocked(getReaderLayoutPreferences);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
@@ -417,6 +422,7 @@ const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
+const saveReaderCacheMock = vi.mocked(saveReaderCache);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 const saveReaderLayoutPreferencesMock = vi.mocked(saveReaderLayoutPreferences);
 const updateAnnotationMock = vi.mocked(updateAnnotation);
@@ -477,6 +483,7 @@ describe("App", () => {
     );
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
+    getReaderCacheMock.mockResolvedValue(null);
     getReaderLayoutPreferencesMock.mockResolvedValue({ sidebarWidth: 292 });
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
@@ -522,6 +529,7 @@ describe("App", () => {
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
+    saveReaderCacheMock.mockResolvedValue(undefined);
     saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
       bookId,
       locator,
@@ -819,11 +827,11 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
+    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
     expect(markBookOpenedMock).toHaveBeenCalledWith("txt-book");
     expect(openTxtBookMock).toHaveBeenCalledWith("txt-book");
-    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "第一章 初见" })).toBeVisible();
-    expect(screen.getByText("她推开门。")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "第一章 初见" })).toBeVisible();
+    expect(await screen.findByText("她推开门。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back to shelf" }));
 
@@ -1030,6 +1038,33 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
     expect(epubAdapterOpenMock).toHaveBeenCalledWith("epub-book");
     expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
+    expect(saveReaderCacheMock).toHaveBeenCalledWith(
+      openedBook,
+      "epub_toc_v1",
+      expect.stringContaining("Chapter One"),
+    );
+  });
+
+  it("uses a matching EPUB table-of-contents cache without reparsing", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "cached-epub",
+      title: "Cached EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
+      cacheKey === "epub_toc_v1"
+        ? JSON.stringify([{ id: "cached", title: "Cached Chapter" }])
+        : null,
+    );
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("button", { name: "Cached Chapter" })).toBeVisible();
+    expect(epubAdapterGetTocMock).not.toHaveBeenCalled();
   });
 
   it("shows selection actions for an EPUB selection", async () => {

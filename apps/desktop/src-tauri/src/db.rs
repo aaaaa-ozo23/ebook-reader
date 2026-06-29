@@ -22,6 +22,7 @@ const DB_FILE_NAME: &str = "ebook-reader.sqlite3";
 const LIBRARY_DIR_NAME: &str = "library";
 const COVER_DIR_NAME: &str = "covers";
 const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
+const MAX_READER_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const READER_LAYOUT_SETTING_KEY: &str = "reader_layout";
 const READER_THEME_SETTING_KEY: &str = "reader_theme";
 
@@ -484,6 +485,25 @@ pub fn save_reader_layout_preferences(
     save_reader_layout_preferences_at(&database_path, &preferences)
 }
 
+pub fn get_reader_cache(
+    app: &AppHandle,
+    book_id: &str,
+    cache_key: &str,
+) -> anyhow::Result<Option<String>> {
+    let database_path = init_app_database(app)?;
+    get_reader_cache_at(&database_path, book_id, cache_key)
+}
+
+pub fn save_reader_cache(
+    app: &AppHandle,
+    book_id: &str,
+    cache_key: &str,
+    value_json: &str,
+) -> anyhow::Result<()> {
+    let database_path = init_app_database(app)?;
+    save_reader_cache_at(&database_path, book_id, cache_key, value_json)
+}
+
 pub fn get_reading_progress(
     app: &AppHandle,
     book_id: &str,
@@ -895,6 +915,73 @@ pub fn save_reader_layout_preferences_at(
     )?;
 
     Ok(preferences)
+}
+
+pub fn get_reader_cache_at(
+    database_path: &Path,
+    book_id: &str,
+    cache_key: &str,
+) -> anyhow::Result<Option<String>> {
+    init_database_at(database_path)?;
+    validate_reader_cache_key(cache_key)?;
+    let conn = open_database(database_path)?;
+    conn.query_row(
+        "SELECT reader_cache.value_json
+         FROM reader_cache
+         INNER JOIN books ON books.id = reader_cache.book_id
+         WHERE reader_cache.book_id = ?1
+           AND reader_cache.cache_key = ?2
+           AND reader_cache.source_hash = books.file_hash",
+        params![book_id, cache_key],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+pub fn save_reader_cache_at(
+    database_path: &Path,
+    book_id: &str,
+    cache_key: &str,
+    value_json: &str,
+) -> anyhow::Result<()> {
+    init_database_at(database_path)?;
+    validate_reader_cache_key(cache_key)?;
+
+    if value_json.is_empty() || value_json.len() > MAX_READER_CACHE_BYTES {
+        bail!("reader cache must be between 1 byte and {MAX_READER_CACHE_BYTES} bytes");
+    }
+
+    serde_json::from_str::<serde_json::Value>(value_json)
+        .context("reader cache must contain valid JSON")?;
+
+    let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let now = current_timestamp(&conn)?;
+    conn.execute(
+        "INSERT INTO reader_cache (book_id, cache_key, source_hash, value_json, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(book_id, cache_key) DO UPDATE SET
+           source_hash = excluded.source_hash,
+           value_json = excluded.value_json,
+           updated_at = excluded.updated_at",
+        params![book_id, cache_key, book.file_hash, value_json, now],
+    )?;
+    Ok(())
+}
+
+fn validate_reader_cache_key(cache_key: &str) -> anyhow::Result<()> {
+    if cache_key.is_empty()
+        || cache_key.len() > 64
+        || !cache_key
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    {
+        bail!("reader cache key is invalid");
+    }
+
+    Ok(())
 }
 
 pub fn get_reading_progress_at(
@@ -1943,14 +2030,14 @@ mod tests {
 
     use super::{
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
-        get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
-        import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
-        mark_book_cover_fallback_at, mark_book_opened_at, open_txt_book_at, remove_book_at,
-        save_book_cover_at, save_reader_layout_preferences_at, save_reader_theme_at,
-        save_reading_progress_at, schema_version, update_annotation_at, AnnotationKind,
-        BookCoverStatus, BookFormat, EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect,
-        PdfZoomMode, ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TxtLocator,
-        DB_FILE_NAME,
+        get_reader_cache_at, get_reader_layout_preferences_at, get_reader_theme_at,
+        get_reading_progress_at, import_book_at, init_database_at, list_annotations_at,
+        list_bookmarks_at, list_books_at, mark_book_cover_fallback_at, mark_book_opened_at,
+        open_txt_book_at, remove_book_at, save_book_cover_at, save_reader_cache_at,
+        save_reader_layout_preferences_at, save_reader_theme_at, save_reading_progress_at,
+        schema_version, update_annotation_at, AnnotationKind, BookCoverStatus, BookFormat,
+        EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect, PdfZoomMode,
+        ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TxtLocator, DB_FILE_NAME,
     };
 
     #[test]
@@ -2182,6 +2269,70 @@ mod tests {
         );
         remove_book_at(&database_path, &library_dir, &imported.book.id).expect("remove book");
         assert!(!second_cover_path.exists());
+    }
+
+    #[test]
+    fn reader_cache_hits_invalidates_with_hash_and_cascades_on_delete() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("cache.epub");
+        fs::write(&source_path, "epub cache source").expect("write source file");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import book");
+
+        save_reader_cache_at(
+            &database_path,
+            &imported.book.id,
+            "epub_toc_v1",
+            r#"[{"id":"one","title":"One"}]"#,
+        )
+        .expect("save cache");
+        assert!(
+            get_reader_cache_at(&database_path, &imported.book.id, "epub_toc_v1")
+                .expect("get cache")
+                .is_some()
+        );
+
+        let conn = Connection::open(&database_path).expect("open database");
+        conn.execute(
+            "UPDATE books SET file_hash = 'changed-source-hash' WHERE id = ?1",
+            params![imported.book.id],
+        )
+        .expect("change source hash");
+        assert!(
+            get_reader_cache_at(&database_path, &imported.book.id, "epub_toc_v1")
+                .expect("get invalidated cache")
+                .is_none()
+        );
+
+        save_reader_cache_at(
+            &database_path,
+            &imported.book.id,
+            "epub_toc_v1",
+            r#"[{"id":"two","title":"Two"}]"#,
+        )
+        .expect("refresh cache");
+        remove_book_at(&database_path, &library_dir, &imported.book.id).expect("remove book");
+
+        let cache_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM reader_cache", [], |row| row.get(0))
+            .expect("count cache rows");
+        assert_eq!(cache_count, 0);
+    }
+
+    #[test]
+    fn reader_cache_rejects_invalid_keys_and_json() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+
+        let key_error = get_reader_cache_at(&database_path, "missing", "invalid key")
+            .expect_err("reject invalid key");
+        assert!(key_error.to_string().contains("key is invalid"));
+
+        let json_error = save_reader_cache_at(&database_path, "missing", "epub_toc_v1", "not-json")
+            .expect_err("reject invalid json before missing book");
+        assert!(json_error.to_string().contains("valid JSON"));
     }
 
     #[test]

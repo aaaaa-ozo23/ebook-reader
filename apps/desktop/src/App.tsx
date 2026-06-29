@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -12,7 +14,6 @@ import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/co
 
 import "./App.css";
 import defaultBookCover from "./assets/default-book-cover.jpg";
-import { ReaderShell } from "./components/ReaderShell";
 import { prepareBookCover } from "./covers/bookCovers";
 import {
   getBookCoverSource,
@@ -22,6 +23,12 @@ import {
   pickBookFile,
   removeBook,
 } from "./tauri/library";
+
+const LazyReaderShell = lazy(() =>
+  import("./components/ReaderShell").then((module) => ({
+    default: module.ReaderShell,
+  })),
+);
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
@@ -289,7 +296,17 @@ function App() {
   }, []);
 
   if (readerBook !== null) {
-    return <ReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />;
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading reader...
+          </main>
+        }
+      >
+        <LazyReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />
+      </Suspense>
+    );
   }
 
   return (

@@ -1356,3 +1356,14 @@
 - **过程问题：** React StrictMode 的 effect 探测清理曾把 mounted ref 永久留在 false，导致 PDF 封面已保存但书架 state 不刷新；effect setup 显式恢复 true 后真实 PDF 首页 E2E 通过。
 - **过程问题：** 首次从仓库根目录直接运行 `cargo fmt/test` 找不到 Cargo.toml；改在 `apps/desktop/src-tauri` 执行。
 - **验证：** core build、desktop lint/build、Vitest 60 tests、Rust 30 tests，以及默认封面长书名/PDF 首页缩略图 Playwright 均通过。
+
+### 阶段 6.3：性能优化
+- **状态：** complete
+- **分支：** `codex/stage6-performance`
+- **实现：** App 使用 `React.lazy`/`Suspense` 延迟加载完整 ReaderShell；阅读器专属 23.09 kB CSS 独立为异步 chunk，书架首屏 CSS 仅 9.03 kB。
+- **实现：** 侧栏、TXT、EPUB、PDF 四个重组件使用 memo；拖动进度、渲染序列、标注重放和待保存位置继续用 ref 隔离高频临时状态。
+- **实现：** 新增 `get_reader_cache`/`save_reader_cache`，缓存 `epub_locations_v1`、`epub_toc_v1`、`pdf_toc_v1`；SQLite 按当前书籍 file hash 判定命中，失配自动视为无缓存，删除书籍级联删除。
+- **包体：** 书架入口从阶段 6 基线 93.63 kB gzip 降到 68.45 kB，下降 26.9%，低于 80 kB 目标；ReaderShell 为独立 29.25 kB gzip chunk。
+- **过程问题：** 懒加载后旧组件测试在 ReaderShell 出现时就同步断言 TXT 内容，造成一次性 mock 未及时消费并级联污染后续用例；将内容断言改为异步等待后恢复稳定。
+- **过程问题：** 快速连续关闭 Search 侧栏和 Focus 模式时，两个 requestAnimationFrame 焦点恢复任务会竞争；统一取消旧任务并只执行最后一次焦点恢复。
+- **验证：** desktop lint/build、Vitest 62 tests、Rust 32 tests、Playwright 6 tests 通过；Playwright 明确断言书架不请求 ReaderShell/epubjs/pdfjs，TXT 打开不请求 EPUB/PDF 运行时。

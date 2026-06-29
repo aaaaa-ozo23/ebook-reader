@@ -249,3 +249,6 @@
 | React StrictMode 会执行一次 effect setup/cleanup 探测 | 只在初始化 ref 时设 true 会让异步封面 worker 的 state 更新被永久丢弃 | mounted effect 每次 setup 都显式设 true，cleanup 再设 false |
 | PDF 首页封面可直接复用按需加载的 pdfjs-dist worker | 不必让完整 PDF 阅读器进入书架首屏 chunk | 封面模块只静态引用 worker URL，pdfjs 本体在 pending PDF 处理时动态 import |
 | 阶段 6.6 首次在仓库根运行 Cargo 命令找不到 Cargo.toml | 前端验证已通过但 Rust 串联命令中断 | 后续统一在 `apps/desktop/src-tauri` 运行或传 `--manifest-path` |
+| 只对 ReaderShell 使用 `React.lazy` 即可把入口 JS gzip 从 96.74 kB 降到 68.42 kB | 阅读壳自身约 29 kB gzip，是超过 80 kB 目标的主要来源 | 继续拆出阅读器 CSS，最终入口 68.46 kB、首屏 CSS 2.77 kB gzip |
+| Vitest 的一次性 mock 在 lazy 组件尚未完成加载时可能未被消费 | 过早同步断言会使该 mock 留给下一测试，形成看似跨书籍的数据污染 | 所有 lazy reader 内容断言先等待实际内容/状态出现 |
+| reader_cache 同时保存 source_hash 并在读取时 join books.file_hash | 不需要前端主动清理旧解析缓存即可安全失效 | 保存接口从 books 读取当前 hash，读取只返回 hash 匹配记录，删除由外键级联 |
