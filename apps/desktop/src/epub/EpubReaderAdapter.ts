@@ -413,7 +413,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
         stroke: color,
         "stroke-dasharray": "3 3",
         "stroke-opacity": "0.95",
-        "stroke-width": "1.6",
+        // marks-pane draws both a transparent rect and a bottom line. Keep the
+        // rect available for hit testing without painting its four edges.
+        "stroke-width": "0",
       },
     );
   }
@@ -446,12 +448,13 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       return;
     }
 
-    const range = await this.book.getRange(cfiRange);
+    const visibleRange = this.rendition?.getRange(cfiRange) ?? null;
+    const range = visibleRange ?? (await this.book.getRange(cfiRange));
     const selectedText = range?.toString() ?? undefined;
     this.onSelected?.({
       cfiRange,
       selectedText,
-      anchorRect: getViewportRangeRect(range),
+      anchorRect: getViewportRangeRect(visibleRange),
       ...getRangeContext(range),
     });
   }
@@ -895,13 +898,10 @@ function getViewportRangeRect(range: Range | null): EpubSelectionSnapshot["ancho
   }
 
   const frameElement = range.startContainer.ownerDocument?.defaultView?.frameElement;
-  const frameRect =
-    frameElement instanceof HTMLElement
-      ? frameElement.getBoundingClientRect()
-      : ({
-          left: 0,
-          top: 0,
-        } as Pick<DOMRect, "left" | "top">);
+  const frameRect = frameElement?.getBoundingClientRect() ?? {
+    left: 0,
+    top: 0,
+  };
 
   return {
     height: rect.height,

@@ -1330,6 +1330,16 @@ button:disabled {
   background: var(--txt-reader-background, #f7f1e3);
 }
 
+.reader-epub-note-underline rect {
+  stroke: none;
+}
+
+.reader-epub-note-underline line {
+  stroke: inherit;
+  stroke-width: 2px;
+  stroke-linecap: butt;
+}
+
 .reader-epub-controls {
   display: grid;
   gap: 8px;

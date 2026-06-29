@@ -1,8 +1,9 @@
 import { defaultReaderTheme, type ReaderTheme } from "@reader/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildEpubThemeRules,
+  EpubReaderAdapter,
   nextEpubLocationIndex,
   progressionToEpubPage,
 } from "./EpubReaderAdapter";
@@ -61,5 +62,89 @@ describe("buildEpubThemeRules", () => {
     expect(nextEpubLocationIndex(9, 10)).toBe(9);
     expect(nextEpubLocationIndex(10, 10)).toBeNull();
     expect(nextEpubLocationIndex(null, 10)).toBeNull();
+  });
+});
+
+describe("EPUB selection annotations", () => {
+  function createAdapter(onSelected = vi.fn()) {
+    return new EpubReaderAdapter({
+      bookId: "epub-book",
+      container: document.createElement("div"),
+      onSelected,
+      sourceUrl: "blob:epub-book",
+      theme: defaultReaderTheme,
+    });
+  }
+
+  it("anchors the selection menu to the visible rendition range", async () => {
+    const onSelected = vi.fn();
+    const adapter = createAdapter(onSelected);
+    const frameElement = {
+      getBoundingClientRect: () => ({ left: 320, top: 140 }),
+    };
+    const visibleRange = {
+      commonAncestorContainer: { textContent: "Before selected text after" },
+      getBoundingClientRect: () => ({ height: 24, left: 48, top: 260, width: 120 }),
+      getClientRects: () => [{ height: 24, left: 48, top: 260, width: 120 }],
+      startContainer: {
+        ownerDocument: {
+          defaultView: { frameElement },
+        },
+      },
+      toString: () => "selected text",
+    } as unknown as Range;
+    const fallbackRange = {
+      ...visibleRange,
+      getClientRects: () => [],
+    } as unknown as Range;
+    const bookGetRange = vi.fn().mockResolvedValue(fallbackRange);
+    const renditionGetRange = vi.fn(() => visibleRange);
+    const internals = adapter as unknown as {
+      book: { getRange: typeof bookGetRange };
+      captureSelection: (cfiRange: string) => Promise<void>;
+      rendition: { getRange: typeof renditionGetRange };
+    };
+
+    internals.book = { getRange: bookGetRange };
+    internals.rendition = { getRange: renditionGetRange };
+
+    await internals.captureSelection("epubcfi(/6/2!/4/2,/1:0,/1:13)");
+
+    expect(renditionGetRange).toHaveBeenCalled();
+    expect(bookGetRange).not.toHaveBeenCalled();
+    expect(onSelected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        anchorRect: {
+          height: 24,
+          left: 368,
+          top: 400,
+          width: 120,
+        },
+        selectedText: "selected text",
+      }),
+    );
+  });
+
+  it("keeps the underline hit rect unpainted", () => {
+    const adapter = createAdapter();
+    const underline = vi.fn();
+    const internals = adapter as unknown as {
+      rendition: { annotations: { underline: typeof underline } };
+    };
+    internals.rendition = { annotations: { underline } };
+
+    adapter.addUnderline("epubcfi(/6/2!/4/2,/1:0,/1:13)", "#77a86b");
+
+    expect(underline).toHaveBeenCalledWith(
+      expect.any(String),
+      {},
+      undefined,
+      "reader-epub-note-underline",
+      expect.objectContaining({
+        stroke: "#77a86b",
+        "stroke-dasharray": "3 3",
+        "stroke-width": "0",
+      }),
+    );
   });
 });
