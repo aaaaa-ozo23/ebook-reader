@@ -1367,3 +1367,14 @@
 - **过程问题：** 懒加载后旧组件测试在 ReaderShell 出现时就同步断言 TXT 内容，造成一次性 mock 未及时消费并级联污染后续用例；将内容断言改为异步等待后恢复稳定。
 - **过程问题：** 快速连续关闭 Search 侧栏和 Focus 模式时，两个 requestAnimationFrame 焦点恢复任务会竞争；统一取消旧任务并只执行最后一次焦点恢复。
 - **验证：** desktop lint/build、Vitest 62 tests、Rust 32 tests、Playwright 6 tests 通过；Playwright 明确断言书架不请求 ReaderShell/epubjs/pdfjs，TXT 打开不请求 EPUB/PDF 运行时。
+
+### 阶段 6.4：错误和空状态
+- **状态：** complete
+- **分支：** `codex/stage6-error-states`
+- **实现：** 书库加载错误使用独立 alert 状态和 Retry，不再与空书架混淆；空书架新增直接选择书籍入口。
+- **实现：** 导入失败提供重新选择，取消导入保持中性 status；打开书库副本失败提供“Choose file to repair”，并复用 6.6 的 repaired 导入链路。
+- **实现：** TXT、EPUB、PDF 解析错误均提供原地 Retry 和 Back to shelf；加载状态统一使用 `role=status`/`aria-live=polite`。
+- **实现：** 批注创建/更新显示 Saving 状态；失败时草稿和编辑器保持不变，错误直接显示在表单内，可再次 Save。
+- **可访问性：** 接入 `@axe-core/playwright`，书架及 TXT/EPUB/PDF 阅读壳无 serious/critical；EPUB 出版物 blob iframe 因内容由书籍提供而从应用壳扫描中排除。
+- **过程问题：** axe 首次发现 Import 按钮白字/橙色对比度仅 3.36:1，改为更深橙红色；TXT 视口和 PDF 页面框架补充键盘焦点后消除 scrollable-region-focusable。
+- **验证：** desktop lint/build、Vitest 65 tests、Playwright 6 tests 通过；错误重试、草稿保留及 axe 均有自动化覆盖。

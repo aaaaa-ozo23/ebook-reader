@@ -252,3 +252,6 @@
 | 只对 ReaderShell 使用 `React.lazy` 即可把入口 JS gzip 从 96.74 kB 降到 68.42 kB | 阅读壳自身约 29 kB gzip，是超过 80 kB 目标的主要来源 | 继续拆出阅读器 CSS，最终入口 68.46 kB、首屏 CSS 2.77 kB gzip |
 | Vitest 的一次性 mock 在 lazy 组件尚未完成加载时可能未被消费 | 过早同步断言会使该 mock 留给下一测试，形成看似跨书籍的数据污染 | 所有 lazy reader 内容断言先等待实际内容/状态出现 |
 | reader_cache 同时保存 source_hash 并在读取时 join books.file_hash | 不需要前端主动清理旧解析缓存即可安全失效 | 保存接口从 books 读取当前 hash，读取只返回 hash 匹配记录，删除由外键级联 |
+| 书库加载失败原先只写全局 feedback，ShelfBody 仍按空数组显示空书架 | 数据库故障会被误导为“没有书” | 增加独立 libraryError 和 Retry 状态，错误优先于空状态渲染 |
+| axe 检出 Import 按钮对比度 3.36:1，TXT/PDF 滚动容器不能键盘聚焦 | 不符合 WCAG 2.2 AA 主流程目标 | 深化按钮背景色，并为实际滚动容器增加 tabIndex=0 和可访问名称 |
+| AxeBuilder 扫描 blob EPUB iframe 时 Playwright 可能因跨 frame target 超时 | 出版物正文来自导入文件，不属于应用 UI 可控内容 | 应用壳检查排除 `.reader-epub-host iframe`，保留 EPUB 导航、侧栏、工具栏和面板扫描 |

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 function collectConsoleIssues(page: Page): string[] {
   const issues: string[] = [];
@@ -34,6 +35,17 @@ async function readEpubPageState(
   };
 }
 
+async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
+  const results = await new AxeBuilder({ page })
+    .exclude(".reader-epub-host iframe")
+    .analyze();
+  const violations = results.violations.filter(
+    (violation) => violation.impact === "serious" || violation.impact === "critical",
+  );
+
+  expect(violations).toEqual([]);
+}
+
 test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await page.goto("/");
 
@@ -58,6 +70,7 @@ test("renders the bookshelf-first desktop UI", async ({ page }) => {
   expect(
     shelfResources.some((resource) => resource.includes("pdfjs-dist/build/pdf.mjs")),
   ).toBe(false);
+  await expectNoSeriousAccessibilityViolations(page);
 });
 
 test("renders the shared default cover with a long HTML title", async ({ page }) => {
@@ -208,6 +221,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   ).toBe(false);
   await expect(page.getByRole("button", { name: "Theme" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "第一章 长文本" })).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");
 
   const renderedParagraphCount = await page
@@ -481,6 +495,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   const reader = page.getByRole("main", { name: "EPUB reader" });
   await expect(reader).toBeVisible();
   await expect(page.locator(".reader-epub-host iframe")).toHaveCount(1);
+  await expectNoSeriousAccessibilityViolations(page);
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
   const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
@@ -781,6 +796,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await expect(page.getByRole("button", { name: "Page 1" })).toBeVisible();
   await expect(page.locator(".reader-pdf-canvas").first()).toBeVisible();
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
   await expect.poll(() => firstPdfCanvasHasInk(page), { timeout: 20_000 }).toBe(true);
 
   await page.getByRole("button", { name: "Next" }).click();

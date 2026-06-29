@@ -34,6 +34,7 @@ type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
 
 interface Feedback {
+  actionLabel?: string;
   kind: FeedbackKind;
   title: string;
   message: string;
@@ -62,6 +63,7 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [openingBookId, setOpeningBookId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -77,6 +79,7 @@ function App() {
   const queuedCoverIdsRef = useRef(new Set<string>());
   const isCoverWorkerActiveRef = useRef(false);
   const isAppMountedRef = useRef(true);
+  const libraryRequestIdRef = useRef(0);
 
   const processCoverQueue = useCallback(async () => {
     if (isCoverWorkerActiveRef.current) {
@@ -120,37 +123,36 @@ function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let isCurrent = true;
+  const loadLibrary = useCallback(async () => {
+    const requestId = libraryRequestIdRef.current + 1;
+    libraryRequestIdRef.current = requestId;
+    setIsLoading(true);
+    setLibraryError(null);
 
-    async function loadLibrary() {
-      try {
-        const loadedBooks = await listBooks();
+    try {
+      const loadedBooks = await listBooks();
 
-        if (isCurrent) {
-          setBooks(sortBooksForShelf(loadedBooks));
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setFeedback({
-            kind: "error",
-            title: "Library unavailable",
-            message: getErrorMessage(error),
-          });
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setBooks(sortBooksForShelf(loadedBooks));
+      }
+    } catch (error) {
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setLibraryError(getErrorMessage(error));
+      }
+    } finally {
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setIsLoading(false);
       }
     }
-
-    void loadLibrary();
-
-    return () => {
-      isCurrent = false;
-    };
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadLibrary();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLibrary]);
 
   useEffect(() => {
     for (const book of books) {
@@ -194,6 +196,7 @@ function App() {
       setFeedback(getImportFeedback(result));
     } catch (error) {
       setFeedback({
+        actionLabel: "Choose another file",
         kind: "error",
         title: "Import failed",
         message: getErrorMessage(error),
@@ -215,6 +218,7 @@ function App() {
       setReaderBook(openedBook);
     } catch (error) {
       setFeedback({
+        actionLabel: "Choose file to repair",
         kind: "error",
         title: "Book could not be opened",
         message: getErrorMessage(error),
@@ -325,15 +329,18 @@ function App() {
           onShowGridView={showGridView}
           onShowListView={showListView}
         />
-        <FeedbackBanner feedback={feedback} />
+        <FeedbackBanner feedback={feedback} onAction={handleImportBook} />
         <ShelfBody
           books={sortedBooks}
           isLoading={isLoading}
+          libraryError={libraryError}
           openingBookId={openingBookId}
           activeMenuBookId={bookActionMenu?.book.id ?? null}
           removingBookId={removingBookId}
           viewMode={viewMode}
           onOpenBook={handleOpenBook}
+          onImportBook={handleImportBook}
+          onRetryLibrary={loadLibrary}
           onShowBookMenu={showBookActionMenu}
         />
         <BookActionMenu
@@ -445,9 +452,10 @@ function LibraryHeader({
 
 interface FeedbackBannerProps {
   feedback: Feedback | null;
+  onAction: () => void;
 }
 
-function FeedbackBanner({ feedback }: FeedbackBannerProps) {
+function FeedbackBanner({ feedback, onAction }: FeedbackBannerProps) {
   if (feedback === null) {
     return null;
   }
@@ -460,6 +468,11 @@ function FeedbackBanner({ feedback }: FeedbackBannerProps) {
     >
       <strong>{feedback.title}</strong>
       <span>{feedback.message}</span>
+      {feedback.actionLabel !== undefined ? (
+        <button type="button" onClick={onAction}>
+          {feedback.actionLabel}
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -467,11 +480,14 @@ function FeedbackBanner({ feedback }: FeedbackBannerProps) {
 interface ShelfBodyProps {
   books: Book[];
   isLoading: boolean;
+  libraryError: string | null;
   openingBookId: string | null;
   activeMenuBookId: string | null;
   removingBookId: string | null;
   viewMode: ViewMode;
   onOpenBook: (book: Book) => void;
+  onImportBook: () => void;
+  onRetryLibrary: () => void;
   onShowBookMenu: (
     book: Book,
     x: number,
@@ -483,24 +499,44 @@ interface ShelfBodyProps {
 function ShelfBody({
   books,
   isLoading,
+  libraryError,
   openingBookId,
   activeMenuBookId,
   removingBookId,
   viewMode,
   onOpenBook,
+  onImportBook,
+  onRetryLibrary,
   onShowBookMenu,
 }: ShelfBodyProps) {
   if (isLoading) {
     return (
-      <section className="shelf-state" aria-label="Loading library">
+      <section
+        className="shelf-state"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading library"
+      >
         <div className="loading-line" aria-hidden="true" />
         <p>Loading library...</p>
       </section>
     );
   }
 
+  if (libraryError !== null) {
+    return (
+      <section className="shelf-state shelf-state--error" role="alert">
+        <h2>Library could not be loaded</h2>
+        <p>{libraryError}</p>
+        <button type="button" onClick={onRetryLibrary}>
+          Retry
+        </button>
+      </section>
+    );
+  }
+
   if (books.length === 0) {
-    return <EmptyShelf />;
+    return <EmptyShelf onImportBook={onImportBook} />;
   }
 
   return (
@@ -524,7 +560,7 @@ function ShelfBody({
   );
 }
 
-function EmptyShelf() {
+function EmptyShelf({ onImportBook }: { onImportBook: () => void }) {
   return (
     <section className="empty-shelf" aria-labelledby="empty-shelf-title">
       <div className="empty-shelf__mark" aria-hidden="true">
@@ -532,6 +568,9 @@ function EmptyShelf() {
       </div>
       <h2 id="empty-shelf-title">Your library is empty</h2>
       <p>No books in your local shelf yet.</p>
+      <button type="button" onClick={onImportBook}>
+        Choose a book
+      </button>
     </section>
   );
 }

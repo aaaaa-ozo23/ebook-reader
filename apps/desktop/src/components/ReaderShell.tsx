@@ -304,6 +304,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotationsBookId, setAnnotationsBookId] = useState(book.id);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
+  const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -330,6 +332,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
   const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
+  const [txtRetryVersion, setTxtRetryVersion] = useState(0);
   const shortcutStateRef = useRef({
     isChromeHidden,
     isSidebarOpen,
@@ -523,7 +526,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     return () => {
       isCurrent = false;
     };
-  }, [book.format, book.id]);
+  }, [book.format, book.id, txtRetryVersion]);
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -1200,6 +1203,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleNoteDraftChange = useCallback((draft: string) => {
+    setNoteSaveError(null);
     setNoteEditor((currentEditor) =>
       currentEditor === null
         ? null
@@ -1211,17 +1215,20 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleCancelNoteEditor = useCallback(() => {
+    setNoteSaveError(null);
     setNoteEditor(null);
   }, []);
 
   const handleSaveNoteEditor = useCallback(() => {
     const editor = noteEditor;
 
-    if (editor === null) {
+    if (editor === null || isNoteSaving) {
       return;
     }
 
     setAnnotationError(null);
+    setNoteSaveError(null);
+    setIsNoteSaving(true);
 
     if (editor.annotationId !== undefined) {
       void updateAnnotation(editor.annotationId, editor.color, editor.draft)
@@ -1229,11 +1236,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           setAnnotations((currentAnnotations) =>
             mergeUpdatedAnnotations(currentAnnotations, [updatedAnnotation]),
           );
+          setNoteSaveError(null);
           setNoteEditor(null);
         })
         .catch((annotationUpdateError: unknown) => {
-          setAnnotationError(getErrorMessage(annotationUpdateError));
-        });
+          const message = getErrorMessage(annotationUpdateError);
+          setAnnotationError(message);
+          setNoteSaveError(message);
+        })
+        .finally(() => setIsNoteSaving(false));
       return;
     }
 
@@ -1253,13 +1264,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             (currentAnnotation) => currentAnnotation.id !== annotation.id,
           ),
         ]);
+        setNoteSaveError(null);
         setNoteEditor(null);
       })
       .catch((annotationCreateError: unknown) => {
         setAnnotationsBookId(book.id);
-        setAnnotationError(getErrorMessage(annotationCreateError));
-      });
-  }, [book.id, noteEditor]);
+        const message = getErrorMessage(annotationCreateError);
+        setAnnotationError(message);
+        setNoteSaveError(message);
+      })
+      .finally(() => setIsNoteSaving(false));
+  }, [book.id, isNoteSaving, noteEditor]);
 
   const readerStyle = useMemo(
     () =>
@@ -1393,6 +1408,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onActiveChapterChange={setActiveTocItemId}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onProgressChange={handleTxtProgressChange}
+            onRetry={() => setTxtRetryVersion((version) => version + 1)}
             onNavigationActionsChange={handleNavigationActionsChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
@@ -1450,6 +1466,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <NoteEditor
           editor={noteEditor}
           editorRef={noteEditorRef}
+          error={noteSaveError}
+          isSaving={isNoteSaving}
           onCancel={handleCancelNoteEditor}
           onDraftChange={handleNoteDraftChange}
           onSave={handleSaveNoteEditor}
@@ -1874,6 +1892,8 @@ function SelectionMenu({
 interface NoteEditorProps {
   editor: ReaderNoteEditorState | null;
   editorRef: RefObject<HTMLFormElement | null>;
+  error: string | null;
+  isSaving: boolean;
   onCancel: () => void;
   onDraftChange: (draft: string) => void;
   onSave: () => void;
@@ -1882,6 +1902,8 @@ interface NoteEditorProps {
 function NoteEditor({
   editor,
   editorRef,
+  error,
+  isSaving,
   onCancel,
   onDraftChange,
   onSave,
@@ -1907,12 +1929,16 @@ function NoteEditor({
       <textarea
         aria-label={`Note for ${editor.selectedText}`}
         autoFocus
+        disabled={isSaving}
         value={editor.draft}
         onChange={(event) => onDraftChange(event.currentTarget.value)}
       />
+      {error !== null ? <p role="alert">{error}</p> : null}
       <div className="reader-note-editor__actions">
-        <button type="submit">Save</button>
-        <button type="button" onClick={onCancel}>
+        <button type="submit" disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+        <button type="button" disabled={isSaving} onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -1997,6 +2023,7 @@ interface TxtReaderContentProps {
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
+  onRetry: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onBackToLibrary: () => void;
 }
@@ -2013,6 +2040,7 @@ function TxtReaderContent({
   onAnnotationActivate,
   onNavigationActionsChange,
   onProgressChange,
+  onRetry,
   onSelectionChange,
   onBackToLibrary,
 }: TxtReaderContentProps) {
@@ -2267,7 +2295,12 @@ function TxtReaderContent({
 
   if (isLoading) {
     return (
-      <section className="reader-state" aria-label="Loading TXT book">
+      <section
+        className="reader-state"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading TXT book"
+      >
         <div className="loading-line" aria-hidden="true" />
         <p>Opening TXT book...</p>
       </section>
@@ -2279,9 +2312,18 @@ function TxtReaderContent({
       <section className="reader-state reader-state--error" role="alert">
         <h2>Book could not be opened</h2>
         <p>{error}</p>
-        <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
-          Back to shelf
-        </button>
+        <div className="reader-state__actions">
+          <button type="button" className="reader-tool-button" onClick={onRetry}>
+            Retry
+          </button>
+          <button
+            type="button"
+            className="reader-tool-button"
+            onClick={onBackToLibrary}
+          >
+            Back to shelf
+          </button>
+        </div>
       </section>
     );
   }
@@ -2295,6 +2337,7 @@ function TxtReaderContent({
       ref={viewportRef}
       className="reader-viewport"
       aria-label={`${document.book.title} content`}
+      tabIndex={0}
       onKeyUp={handleTextSelection}
       onMouseUp={handleTextSelection}
       onScroll={handleScroll}
@@ -2390,6 +2433,7 @@ function EpubReaderContent({
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
@@ -2632,6 +2676,7 @@ function EpubReaderContent({
     onSelectionChange,
     onSelectionCleared,
     onTocChange,
+    retryVersion,
   ]);
 
   useEffect(() => {
@@ -2869,6 +2914,8 @@ function EpubReaderContent({
           {isLoading ? (
             <section
               className="reader-state reader-state--overlay"
+              role="status"
+              aria-live="polite"
               aria-label="Loading EPUB book"
             >
               <div className="loading-line" aria-hidden="true" />
@@ -2882,13 +2929,22 @@ function EpubReaderContent({
             >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button
-                type="button"
-                className="reader-tool-button"
-                onClick={onBackToLibrary}
-              >
-                Back to shelf
-              </button>
+              <div className="reader-state__actions">
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={() => setRetryVersion((version) => version + 1)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={onBackToLibrary}
+                >
+                  Back to shelf
+                </button>
+              </div>
             </section>
           ) : null}
           <div
@@ -3037,6 +3093,7 @@ function PdfReaderContent({
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
@@ -3431,6 +3488,7 @@ function PdfReaderContent({
     onSearchProviderChange,
     onTocChange,
     renderVisiblePages,
+    retryVersion,
   ]);
 
   useEffect(() => {
@@ -3663,10 +3721,17 @@ function PdfReaderContent({
       aria-label={`${book.title} content`}
     >
       <article className="reader-page reader-page--pdf">
-        <div ref={frameRef} className="reader-pdf-frame">
+        <div
+          ref={frameRef}
+          className="reader-pdf-frame"
+          aria-label="PDF pages"
+          tabIndex={0}
+        >
           {isLoading ? (
             <section
               className="reader-state reader-state--overlay"
+              role="status"
+              aria-live="polite"
               aria-label="Loading PDF book"
             >
               <div className="loading-line" aria-hidden="true" />
@@ -3680,13 +3745,22 @@ function PdfReaderContent({
             >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button
-                type="button"
-                className="reader-tool-button"
-                onClick={onBackToLibrary}
-              >
-                Back to shelf
-              </button>
+              <div className="reader-state__actions">
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={() => setRetryVersion((version) => version + 1)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={onBackToLibrary}
+                >
+                  Back to shelf
+                </button>
+              </div>
             </section>
           ) : null}
           <div
@@ -5254,10 +5328,25 @@ function focusElementSoon<TElement extends HTMLElement>(
     window.cancelAnimationFrame(pendingFocusFrameId);
   }
 
-  pendingFocusFrameId = window.requestAnimationFrame(() => {
-    pendingFocusFrameId = null;
-    ref.current?.focus();
-  });
+  const tryFocus = (remainingAttempts: number) => {
+    pendingFocusFrameId = window.requestAnimationFrame(() => {
+      const element = ref.current;
+
+      if (element !== null) {
+        pendingFocusFrameId = null;
+        element.focus();
+        return;
+      }
+
+      if (remainingAttempts > 0) {
+        tryFocus(remainingAttempts - 1);
+      } else {
+        pendingFocusFrameId = null;
+      }
+    });
+  };
+
+  tryFocus(2);
 }
 
 function isEditableKeyboardTarget(target: EventTarget | null): boolean {

@@ -223,7 +223,7 @@ button:disabled {
   gap: 8px;
   border: 0;
   border-radius: 8px;
-  background: #d76f45;
+  background: #a84632;
   color: #ffffff;
   font-weight: 800;
   padding: 0 16px;
@@ -277,6 +277,22 @@ button:disabled {
   white-space: nowrap;
 }
 
+.feedback button,
+.shelf-state button,
+.empty-shelf button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f5d62;
+  color: #ffffff;
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.feedback button {
+  margin-left: auto;
+}
+
 .feedback--success {
   border-color: #9fc8ae;
   background: #ecf7ef;
@@ -311,6 +327,18 @@ button:disabled {
 .empty-shelf p {
   margin: 0;
   color: #68727b;
+}
+
+.shelf-state--error {
+  align-content: center;
+  gap: 12px;
+  border-color: #e2a39a;
+  background: #fff8f5;
+}
+
+.shelf-state--error h2 {
+  margin: 0;
+  color: #8d3328;
 }
 
 .loading-line {
