@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -70,7 +71,14 @@ import {
 const EPUB_LOCATIONS_CACHE_KEY = "epub_locations_v1";
 const EPUB_TOC_CACHE_KEY = "epub_toc_v1";
 const PDF_TOC_CACHE_KEY = "pdf_toc_v1";
+const SIDEBAR_WIDTH_MIN = 240;
+const SIDEBAR_WIDTH_MAX = 480;
+const SIDEBAR_WIDTH_KEYBOARD_STEP = 8;
 let pendingFocusFrameId: number | null = null;
+
+function clampSidebarWidth(width: number): number {
+  return Math.min(SIDEBAR_WIDTH_MAX, Math.max(SIDEBAR_WIDTH_MIN, Math.round(width)));
+}
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -605,7 +613,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
     const nextPreferences = {
-      sidebarWidth: Math.min(480, Math.max(240, Math.round(sidebarWidth / 8) * 8)),
+      sidebarWidth: clampSidebarWidth(sidebarWidth),
     };
     setLayoutPreferences(nextPreferences);
     setLayoutError(null);
@@ -929,6 +937,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleReaderKeyDown = useCallback((event: globalThis.KeyboardEvent) => {
+    if (event.defaultPrevented) {
+      return;
+    }
+
     const shortcutState = shortcutStateRef.current;
     const normalizedKey = event.key.toLocaleLowerCase();
 
@@ -1610,20 +1622,10 @@ function ReaderSidebar({
           ),
         )}
       </div>
-      <label className="reader-sidebar-size">
-        <span>
-          Contents width <output>{sidebarWidth}px</output>
-        </span>
-        <input
-          type="range"
-          min="240"
-          max="480"
-          step="8"
-          value={sidebarWidth}
-          aria-label="Contents width"
-          onChange={(event) => onSidebarWidthChange(Number(event.currentTarget.value))}
-        />
-      </label>
+      <ReaderSidebarResizer
+        sidebarWidth={sidebarWidth}
+        onSidebarWidthChange={onSidebarWidthChange}
+      />
       {layoutError !== null ? (
         <p className="reader-sidebar__error" role="alert">
           Layout preference could not be saved. {layoutError}
@@ -1784,6 +1786,123 @@ function ReaderSidebar({
         </section>
       ) : null}
     </aside>
+  );
+}
+
+interface ReaderSidebarResizerProps {
+  sidebarWidth: number;
+  onSidebarWidthChange: (width: number) => void;
+}
+
+interface SidebarDragState {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+}
+
+function ReaderSidebarResizer({
+  sidebarWidth,
+  onSidebarWidthChange,
+}: ReaderSidebarResizerProps) {
+  const dragStateRef = useRef<SidebarDragState | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handlePointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      const measuredWidth =
+        event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0;
+      dragStateRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startWidth: measuredWidth > 0 ? measuredWidth : sidebarWidth,
+      };
+      event.currentTarget.focus();
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      setIsDragging(true);
+      event.preventDefault();
+    },
+    [sidebarWidth],
+  );
+
+  const handlePointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const dragState = dragStateRef.current;
+
+      if (dragState === null || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      onSidebarWidthChange(dragState.startWidth + event.clientX - dragState.startX);
+      event.preventDefault();
+    },
+    [onSidebarWidthChange],
+  );
+
+  const stopDragging = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const dragState = dragStateRef.current;
+
+    if (dragState === null || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+    dragStateRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      let nextWidth: number | null = null;
+
+      if (event.key === "ArrowLeft") {
+        nextWidth = sidebarWidth - SIDEBAR_WIDTH_KEYBOARD_STEP;
+      } else if (event.key === "ArrowRight") {
+        nextWidth = sidebarWidth + SIDEBAR_WIDTH_KEYBOARD_STEP;
+      } else if (event.key === "Home") {
+        nextWidth = SIDEBAR_WIDTH_MIN;
+      } else if (event.key === "End") {
+        nextWidth = SIDEBAR_WIDTH_MAX;
+      }
+
+      if (nextWidth === null) {
+        return;
+      }
+
+      event.preventDefault();
+      onSidebarWidthChange(nextWidth);
+    },
+    [onSidebarWidthChange, sidebarWidth],
+  );
+
+  return (
+    <div
+      className={`reader-sidebar-resizer${isDragging ? " reader-sidebar-resizer--dragging" : ""}`}
+      role="separator"
+      tabIndex={0}
+      aria-label="Resize contents panel"
+      aria-orientation="vertical"
+      aria-valuemin={SIDEBAR_WIDTH_MIN}
+      aria-valuemax={SIDEBAR_WIDTH_MAX}
+      aria-valuenow={sidebarWidth}
+      aria-valuetext={`${sidebarWidth} pixels`}
+      onKeyDown={handleKeyDown}
+      onPointerCancel={stopDragging}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={stopDragging}
+    >
+      <span className="reader-sidebar-resizer__grip" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </span>
+    </div>
   );
 }
 

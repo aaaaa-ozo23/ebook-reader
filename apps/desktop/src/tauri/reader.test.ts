@@ -1,7 +1,12 @@
 import type { Book } from "@reader/core";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { getReaderCache, saveReaderCache } from "./reader";
+import {
+  getReaderCache,
+  getReaderLayoutPreferences,
+  saveReaderCache,
+  saveReaderLayoutPreferences,
+} from "./reader";
 
 describe("reader cache fallback", () => {
   beforeEach(() => {
@@ -21,6 +26,32 @@ describe("reader cache fallback", () => {
     await expect(
       getReaderCache(createBook("hash-v2"), "epub_toc_v1"),
     ).resolves.toBeNull();
+  });
+});
+
+describe("reader layout fallback", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: createMemoryStorage(),
+    });
+    window.localStorage.clear();
+  });
+
+  it("persists integer pixel widths without 8px snapping", async () => {
+    await expect(saveReaderLayoutPreferences({ sidebarWidth: 401.4 })).resolves.toEqual(
+      { sidebarWidth: 401 },
+    );
+    await expect(getReaderLayoutPreferences()).resolves.toEqual({ sidebarWidth: 401 });
+  });
+
+  it("clamps restored widths to the supported bounds", async () => {
+    await expect(saveReaderLayoutPreferences({ sidebarWidth: 120 })).resolves.toEqual({
+      sidebarWidth: 240,
+    });
+    await expect(saveReaderLayoutPreferences({ sidebarWidth: 720 })).resolves.toEqual({
+      sidebarWidth: 480,
+    });
   });
 });
 

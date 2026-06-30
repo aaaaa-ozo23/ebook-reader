@@ -73,7 +73,9 @@ test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await expectNoSeriousAccessibilityViolations(page);
 });
 
-test("renders the shared default cover with a long HTML title", async ({ page }) => {
+test("shows the complete default-cover title in list view", async ({ page }) => {
+  const title =
+    "很长的中文书名与 A Deliberately Long English Book Title Rendered Above the Shared Cover Background";
   await page.addInitScript(() => {
     window.localStorage.setItem(
       "reader:fallback:books",
@@ -81,7 +83,7 @@ test("renders the shared default cover with a long HTML title", async ({ page })
         {
           id: "e2e-default-cover",
           title:
-            "A Deliberately Long Book Title Rendered Above the Shared Cover Background",
+            "很长的中文书名与 A Deliberately Long English Book Title Rendered Above the Shared Cover Background",
           format: "txt",
           libraryPath: "D:\\library\\default-cover.txt",
           fileHash: "default-cover-hash",
@@ -95,9 +97,28 @@ test("renders the shared default cover with a long HTML title", async ({ page })
 
   await page.goto("/");
 
+  await page.getByRole("button", { name: "List" }).click();
+  const card = page.getByRole("article", { name: `${title} book` });
   const cover = page.locator(".book-card__cover");
-  await expect(cover.locator("strong")).toHaveText(/A Deliberately Long Book Title/);
+  const coverShell = card.locator(".book-card__cover-shell");
+  const fullTitle = card.locator(".book-card__cover-title-popover");
+  const cardBeforeHover = await card.boundingBox();
+
+  await expect(cover.locator(".book-card__cover-title")).toHaveText(title);
   await expect(cover).toHaveCSS("background-image", /default-book-cover/);
+  await expect(fullTitle).toBeHidden();
+  await coverShell.hover();
+  await expect(fullTitle).toBeVisible();
+  await expect(fullTitle).toHaveText(title);
+  await expect(card.locator(".book-card__body h2")).toHaveCSS("visibility", "hidden");
+  await expect(fullTitle).toHaveCSS("white-space", "normal");
+  await expect(fullTitle).toHaveCSS("overflow-wrap", "anywhere");
+
+  const coverBox = await cover.boundingBox();
+  const cardAfterHover = await card.boundingBox();
+  expect(coverBox?.width).toBe(82);
+  expect(coverBox?.height).toBe(123);
+  expect(cardAfterHover?.height).toBe(cardBeforeHover?.height);
 });
 
 test("removes a seeded book through the right-click actions menu", async ({ page }) => {
@@ -249,11 +270,32 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   );
   await page.getByRole("button", { name: "Theme" }).click();
 
-  const contentsWidth = page.getByRole("slider", { name: "Contents width" });
-  await contentsWidth.fill("400");
+  const contentsResizer = page.getByRole("separator", {
+    name: "Resize contents panel",
+  });
+  const resizerBox = await contentsResizer.boundingBox();
+  expect(resizerBox).not.toBeNull();
+  await page.mouse.move(
+    (resizerBox?.x ?? 0) + (resizerBox?.width ?? 0) / 2,
+    (resizerBox?.y ?? 0) + (resizerBox?.height ?? 0) / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    (resizerBox?.x ?? 0) + (resizerBox?.width ?? 0) / 2 + 109,
+    (resizerBox?.y ?? 0) + (resizerBox?.height ?? 0) / 2,
+  );
+  await page.mouse.up();
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
-    /--reader-sidebar-width: 400px/,
+    /--reader-sidebar-width: 401px/,
+  );
+  await expect(contentsResizer).toHaveAttribute("aria-valuenow", "401");
+  await page.waitForTimeout(350);
+  await page.reload();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
+    "style",
+    /--reader-sidebar-width: 401px/,
   );
   const firstTocItem = page.getByRole("button", { name: "第一章 长文本" });
   await expect(firstTocItem).toHaveCSS("white-space", "nowrap");
@@ -268,8 +310,20 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "location",
   );
 
+  await page.setViewportSize({ width: 900, height: 640 });
+  await expect(page.locator(".reader-sidebar")).toHaveCSS("width", "401px");
+
+  await page.setViewportSize({ width: 899, height: 640 });
+  const mediumSidebar = await page.locator(".reader-sidebar").boundingBox();
+  expect(mediumSidebar?.width).toBeLessThanOrEqual(899 * 0.4);
+
+  await page.setViewportSize({ width: 640, height: 640 });
+  await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
+  await expect(contentsResizer).toBeHidden();
+
   await page.setViewportSize({ width: 375, height: 760 });
   await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
+  await expect(contentsResizer).toBeHidden();
   const narrowLayout = await page.evaluate(() => {
     const sidebar = document.querySelector<HTMLElement>(".reader-sidebar");
     const main = document.querySelector<HTMLElement>(".reader-main");

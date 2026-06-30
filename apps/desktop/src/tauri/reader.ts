@@ -443,10 +443,7 @@ function normalizeReaderLayoutPreferences(
   preferences: ReaderLayoutPreferences,
 ): ReaderLayoutPreferences {
   return {
-    sidebarWidth: Math.min(
-      480,
-      Math.max(240, Math.round(preferences.sidebarWidth / 8) * 8),
-    ),
+    sidebarWidth: Math.min(480, Math.max(240, Math.round(preferences.sidebarWidth))),
   };
 }
 

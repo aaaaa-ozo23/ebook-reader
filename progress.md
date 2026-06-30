@@ -1397,3 +1397,23 @@
 - **视觉：** 已用 `view_image` 检查 `D:\tl-temp\ebook-reader-stage6-final-desktop.png` 与 `D:\tl-temp\ebook-reader-stage6-final-mobile.png`，布局清晰且无溢出/裁切。
 - **打包：** Tauri release build 通过，生成 `ebook-reader-desktop.exe`、MSI 和 NSIS installer。
 - **过程问题：** 新增 Playwright project 后首次 format check 发现 config 未格式化；运行仓库 Prettier 后重跑全套通过。
+
+## 2026-06-30 阶段 6.x：书架封面与目录拖拽宽度修复
+
+- **状态：** complete
+- **分支：** `codex/stage6-cover-resizer-fix`
+- **目标：** list 默认封面保持 82×123px 并可完整查看书名；目录宽度改为右边缘拖拽分隔条，保留响应式和持久化。
+- **已执行：** 将 `codex/v0.1.0-mvp-integration` 快进到最新 `main`，从同一基线建立独立修复分支；确认工作区无用户未提交改动。
+- **过程问题：** 首轮 Vitest 的键盘分隔条用例发现 `pointerdown` 的 `preventDefault` 会阻止自动聚焦；改为拖动开始时显式聚焦 separator。
+- **Browser QA：** `http://127.0.0.1:1420/` 页面标题/DOM 正常、无框架错误覆盖、console 无 warning/error；List 按钮可切换到 pressed；375×760 下无横向溢出。Browser 无法在只读页面上下文注入书籍 fixture，目标封面和阅读器状态继续由 seeded Playwright 验证。
+- **过程问题：** 首轮 Playwright 的新增 900px 断言误套用了 761–899px 的 40vw 规则；修正为 900px 验证完整设置宽度、899px 验证 40vw 上限。
+- **视觉修正：** 首次目标截图发现封面浮层所在 grid item 低于右侧书籍信息，导致标题叠字；提升悬停封面容器层级后重新截图验证。
+- **视觉修正：** 诊断确认二次截图处于 opacity 淡入中间帧，背景因此短暂透出正文；移除透明度动画，仅保留不影响可读性的位移动画。
+- **视觉修正：** 浮层右侧仍可见正文超长标题尾部；悬停期间仅隐藏相邻正文 `h2`，消除重复文字且不触发布局变化。
+- **实现：** 默认封面新增独立标题浮层；list 封面实际尺寸保持 82×123px，悬停显示完整中英文标题，真实封面不增加浮层。
+- **实现：** 删除侧栏内部 range，新增全高 `role=separator` 边缘热区和三线手柄；指针按整数像素拖动，方向键每次 8px，Home/End 到 240/480px。
+- **实现：** 前端与 Rust 宽度归一改为 240–480px 整数钳制，接口、设置键和数据库不变；250ms 防抖保存与刷新恢复继续生效。
+- **响应式：** 900px 保留设置宽度；761–899px 限制为 40vw；640px 与 375px 使用抽屉并隐藏 separator。
+- **最终验证：** format、core build、desktop lint/build、68 Vitest、32 Rust tests、8 Playwright tests 全部通过；Browser 页面身份/DOM/console/桌面与 375px 检查通过。
+- **视觉证据：** `D:\tl-temp\ebook-reader-stage6-cover-popover.png`、`D:\tl-temp\ebook-reader-stage6-resizer-desktop.png`、`D:\tl-temp\ebook-reader-stage6-resizer-mobile.png` 已用 `view_image` 检查。
+- **代码复查：** 修正全局阅读快捷键未尊重 `defaultPrevented` 的问题，避免 separator 方向键同时翻页；新增 TXT `scrollBy` 零调用断言。

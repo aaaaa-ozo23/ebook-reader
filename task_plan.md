@@ -277,6 +277,7 @@
 | 6.4 错误和空状态 | `codex/stage6-error-states` | complete | Vitest 65 tests；Playwright 6 tests；axe 主流程无 serious/critical |
 | 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | complete | README 链接；桌面/浏览器存储、删除、网络和日志行为已说明 |
 | 6.6 书架封面 | `codex/stage6-bookshelf-covers` | complete | Rust 30 tests；Vitest 60 tests；PDF/default-cover Playwright；desktop lint/build |
+| 6.x 封面与目录拖拽修复 | `codex/stage6-cover-resizer-fix` | complete | 默认封面完整标题浮层；侧栏边缘拖拽；整数像素持久化；68 Vitest、32 Rust、8 Playwright tests；Browser/视觉检查 |
 
 ### 阶段 6 最终验收记录
 
@@ -367,6 +368,9 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 阶段 3.1 `epubjs` 安装触发 pnpm build-script 审批 | 1 | 批准 `core-js` 和 `es5-ext`，并在 `pnpm-workspace.yaml` 记录 allowBuilds |
 | 阶段 3.1 Tauri asset protocol 编译失败 | 1 | 为 Rust `tauri` 依赖开启 `protocol-asset` feature |
 | 阶段 3.2 EPUB 内容层打开后触发 React maximum update depth | 1 | 将 EPUB TOC 读取改为 ref，避免 TOC 更新改变 relocated 回调 identity 后重复 open/close |
+| 阶段 6.x 分隔条 `pointerdown` 阻止默认聚焦，键盘回归测试仍停留在 292px | 1 | 拖动开始时显式聚焦 separator，确保拖动后方向键继续可用 |
+| 阶段 6.x E2E 在 900px 断言侧栏受 40vw 限制，但媒体区间实际到 899px | 1 | 分别断言 900px 保留设置宽度、899px 开始限制为 40vw |
+| 阶段 6.x 首次封面浮层截图与右侧卡片标题发生叠字 | 1 | 悬停时提升封面 grid item 的 stacking context，确保不透明浮层覆盖正文列 |
 
 ## 备注
 
