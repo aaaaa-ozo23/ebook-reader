@@ -1,6 +1,6 @@
 [package]
 name = "ebook-reader-desktop"
-version = "0.0.0"
+version = "0.1.0"
 description = "Local-first desktop ebook reader"
 authors = ["ebook-reader contributors"]
 edition = "2021"
