@@ -313,8 +313,8 @@
 | 小阶段 | 分支 | 状态 | 验证 |
 |--------|------|------|------|
 | 7.1 应用元信息 | `codex/stage7-app-metadata` | complete | 0.1.0 四处版本一致；正式图标透明源图和 Windows 32/128px 检查通过；desktop build 通过 |
-| 7.2 Windows installer | `codex/stage7-windows-installer` | in_progress | 待完成 MSI/NSIS 构建、安装和卸载验证 |
-| 7.3 文件关联 | `codex/stage7-file-associations` | pending | 待完成 EPUB/TXT/PDF 冷启动与运行中打开验证 |
+| 7.2 Windows installer | `codex/stage7-windows-installer` | complete | EXE、NSIS、MSI 0.1.0 干净构建；两种安装包安装/启动空库/卸载通过 |
+| 7.3 文件关联 | `codex/stage7-file-associations` | in_progress | 待完成 EPUB/TXT/PDF 冷启动与运行中打开验证 |
 | 7.4 升级验证 | `codex/stage7-upgrade-check` | pending | 待完成 0.0.0 → 0.1.0 数据保留验证 |
 | 7.5 发布清单 | `codex/stage7-release-checklist` | pending | 待完成许可证、校验值、发布分支和 GitHub Release |
 

@@ -1163,6 +1163,9 @@
 |--------|------|---------|---------|
 | 2026-06-30 | 阶段 7 首次备份 Local AppData 时 WebView2 `Cookies` 文件被占用 | 1 | 保留原数据不清理；定位并关闭仅属于 Ebook Reader 的 WebView2 进程，改用新的备份目录重新完整复制和核验 |
 | 2026-06-30 | Image Gen 色键处理与 `tauri icon --help` 合并命令超时 | 1 | 分离检查透明 PNG 与 Tauri CLI 调用，若去背产物有效则不重复处理 |
+| 2026-06-30 | NSIS 安装后 QA 脚本使用 `Get-ChildItem -File` 被当前 PowerShell 拒绝 | 1 | 安装已成功，改用 `Where-Object { -not $_.PSIsContainer }` 从当前安装状态继续，不重复安装 |
+| 2026-06-30 | NSIS 注册表 `InstallLocation` 包含外层引号，脚本将 `"C:` 误判为驱动器 | 1 | 对 InstallLocation 与 UninstallString 显式 `Trim('"')` 后继续当前安装验证 |
+| 2026-06-30 | MSI 0.1.0 使用默认静默参数安装返回 1603 | 1 | 生成详细 MSI 日志并尝试显式 per-user 属性，按日志根因修正配置或安装参数 |
 
 ## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
 
@@ -1186,8 +1189,19 @@
 - 验证：`pnpm.cmd run verify:release`、`pnpm.cmd run format`、`pnpm.cmd --filter @reader/desktop build` 通过。
 
 ### 阶段 7.2：Windows installer
+- **状态：** complete
+- **分支：** `codex/stage7-windows-installer`
+- Tauri bundle 目标明确为 NSIS + MSI，publisher 为 `Ebook Reader Contributors`，禁止降级，NSIS 固定 currentUser，WebView2 采用静默 downloadBootstrapper。
+- 清理限定在工作区 release EXE、bundle、NSIS/WiX 中间目录后执行完整 Tauri release build。
+- 构建成功：`ebook-reader-desktop.exe`、`Ebook Reader_0.1.0_x64-setup.exe`、`Ebook Reader_0.1.0_x64_en-US.msi`。
+- EXE/NSIS FileVersion 与 ProductVersion 均为 0.1.0；MSI ProductName、ProductVersion、Manufacturer、ProductCode、UpgradeCode 已通过 Windows Installer API 核对。
+- NSIS 安装、启动空书架数据库（books=0）、静默卸载通过。
+- MSI 使用 `ALLUSERS=2 MSIINSTALLPERUSER=1` 安装、启动空书架数据库（books=0）、静默卸载通过。
+- 两种安装测试结束后均清理本轮 QA AppData；原用户数据备份未恢复。
+
+### 阶段 7.3：文件关联
 - **状态：** in_progress
-- **分支：** `codex/stage7-windows-installer`（下一步创建）
+- **分支：** `codex/stage7-file-associations`（下一步创建）
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
