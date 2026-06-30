@@ -396,6 +396,8 @@ button:disabled {
 }
 
 .book-card {
+  position: relative;
+  isolation: isolate;
   display: grid;
   min-width: 0;
   grid-template-columns: 82px minmax(0, 1fr);
@@ -407,13 +409,27 @@ button:disabled {
   box-shadow: 0 14px 34px rgba(53, 48, 39, 0.08);
 }
 
+.book-card:hover {
+  z-index: 2;
+}
+
 .book-shelf--grid .book-card {
   grid-template-columns: 1fr;
+}
+
+.book-card__cover-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.book-shelf--list .book-card__cover-shell:hover {
+  z-index: 10;
 }
 
 .book-card__cover {
   position: relative;
   display: flex;
+  width: 100%;
   aspect-ratio: 2 / 3;
   min-height: 116px;
   align-items: flex-end;
@@ -443,7 +459,7 @@ button:disabled {
   font-weight: 800;
 }
 
-.book-card__cover strong {
+.book-card__cover-title {
   position: relative;
   z-index: 1;
   display: -webkit-box;
@@ -455,6 +471,42 @@ button:disabled {
   line-height: 1.15;
   text-wrap: balance;
   text-shadow: 0 2px 12px rgba(10, 20, 22, 0.86);
+}
+
+.book-card__cover-title-popover {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  left: calc(100% + 12px);
+  width: min(360px, calc(100vw - 150px));
+  min-width: 180px;
+  visibility: hidden;
+  border: 1px solid #c9bea9;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #263238;
+  opacity: 0;
+  padding: 12px 14px;
+  box-shadow: 0 16px 38px rgba(28, 38, 42, 0.22);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 0.98rem;
+  font-weight: 800;
+  line-height: 1.42;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translateX(-4px);
+  transition: transform 120ms ease;
+  white-space: normal;
+}
+
+.book-shelf--list .book-card__cover-shell:hover .book-card__cover-title-popover {
+  visibility: visible;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.book-shelf--list .book-card__cover-shell:hover + .book-card__body h2 {
+  visibility: hidden;
 }
 
 .book-card__cover--image {
@@ -470,6 +522,8 @@ button:disabled {
 }
 
 .book-card__body {
+  position: relative;
+  z-index: 1;
   display: flex;
   min-width: 0;
   flex-direction: column;

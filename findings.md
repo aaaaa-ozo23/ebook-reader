@@ -259,3 +259,20 @@
 | 浏览器 fallback 把测试数据和 data URL 封面放在同一 origin 的 localStorage | 它不是打包桌面的持久化后端，但会影响浏览器 QA 重跑 | 隐私文档单独说明 fallback key 前缀和清理站点数据的方法 |
 | Playwright 可用独立 DPR 2 project 复用同一响应式矩阵 | 无需把全部重阅读器 smoke 重跑两次也能覆盖高 DPI 布局 | `chromium-dpr2` 只执行 `responsive.spec.ts`，默认项目继续执行完整 smoke |
 | 包脚本内再次调用 `pnpm` 时会按 PATH 重新解析 shim | 仅用绝对路径启动顶层 pnpm 仍可能让子脚本落到 Codex 内置版本 | 最终验收将 Node 26 和用户 npm 目录置于 PATH 最前，顶层与子脚本均使用 pnpm 11.1.2 |
+
+## 2026-06-30 阶段 6.x 封面与目录拖拽修复发现
+
+| 发现 | 影响 | 决策 |
+|------|------|------|
+| list 默认封面书名使用固定四行截断，且格式徽标占用同一封面空间 | 长中文/英文标题无法完整读取 | 保持 82×123px 封面不变，为默认封面增加独立悬停/键盘聚焦浮层 |
+| 目录宽度目前由侧栏内部 range 控件调节 | 与 Codex 的边缘拖拽模型不一致，并额外占用侧栏高度 | 删除 range，在目录右边缘提供全高可拖拽 separator；移动抽屉继续隐藏 |
+| 前端和 Rust 都把宽度吸附到 8px | 鼠标无法按连续像素调节 | 改为 240–480px 整数钳制；键盘仍以 8px 调整，旧存储值无需迁移 |
+| Browser 在本轮只读页面上下文中无法注入本地书籍 fixture | 空书架可验证壳层与视图切换，但封面悬停和阅读器拖拽需要 seeded 状态 | Browser 先完成页面身份、DOM、console、桌面/375px 截图和 List 交互；目标数据态由项目 Playwright 验证 |
+| Browser 375×760 下 body client/scroll width 均为 360px | 新增封面浮层结构未造成空书架横向溢出 | 保留项目 Playwright 对有书列表和移动抽屉的布局断言 |
+| 首次有书截图中浮层虽为不透明背景，但所在 grid item 层级低于后续书籍信息列 | 浮层完整标题和卡片正文标题发生视觉叠字 | list 悬停时提升封面容器 stacking context，再复查截图；封面和行高保持不变 |
+| 桌面目录截图显示 401px 边缘分隔条位于侧栏/正文交界，三线手柄垂直居中；375px 抽屉截图不显示分隔条 | 新交互外观与 Codex 参考逻辑一致，移动端未回归 | 保留拖拽、键盘、持久化和隐藏断言 |
+| 浮层层级修正后截图仍在约 0.47 opacity 的淡入中间帧看到正文透出 | 整体 opacity 动画会让不透明背景同步半透明，真实悬停时存在短暂闪叠 | 浮层立即切换为完全不透明，只保留 4px 位移动画 |
+| 浮层完全不透明后，正文超长 `h2` 仍会从 360px 浮层右侧继续显示 | 用户会看到同一标题的重复尾部 | 仅在默认封面悬停期间隐藏相邻正文 `h2`；离开即恢复，不影响卡片布局和操作按钮 |
+| 最终封面截图中 82×123px 默认封面保持不变，浮层三行完整显示中英文长标题且无重复文字 | list 模式的书名可读性问题已解决 | 截图保存在 `D:\tl-temp\ebook-reader-stage6-cover-popover.png` |
+| 最终目录截图中桌面宽度为 401px、移动抽屉为 323px 且无分隔条 | 连续像素拖拽、宽度持久化和移动端抽屉规则均符合计划 | 截图保存在 `D:\tl-temp\ebook-reader-stage6-resizer-desktop.png` 与 `D:\tl-temp\ebook-reader-stage6-resizer-mobile.png` |
+| 全局阅读快捷键监听原先不检查子控件是否已 `preventDefault` | separator 的 ArrowLeft/Right 可能同时调整宽度和翻页 | 全局控制器先检查 `defaultPrevented`，并用 Vitest 断言键盘调宽不会触发 TXT `scrollBy` |
