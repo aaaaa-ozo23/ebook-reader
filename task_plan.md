@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 6：complete；阅读体验、可访问性、响应式、封面、性能、错误恢复和隐私文档均已验收，尚未开始大阶段 7。
+大阶段 7：in_progress；正在实施 Windows v0.1.0 元信息、正式图标、安装包、文件关联、覆盖升级验证和 GitHub 首版发布。
 
 ## 分支策略
 
@@ -307,6 +307,16 @@
 | 7.3 文件关联 | `codex/stage7-file-associations` | 配置 `.epub`、`.txt`、`.pdf` 文件关联和打开参数 | 双击关联文件能进入导入或打开流程 |
 | 7.4 升级验证 | `codex/stage7-upgrade-check` | 验证旧版本数据库和书库在新版本中可继续使用 | 模拟升级后数据不丢失 |
 | 7.5 发布清单 | `codex/stage7-release-checklist` | 创建发布 checklist、许可证核查、第三方依赖说明 | `release/v0.1.0` 可作为候选发布分支 |
+
+### 阶段 7 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 7.1 应用元信息 | `codex/stage7-app-metadata` | complete | 0.1.0 四处版本一致；正式图标透明源图和 Windows 32/128px 检查通过；desktop build 通过 |
+| 7.2 Windows installer | `codex/stage7-windows-installer` | in_progress | 待完成 MSI/NSIS 构建、安装和卸载验证 |
+| 7.3 文件关联 | `codex/stage7-file-associations` | pending | 待完成 EPUB/TXT/PDF 冷启动与运行中打开验证 |
+| 7.4 升级验证 | `codex/stage7-upgrade-check` | pending | 待完成 0.0.0 → 0.1.0 数据保留验证 |
+| 7.5 发布清单 | `codex/stage7-release-checklist` | pending | 待完成许可证、校验值、发布分支和 GitHub Release |
 
 ## 大阶段 8：v0.2 预留方向
 

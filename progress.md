@@ -1161,6 +1161,33 @@
 
 | 时间戳 | 错误 | 尝试次数 | 解决方案 |
 |--------|------|---------|---------|
+| 2026-06-30 | 阶段 7 首次备份 Local AppData 时 WebView2 `Cookies` 文件被占用 | 1 | 保留原数据不清理；定位并关闭仅属于 Ebook Reader 的 WebView2 进程，改用新的备份目录重新完整复制和核验 |
+| 2026-06-30 | Image Gen 色键处理与 `tauri icon --help` 合并命令超时 | 1 | 分离检查透明 PNG 与 Tauri CLI 调用，若去背产物有效则不重复处理 |
+
+## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
+
+### 状态
+- **当前状态：** in_progress
+- **当前小阶段：** 7.1 应用元信息
+
+### 发布前保护
+- 保存当前 0.0.0 MSI 与 NSIS 到 `D:\tl-temp\ebook-reader-stage7-backup-20260630-225613\upgrade-fixtures`。
+- 关闭仅属于 Ebook Reader 的 release/WebView2 进程后，完整备份 Roaming 与 Local 应用数据。
+- 核对 Roaming 6 文件 / 21,505,580 bytes，Local 362 文件 / 39,615,213 bytes，备份一致后清空原目录。
+- 备份清单与旧安装包 SHA-256 位于 `D:\tl-temp\ebook-reader-stage7-backup-20260630-225613\backup-manifest.json`。
+
+### 阶段 7.1：应用元信息与正式图标
+- **状态：** complete
+- **分支：** `codex/stage7-app-metadata`
+- 将根 package、desktop package、Cargo 和 Tauri 版本统一为 `0.1.0`，新增 `pnpm.cmd run verify:release` 一致性门禁。
+- 使用 Image Gen 内置模式生成暖橙开放书页/深灰书脊、无文字、绿色色键背景的正式源图；用技能自带脚本去背为 `icons/app-icon-v0.1.0.png`。
+- Tauri CLI 已重建 ICO、ICNS、Windows Appx PNG、32/128/256 图标；移除本阶段额外生成且未使用的 Android/iOS 目录。
+- 视觉验证：透明四角、主体覆盖范围、32×32 和 128×128 小尺寸辨识度通过。
+- 验证：`pnpm.cmd run verify:release`、`pnpm.cmd run format`、`pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 7.2：Windows installer
+- **状态：** in_progress
+- **分支：** `codex/stage7-windows-installer`（下一步创建）
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |

@@ -9,6 +9,18 @@
 
 ## 研究发现
 
+### 2026-06-30 大阶段 7 发布基线
+
+- `main` 与 `origin/main` 一致；`codex/v0.1.0-mvp-integration` 内容与 main 相同，仅缺少 main 的合并提交。
+- 根 package、desktop package、Cargo 和 Tauri 当前版本均为 `0.0.0`；旧 release EXE、MSI、NSIS 也为 0.0.0。
+- 当前没有文件关联、single-instance 或 updater 实现；v0.1.0 采用 MSI/NSIS 覆盖安装升级，不加入应用内 updater。
+- 本机没有 Windows 代码签名证书，首版按未签名包发布并提供 SHA-256 与 SmartScreen 提示。
+- 用户数据已完整备份至 `D:\tl-temp\ebook-reader-stage7-backup-20260630-225613`：Roaming 6 文件 / 21,505,580 bytes，Local 362 文件 / 39,615,213 bytes；原应用数据目录已清空。
+- 0.0.0 升级基线 MSI/NSIS 已保存到同一备份目录的 `upgrade-fixtures`，SHA-256 写入 `backup-manifest.json`。
+- Image Gen 生成的正式图标源图经内置色键流程处理为 1254×1254 RGBA PNG；四角 alpha 为 0，有效主体 bbox 为 `(187, 192, 1066, 1039)`，暖橙书页与深灰书脊在透明背景下边缘完整。
+- Tauri 图标生成后的 32×32 和 128×128 PNG 已视觉检查：书本轮廓、翻页负形和橙/深灰对比在小尺寸均清楚；不再使用默认 Tauri 图标。
+- 当前 shell 中 Codex bundled pnpm 使用 Node 24.14.0，因此会提示项目 `>=26.1.0` engine warning；版本检查、Prettier 和 desktop production build 均实际通过，该 warning 不影响产物。
+
 - 当前仓库是初始状态：已有 `README.md`，`DEVELOPMENT.md` 尚未跟踪，尚未创建 `package.json`、`pnpm-workspace.yaml`、`apps/desktop` 或 `packages/*`。
 - 远程仓库为 `https://github.com/aaaaa-ozo23/ebook-reader.git`，当前分支是 `main`，与 `origin/main` 对齐。
 - `DEVELOPMENT.md` 已确定首版路线：Tauri 2 + React + TypeScript + Vite、Rust 后端、SQLite、本地优先、pnpm workspace。
