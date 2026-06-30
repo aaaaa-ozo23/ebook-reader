@@ -622,9 +622,10 @@ describe("App", () => {
   });
 
   it("renders the generated fallback background with an HTML book title", async () => {
+    const user = userEvent.setup();
     const book = createBook({
       id: "fallback-cover",
-      title: "A Very Long Local Book Title",
+      title: "很长的中文书名与 A Very Long Local Book Title 都需要完整显示",
       format: "txt",
       coverStatus: "fallback",
     });
@@ -633,12 +634,18 @@ describe("App", () => {
     render(<App />);
 
     const card = await screen.findByRole("article", { name: `${book.title} book` });
+    await user.click(screen.getByRole("button", { name: "List" }));
     const cover = card.querySelector(".book-card__cover");
+    const fullTitle = card.querySelector(".book-card__cover-title-popover");
 
     expect((cover as HTMLElement).style.backgroundImage).toContain(
       "default-book-cover",
     );
-    expect(cover?.querySelector("strong")).toHaveTextContent(book.title);
+    expect(cover?.querySelector(".book-card__cover-title")).toHaveTextContent(
+      book.title,
+    );
+    expect(fullTitle).toHaveTextContent(book.title);
+    expect(fullTitle).toHaveAttribute("aria-hidden", "true");
   });
 
   it("renders a cached extracted cover and falls back when it cannot load", async () => {
@@ -950,16 +957,60 @@ describe("App", () => {
     await user.click(await screen.findByRole("button", { name: "Continue" }));
 
     const reader = await screen.findByRole("main", { name: "TXT reader" });
-    const widthSlider = await screen.findByRole("slider", { name: "Contents width" });
-    await waitFor(() => expect(widthSlider).toHaveValue("336"));
+    const resizer = await screen.findByRole("separator", {
+      name: "Resize contents panel",
+    });
+    await waitFor(() => expect(resizer).toHaveAttribute("aria-valuenow", "336"));
     expect(reader).toHaveStyle({ "--reader-sidebar-width": "336px" });
 
-    fireEvent.change(widthSlider, { target: { value: "401" } });
-    expect(widthSlider).toHaveValue("400");
-    expect(reader).toHaveStyle({ "--reader-sidebar-width": "400px" });
+    fireEvent.pointerDown(resizer, { button: 0, clientX: 336, pointerId: 1 });
+    fireEvent.pointerMove(resizer, { clientX: 401, pointerId: 1 });
+    fireEvent.pointerUp(resizer, { clientX: 401, pointerId: 1 });
+    expect(resizer).toHaveAttribute("aria-valuenow", "401");
+    expect(reader).toHaveStyle({ "--reader-sidebar-width": "401px" });
     await waitFor(() =>
       expect(saveReaderLayoutPreferencesMock).toHaveBeenCalledWith({
-        sidebarWidth: 400,
+        sidebarWidth: 401,
+      }),
+    );
+  });
+
+  it("supports keyboard resizing and clamps the contents separator", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "layout-keyboard",
+      title: "Layout Keyboard",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    const viewport = await screen.findByLabelText("Layout Keyboard content");
+    const scrollBy = vi.fn();
+    Object.defineProperty(viewport, "scrollBy", {
+      configurable: true,
+      value: scrollBy,
+    });
+    const resizer = await screen.findByRole("separator", {
+      name: "Resize contents panel",
+    });
+    await user.click(resizer);
+    await user.keyboard("{ArrowRight}");
+    expect(resizer).toHaveAttribute("aria-valuenow", "300");
+    expect(scrollBy).not.toHaveBeenCalled();
+
+    await user.keyboard("{Home}{ArrowLeft}");
+    expect(resizer).toHaveAttribute("aria-valuenow", "240");
+
+    await user.keyboard("{End}{ArrowRight}");
+    expect(resizer).toHaveAttribute("aria-valuenow", "480");
+    await waitFor(() =>
+      expect(saveReaderLayoutPreferencesMock).toHaveBeenLastCalledWith({
+        sidebarWidth: 480,
       }),
     );
   });

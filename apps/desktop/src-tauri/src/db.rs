@@ -1573,7 +1573,6 @@ fn default_reader_layout_preferences() -> ReaderLayoutPreferences {
 fn normalize_reader_layout_preferences(
     mut preferences: ReaderLayoutPreferences,
 ) -> ReaderLayoutPreferences {
-    preferences.sidebar_width = ((preferences.sidebar_width.clamp(240, 480) + 4) / 8) * 8;
     preferences.sidebar_width = preferences.sidebar_width.clamp(240, 480);
     preferences
 }
@@ -2812,8 +2811,22 @@ mod tests {
         init_database_at(&database_path).expect("reopen database");
         let restored = get_reader_layout_preferences_at(&database_path).expect("restore layout");
 
-        assert_eq!(saved.sidebar_width, 400);
+        assert_eq!(saved.sidebar_width, 401);
         assert_eq!(restored, saved);
+
+        let clamped_low = save_reader_layout_preferences_at(
+            &database_path,
+            &ReaderLayoutPreferences { sidebar_width: 120 },
+        )
+        .expect("clamp low layout");
+        let clamped_high = save_reader_layout_preferences_at(
+            &database_path,
+            &ReaderLayoutPreferences { sidebar_width: 720 },
+        )
+        .expect("clamp high layout");
+
+        assert_eq!(clamped_low.sidebar_width, 240);
+        assert_eq!(clamped_high.sidebar_width, 480);
     }
 
     #[test]

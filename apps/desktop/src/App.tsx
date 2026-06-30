@@ -686,17 +686,26 @@ function BookCover({ book }: { book: Book }) {
   } as CSSProperties;
 
   return (
-    <div
-      className={`book-card__cover${showsExtractedCover ? " book-card__cover--image" : ""}`}
-      style={showsExtractedCover ? undefined : fallbackStyle}
-      aria-hidden="true"
-    >
-      {showsExtractedCover ? (
-        <img src={source} alt="" onError={() => setFailedSource(source)} />
-      ) : (
-        <strong title={book.title}>{book.title}</strong>
-      )}
-      <span>{formatBookFormat(book.format)}</span>
+    <div className="book-card__cover-shell">
+      <div
+        className={`book-card__cover${showsExtractedCover ? " book-card__cover--image" : ""}`}
+        style={showsExtractedCover ? undefined : fallbackStyle}
+        aria-hidden="true"
+      >
+        {showsExtractedCover ? (
+          <img src={source} alt="" onError={() => setFailedSource(source)} />
+        ) : (
+          <strong className="book-card__cover-title" title={book.title}>
+            {book.title}
+          </strong>
+        )}
+        <span>{formatBookFormat(book.format)}</span>
+      </div>
+      {!showsExtractedCover ? (
+        <div className="book-card__cover-title-popover" aria-hidden="true">
+          {book.title}
+        </div>
+      ) : null}
     </div>
   );
 }
