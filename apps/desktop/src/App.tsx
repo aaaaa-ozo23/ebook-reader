@@ -15,6 +15,7 @@ import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/co
 import "./App.css";
 import defaultBookCover from "./assets/default-book-cover.jpg";
 import { prepareBookCover } from "./covers/bookCovers";
+import { listenForOpenBookFiles, takePendingOpenFiles } from "./tauri/fileOpen";
 import {
   getBookCoverSource,
   importBook,
@@ -147,14 +148,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      void loadLibrary();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [loadLibrary]);
-
-  useEffect(() => {
     for (const book of books) {
       if (book.coverStatus !== "pending" || queuedCoverIdsRef.current.has(book.id)) {
         continue;
@@ -227,6 +220,123 @@ function App() {
       setOpeningBookId(null);
     }
   }, []);
+
+  const handleAssociatedBookFiles = useCallback(
+    async (paths: string[]) => {
+      const uniquePaths = [...new Set(paths)];
+
+      if (uniquePaths.length === 0) {
+        return;
+      }
+
+      setFeedback(null);
+      setIsImporting(true);
+      let firstBook: Book | null = null;
+      let firstError: unknown = null;
+
+      try {
+        for (const path of uniquePaths) {
+          try {
+            const result = await importBook(path);
+            firstBook ??= result.book;
+            setBooks((currentBooks) => upsertBook(currentBooks, result.book));
+          } catch (error) {
+            firstError ??= error;
+          }
+        }
+      } finally {
+        setIsImporting(false);
+      }
+
+      if (firstBook !== null) {
+        await handleOpenBook(firstBook);
+        return;
+      }
+
+      setFeedback({
+        actionLabel: "Choose another file",
+        kind: "error",
+        title: "Associated file could not be opened",
+        message: getErrorMessage(firstError),
+      });
+    },
+    [handleOpenBook],
+  );
+
+  useEffect(() => {
+    let canceled = false;
+    let stopListening: (() => void) | undefined;
+    let listenerReady = false;
+    const earlyPaths: string[] = [];
+
+    const receivePaths = (paths: string[]) => {
+      if (!listenerReady) {
+        earlyPaths.push(...paths);
+        return;
+      }
+
+      void handleAssociatedBookFiles(paths);
+    };
+
+    const initialize = async () => {
+      try {
+        stopListening = await listenForOpenBookFiles(receivePaths);
+      } catch (error) {
+        if (!canceled) {
+          setFeedback({
+            kind: "error",
+            title: "File opening is unavailable",
+            message: getErrorMessage(error),
+          });
+        }
+      }
+
+      if (canceled) {
+        stopListening?.();
+        return;
+      }
+
+      await loadLibrary();
+
+      if (canceled) {
+        return;
+      }
+
+      let pendingPaths: string[] = [];
+
+      try {
+        pendingPaths = await takePendingOpenFiles();
+      } catch (error) {
+        setFeedback({
+          kind: "error",
+          title: "Associated file could not be opened",
+          message: getErrorMessage(error),
+        });
+      }
+
+      if (canceled) {
+        return;
+      }
+
+      listenerReady = true;
+      const queuedPaths = [...pendingPaths, ...earlyPaths];
+      earlyPaths.length = 0;
+
+      if (queuedPaths.length > 0) {
+        await handleAssociatedBookFiles(queuedPaths);
+      }
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      void initialize();
+    }, 0);
+
+    return () => {
+      canceled = true;
+      window.clearTimeout(timeoutId);
+      stopListening?.();
+    };
+  }, [handleAssociatedBookFiles, loadLibrary]);
 
   const closeBookActionMenu = useCallback(() => {
     const trigger = bookActionMenu?.trigger ?? null;

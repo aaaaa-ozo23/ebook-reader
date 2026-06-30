@@ -16,6 +16,11 @@ import { prepareBookCover } from "./covers/bookCovers";
 import { EpubReaderAdapter, type EpubPosition } from "./epub/EpubReaderAdapter";
 import { PdfReaderAdapter, type PdfPosition } from "./pdf/PdfReaderAdapter";
 import {
+  listenForOpenBookFiles,
+  takePendingOpenFiles,
+  type OpenBookFilesHandler,
+} from "./tauri/fileOpen";
+import {
   getBookCoverSource,
   importBook,
   listBooks,
@@ -226,6 +231,11 @@ const deleteBookmarkMock = vi.hoisted(() => vi.fn());
 const listAnnotationsMock = vi.hoisted(() => vi.fn());
 const listBookmarksMock = vi.hoisted(() => vi.fn());
 const prepareBookCoverMock = vi.hoisted(() => vi.fn());
+const listenForOpenBookFilesMock = vi.hoisted(() => vi.fn());
+const takePendingOpenFilesMock = vi.hoisted(() => vi.fn());
+const openBookFilesHandlerRef = vi.hoisted(
+  () => ({ current: null }) as { current: OpenBookFilesHandler | null },
+);
 
 vi.mock("./covers/bookCovers", () => ({
   prepareBookCover: prepareBookCoverMock,
@@ -238,6 +248,11 @@ vi.mock("./tauri/library", () => ({
   markBookOpened: vi.fn(),
   pickBookFile: vi.fn(),
   removeBook: vi.fn(),
+}));
+
+vi.mock("./tauri/fileOpen", () => ({
+  listenForOpenBookFiles: listenForOpenBookFilesMock,
+  takePendingOpenFiles: takePendingOpenFilesMock,
 }));
 
 vi.mock("./tauri/reader", () => ({
@@ -413,6 +428,7 @@ const createBookmarkMocked = vi.mocked(createBookmark);
 const deleteAnnotationMocked = vi.mocked(deleteAnnotation);
 const deleteBookmarkMocked = vi.mocked(deleteBookmark);
 const importBookMock = vi.mocked(importBook);
+const listenForOpenBookFilesMocked = vi.mocked(listenForOpenBookFiles);
 const getBookCoverSourceMock = vi.mocked(getBookCoverSource);
 const listAnnotationsMocked = vi.mocked(listAnnotations);
 const listBookmarksMocked = vi.mocked(listBookmarks);
@@ -429,10 +445,12 @@ const updateAnnotationMock = vi.mocked(updateAnnotation);
 const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
 const prepareBookCoverMocked = vi.mocked(prepareBookCover);
+const takePendingOpenFilesMocked = vi.mocked(takePendingOpenFiles);
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    openBookFilesHandlerRef.current = null;
     epubAdapterCloseMock.mockClear();
     epubAdapterGetTocMock.mockClear();
     epubAdapterGoToMock.mockClear();
@@ -469,6 +487,11 @@ describe("App", () => {
     epubAdapterSearchMock.mockResolvedValue([]);
     pdfAdapterSearchMock.mockResolvedValue([]);
     listBooksMock.mockResolvedValue([]);
+    listenForOpenBookFilesMocked.mockImplementation(async (handler) => {
+      openBookFilesHandlerRef.current = handler;
+      return () => undefined;
+    });
+    takePendingOpenFilesMocked.mockResolvedValue([]);
     getBookCoverSourceMock.mockResolvedValue(null);
     prepareBookCoverMocked.mockImplementation(async (book) => ({
       ...book,
@@ -808,6 +831,77 @@ describe("App", () => {
       screen.getByText("Existing Manual is already on this shelf."),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("imports and opens a file delivered during cold startup", async () => {
+    const associatedBook = createBook({
+      id: "associated-cold",
+      title: "Associated Cold Start",
+      format: "txt",
+      sourcePath: "D:\\books\\associated-cold.txt",
+      libraryPath: "D:\\library\\associated-cold.txt",
+    });
+    takePendingOpenFilesMocked.mockResolvedValueOnce([
+      "D:\\books\\associated-cold.txt",
+    ]);
+    importBookMock.mockResolvedValueOnce(
+      createImportResult("imported", associatedBook),
+    );
+    markBookOpenedMock.mockResolvedValueOnce(associatedBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(associatedBook));
+
+    render(<App />);
+
+    await waitFor(() =>
+      expect(importBookMock).toHaveBeenCalledWith("D:\\books\\associated-cold.txt"),
+    );
+    expect(markBookOpenedMock).toHaveBeenCalledWith("associated-cold");
+    expect(
+      await screen.findByRole("heading", { name: "Associated Cold Start" }),
+    ).toBeVisible();
+    expect(await screen.findByLabelText("Associated Cold Start content")).toBeVisible();
+  });
+
+  it("opens the existing book when a running app receives a duplicate file", async () => {
+    const duplicateBook = createBook({
+      id: "associated-duplicate",
+      title: "Associated Duplicate",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([duplicateBook]);
+    importBookMock.mockResolvedValueOnce(
+      createImportResult("duplicate", duplicateBook),
+    );
+    markBookOpenedMock.mockResolvedValueOnce(duplicateBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(duplicateBook));
+
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { name: "Associated Duplicate" }),
+    ).toBeVisible();
+    expect(openBookFilesHandlerRef.current).not.toBeNull();
+
+    await openBookFilesHandlerRef.current?.(["D:\\books\\associated-duplicate.txt"]);
+
+    expect(importBookMock).toHaveBeenCalledWith("D:\\books\\associated-duplicate.txt");
+    expect(markBookOpenedMock).toHaveBeenCalledWith("associated-duplicate");
+    expect(
+      screen.getAllByRole("heading", { name: "Associated Duplicate" }),
+    ).toHaveLength(1);
+    expect(await screen.findByLabelText("Associated Duplicate content")).toBeVisible();
+  });
+
+  it("shows a recoverable error when an associated file cannot be imported", async () => {
+    takePendingOpenFilesMocked.mockResolvedValueOnce(["D:\\books\\missing.txt"]);
+    importBookMock.mockRejectedValueOnce(new Error("source file does not exist"));
+
+    render(<App />);
+
+    expect(
+      await screen.findByText("Associated file could not be opened"),
+    ).toBeVisible();
+    expect(screen.getByText("source file does not exist")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Choose another file" })).toBeEnabled();
   });
 
   it("reports when re-import repairs a missing library copy", async () => {

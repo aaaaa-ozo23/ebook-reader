@@ -1166,6 +1166,8 @@
 | 2026-06-30 | NSIS 安装后 QA 脚本使用 `Get-ChildItem -File` 被当前 PowerShell 拒绝 | 1 | 安装已成功，改用 `Where-Object { -not $_.PSIsContainer }` 从当前安装状态继续，不重复安装 |
 | 2026-06-30 | NSIS 注册表 `InstallLocation` 包含外层引号，脚本将 `"C:` 误判为驱动器 | 1 | 对 InstallLocation 与 UninstallString 显式 `Trim('"')` 后继续当前安装验证 |
 | 2026-06-30 | MSI 0.1.0 使用默认静默参数安装返回 1603 | 1 | 生成详细 MSI 日志并尝试显式 per-user 属性，按日志根因修正配置或安装参数 |
+| 2026-06-30 | 文件关联测试导致既有 TXT mock 污染及新增 viewport 断言错误 | 3 | 恢复下一 tick 初始化、等待新增用例消费异步 TXT mock，并将 aria-label 断言修正为实际的“书名 + content” |
+| 2026-06-30 | 7.3 探索时读取了不存在的 `src/tauri/runtime.ts` | 1 | 现有 runtime 检测实际位于各 bridge 文件内；新增文件关联 bridge 沿用同一轻量检测模式 |
 
 ## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
 
@@ -1200,8 +1202,19 @@
 - 两种安装测试结束后均清理本轮 QA AppData；原用户数据备份未恢复。
 
 ### 阶段 7.3：文件关联
+- **状态：** complete
+- **分支：** `codex/stage7-file-associations`
+- Tauri bundle 注册 EPUB、TXT、PDF ProgID、MIME、Viewer role 和 Windows 描述。
+- Rust 新增 pending open queue 与 frontend-ready 握手；冷启动参数先入队，运行中第二实例聚焦主窗口并发送 `open-book-files`。
+- 前端新增动态 event bridge；监听建立后加载书库，再取冷启动队列；路径去重后按序导入，首个成功项立即打开，duplicate 复用已有书籍，失败显示可恢复错误。
+- React StrictMode 下沿用下一 tick 初始化与 cleanup 清理，避免重复订阅和重复书库加载。
+- 自动验证：71 Vitest、34 Rust tests、desktop lint/build、format、release version gate 全部通过。
+- 原生验证：NSIS 注册表三种关联存在；EPUB Shell 冷启动成功；TXT/PDF 运行中第二实例传递成功且主进程数保持 1；重复 TXT 不新增记录并更新最后打开时间。
+- QA fixture 仅位于 `D:\tl-temp\ebook-reader-stage7-file-association-qa`，不会进入仓库或安装包。
+
+### 阶段 7.4：升级验证
 - **状态：** in_progress
-- **分支：** `codex/stage7-file-associations`（下一步创建）
+- **分支：** `codex/stage7-upgrade-check`（下一步创建）
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
