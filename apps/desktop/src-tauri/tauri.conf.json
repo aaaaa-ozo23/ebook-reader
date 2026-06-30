@@ -31,6 +31,29 @@
     "active": true,
     "targets": ["nsis", "msi"],
     "publisher": "Ebook Reader Contributors",
+    "fileAssociations": [
+      {
+        "ext": ["epub"],
+        "name": "EPUB Ebook",
+        "description": "EPUB ebook",
+        "mimeType": "application/epub+zip",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["txt"],
+        "name": "Plain Text Ebook",
+        "description": "Plain text ebook",
+        "mimeType": "text/plain",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["pdf"],
+        "name": "PDF Document",
+        "description": "PDF document",
+        "mimeType": "application/pdf",
+        "role": "Viewer"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

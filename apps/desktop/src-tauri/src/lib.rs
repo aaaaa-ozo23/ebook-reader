@@ -1,4 +1,7 @@
 mod db;
+mod file_open;
+
+use tauri::{Emitter, Manager};
 
 #[tauri::command]
 fn app_health(app: tauri::AppHandle) -> Result<db::AppHealth, String> {
@@ -174,9 +177,39 @@ fn delete_annotation(app: tauri::AppHandle, annotation_id: String) -> Result<(),
     db::delete_annotation(&app, &annotation_id).map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+fn take_pending_open_files(
+    pending_files: tauri::State<'_, file_open::PendingOpenFiles>,
+) -> Vec<String> {
+    pending_files.take_and_mark_ready()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let pending_open_files = file_open::PendingOpenFiles::from_args(std::env::args_os().skip(1));
+
     tauri::Builder::default()
+        .manage(pending_open_files)
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let paths = file_open::collect_book_paths(args);
+
+            if paths.is_empty() {
+                return;
+            }
+
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
+            if let Some(paths_to_emit) = app
+                .state::<file_open::PendingOpenFiles>()
+                .route_new_paths(paths)
+            {
+                let _ = app.emit(file_open::OPEN_BOOK_FILES_EVENT, paths_to_emit);
+            }
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -206,7 +239,8 @@ pub fn run() {
             list_annotations,
             create_annotation,
             update_annotation,
-            delete_annotation
+            delete_annotation,
+            take_pending_open_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
