@@ -1378,3 +1378,11 @@
 - **可访问性：** 接入 `@axe-core/playwright`，书架及 TXT/EPUB/PDF 阅读壳无 serious/critical；EPUB 出版物 blob iframe 因内容由书籍提供而从应用壳扫描中排除。
 - **过程问题：** axe 首次发现 Import 按钮白字/橙色对比度仅 3.36:1，改为更深橙红色；TXT 视口和 PDF 页面框架补充键盘焦点后消除 scrollable-region-focusable。
 - **验证：** desktop lint/build、Vitest 65 tests、Playwright 6 tests 通过；错误重试、草稿保留及 axe 均有自动化覆盖。
+
+### 阶段 6.5：隐私和数据位置文档
+- **状态：** complete
+- **分支：** `codex/stage6-privacy-docs`
+- **实现：** 新增 `docs/privacy-and-data.md` 并从 README 链接。
+- **内容：** 说明 SQLite、书库副本、封面缓存、reader cache 和浏览器 fallback 的位置、内容与删除方式。
+- **内容：** 明确无遥测、分析、云同步、自动上传、用户账户或持久化应用日志；移除书籍不会删除原始导入文件。
+- **验证：** 文档路径、应用 identifier、Rust 实际文件名及 localStorage key 前缀均与实现核对。

@@ -255,3 +255,5 @@
 | 书库加载失败原先只写全局 feedback，ShelfBody 仍按空数组显示空书架 | 数据库故障会被误导为“没有书” | 增加独立 libraryError 和 Retry 状态，错误优先于空状态渲染 |
 | axe 检出 Import 按钮对比度 3.36:1，TXT/PDF 滚动容器不能键盘聚焦 | 不符合 WCAG 2.2 AA 主流程目标 | 深化按钮背景色，并为实际滚动容器增加 tabIndex=0 和可访问名称 |
 | AxeBuilder 扫描 blob EPUB iframe 时 Playwright 可能因跨 frame target 超时 | 出版物正文来自导入文件，不属于应用 UI 可控内容 | 应用壳检查排除 `.reader-epub-host iframe`，保留 EPUB 导航、侧栏、工具栏和面板扫描 |
+| 桌面数据根目录由 Tauri `app.path().app_data_dir()` 解析 | 不能在文档中把单一绝对路径写成所有机器都相同 | 记录 identifier 和各平台典型路径，并说明系统配置可能改变 base directory |
+| 浏览器 fallback 把测试数据和 data URL 封面放在同一 origin 的 localStorage | 它不是打包桌面的持久化后端，但会影响浏览器 QA 重跑 | 隐私文档单独说明 fallback key 前缀和清理站点数据的方法 |
