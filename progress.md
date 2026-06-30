@@ -1386,3 +1386,14 @@
 - **内容：** 说明 SQLite、书库副本、封面缓存、reader cache 和浏览器 fallback 的位置、内容与删除方式。
 - **内容：** 明确无遥测、分析、云同步、自动上传、用户账户或持久化应用日志；移除书籍不会删除原始导入文件。
 - **验证：** 文档路径、应用 identifier、Rust 实际文件名及 localStorage key 前缀均与实现核对。
+
+### 大阶段 6：最终验收
+- **状态：** complete
+- **集成分支：** `codex/v0.1.0-mvp-integration`
+- **工具链：** 用户级 pnpm 11.1.2、Node 26.1.0；`install --frozen-lockfile` 通过。
+- **前端：** format、core build、desktop lint、desktop build 通过；Vitest 65 tests 通过；最终首屏入口 68.65 kB gzip。
+- **Rust：** `cargo fmt --check`、32 tests 通过；迁移重复执行、封面校验/删除、缓存失效/级联和副本修复均覆盖。
+- **E2E：** 8 tests 通过，覆盖 1280×800、900×640、640×640、375×760 与 DPR 2；console 无 warning/error，axe 无 serious/critical。
+- **视觉：** 已用 `view_image` 检查 `D:\tl-temp\ebook-reader-stage6-final-desktop.png` 与 `D:\tl-temp\ebook-reader-stage6-final-mobile.png`，布局清晰且无溢出/裁切。
+- **打包：** Tauri release build 通过，生成 `ebook-reader-desktop.exe`、MSI 和 NSIS installer。
+- **过程问题：** 新增 Playwright project 后首次 format check 发现 config 未格式化；运行仓库 Prettier 后重跑全套通过。

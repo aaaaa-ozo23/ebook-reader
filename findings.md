@@ -257,3 +257,5 @@
 | AxeBuilder 扫描 blob EPUB iframe 时 Playwright 可能因跨 frame target 超时 | 出版物正文来自导入文件，不属于应用 UI 可控内容 | 应用壳检查排除 `.reader-epub-host iframe`，保留 EPUB 导航、侧栏、工具栏和面板扫描 |
 | 桌面数据根目录由 Tauri `app.path().app_data_dir()` 解析 | 不能在文档中把单一绝对路径写成所有机器都相同 | 记录 identifier 和各平台典型路径，并说明系统配置可能改变 base directory |
 | 浏览器 fallback 把测试数据和 data URL 封面放在同一 origin 的 localStorage | 它不是打包桌面的持久化后端，但会影响浏览器 QA 重跑 | 隐私文档单独说明 fallback key 前缀和清理站点数据的方法 |
+| Playwright 可用独立 DPR 2 project 复用同一响应式矩阵 | 无需把全部重阅读器 smoke 重跑两次也能覆盖高 DPI 布局 | `chromium-dpr2` 只执行 `responsive.spec.ts`，默认项目继续执行完整 smoke |
+| 包脚本内再次调用 `pnpm` 时会按 PATH 重新解析 shim | 仅用绝对路径启动顶层 pnpm 仍可能让子脚本落到 Codex 内置版本 | 最终验收将 Node 26 和用户 npm 目录置于 PATH 最前，顶层与子脚本均使用 pnpm 11.1.2 |
