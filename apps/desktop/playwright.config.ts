@@ -20,5 +20,14 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
     },
+    {
+      name: "chromium-dpr2",
+      testMatch: "responsive.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 2,
+        viewport: { width: 900, height: 640 },
+      },
+    },
   ],
 });

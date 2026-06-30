@@ -232,3 +232,30 @@
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
+
+## 2026-06-29 阶段 6 启动发现
+
+| 发现 | 影响 | 决策 |
+|------|------|------|
+| `ReaderShell` 只有选区浮层的 Escape 监听，EPUB iframe 键盘事件不会冒泡到主文档 | 左右翻页、Ctrl+F 和 Focus/面板关闭无法形成统一规则 | 在阅读壳建立快捷键路由，并由 EPUB adapter 转发 iframe 键盘事件 |
+| 当前移动阅读页把目录和整组工具栏堆在正文上方 | 375px 视口首屏几乎看不到正文，不适合长时间阅读 | 6.2 改为侧滑目录抽屉并压缩窄屏工具栏 |
+| `Book.coverPath`/`books.cover_path` 已存在但导入始终写入空值 | 封面功能可复用现有路径字段，无需破坏性迁移 | 新增幂等状态表和封面保存命令，默认背景只作为共享静态资产 |
+| 当前生产首屏入口为 309.13 kB / 93.63 kB gzip，阅读器代码静态进入入口 | 需要延迟加载整个 ReaderShell，而不只是 epubjs/pdfjs | 6.3 以入口 gzip 不高于约 80 kB 为目标 |
+| React 19 lint 禁止 render 阶段写 ref，但 iframe 回调又必须保持稳定以避免 adapter 重开 | 直接把 UI 状态闭包进快捷键 callback 会让 EPUB effect 反复执行 | 用 effect 同步状态 ref，快捷键 callback 本身保持稳定 |
+| `Document` 和 EPUB iframe target 不一定属于主窗口 realm，也不一定实现 `closest()` | `instanceof` 或可选链比较会误判输入目标 | 使用 tagName/isContentEditable 和显式函数存在性检查 |
+| Browser 在 375×760 下测得 body scrollWidth 与 clientWidth 同为 360px，console 无 warning/error | 书架窄屏没有横向溢出，现有移动书架样式可继续复用 | 阅读器抽屉状态交由 seeded Playwright 验证 |
+| 375×760 seeded TXT 截图显示目录为 323px 侧滑层，正文留在遮罩后且目录标题均单行 | 已消除旧版目录占据正文上方 42vh 的问题 | 保留关闭按钮、遮罩与 `Esc` 三种关闭路径 |
+| ImageGen 默认封面原图为 1024×1536、2.89 MB PNG | 直接进入书架会抵消首屏性能优化 | 保留生成原图于 Codex 目录，项目内缩放为 720×1080、119 KB JPEG |
+| React StrictMode 会执行一次 effect setup/cleanup 探测 | 只在初始化 ref 时设 true 会让异步封面 worker 的 state 更新被永久丢弃 | mounted effect 每次 setup 都显式设 true，cleanup 再设 false |
+| PDF 首页封面可直接复用按需加载的 pdfjs-dist worker | 不必让完整 PDF 阅读器进入书架首屏 chunk | 封面模块只静态引用 worker URL，pdfjs 本体在 pending PDF 处理时动态 import |
+| 阶段 6.6 首次在仓库根运行 Cargo 命令找不到 Cargo.toml | 前端验证已通过但 Rust 串联命令中断 | 后续统一在 `apps/desktop/src-tauri` 运行或传 `--manifest-path` |
+| 只对 ReaderShell 使用 `React.lazy` 即可把入口 JS gzip 从 96.74 kB 降到 68.42 kB | 阅读壳自身约 29 kB gzip，是超过 80 kB 目标的主要来源 | 继续拆出阅读器 CSS，最终入口 68.46 kB、首屏 CSS 2.77 kB gzip |
+| Vitest 的一次性 mock 在 lazy 组件尚未完成加载时可能未被消费 | 过早同步断言会使该 mock 留给下一测试，形成看似跨书籍的数据污染 | 所有 lazy reader 内容断言先等待实际内容/状态出现 |
+| reader_cache 同时保存 source_hash 并在读取时 join books.file_hash | 不需要前端主动清理旧解析缓存即可安全失效 | 保存接口从 books 读取当前 hash，读取只返回 hash 匹配记录，删除由外键级联 |
+| 书库加载失败原先只写全局 feedback，ShelfBody 仍按空数组显示空书架 | 数据库故障会被误导为“没有书” | 增加独立 libraryError 和 Retry 状态，错误优先于空状态渲染 |
+| axe 检出 Import 按钮对比度 3.36:1，TXT/PDF 滚动容器不能键盘聚焦 | 不符合 WCAG 2.2 AA 主流程目标 | 深化按钮背景色，并为实际滚动容器增加 tabIndex=0 和可访问名称 |
+| AxeBuilder 扫描 blob EPUB iframe 时 Playwright 可能因跨 frame target 超时 | 出版物正文来自导入文件，不属于应用 UI 可控内容 | 应用壳检查排除 `.reader-epub-host iframe`，保留 EPUB 导航、侧栏、工具栏和面板扫描 |
+| 桌面数据根目录由 Tauri `app.path().app_data_dir()` 解析 | 不能在文档中把单一绝对路径写成所有机器都相同 | 记录 identifier 和各平台典型路径，并说明系统配置可能改变 base directory |
+| 浏览器 fallback 把测试数据和 data URL 封面放在同一 origin 的 localStorage | 它不是打包桌面的持久化后端，但会影响浏览器 QA 重跑 | 隐私文档单独说明 fallback key 前缀和清理站点数据的方法 |
+| Playwright 可用独立 DPR 2 project 复用同一响应式矩阵 | 无需把全部重阅读器 smoke 重跑两次也能覆盖高 DPI 布局 | `chromium-dpr2` 只执行 `responsive.spec.ts`，默认项目继续执行完整 smoke |
+| 包脚本内再次调用 `pnpm` 时会按 PATH 重新解析 shim | 仅用绝对路径启动顶层 pnpm 仍可能让子脚本落到 Codex 内置版本 | 最终验收将 Node 26 和用户 npm 目录置于 PATH 最前，顶层与子脚本均使用 pnpm 11.1.2 |

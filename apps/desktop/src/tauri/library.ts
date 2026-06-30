@@ -7,7 +7,10 @@ function hasTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
 
   return invoke<T>(command, args);
@@ -42,7 +45,11 @@ export async function markBookOpened(bookId: string): Promise<Book> {
       ...book,
       lastOpenedAt: new Date().toISOString(),
     };
-    setFallbackBooks(books.map((currentBook) => (currentBook.id === bookId ? openedBook : currentBook)));
+    setFallbackBooks(
+      books.map((currentBook) =>
+        currentBook.id === bookId ? openedBook : currentBook,
+      ),
+    );
     return openedBook;
   }
 
@@ -66,6 +73,79 @@ export async function removeBook(bookId: string): Promise<RemoveBookResult> {
   }
 
   return invokeCommand<RemoveBookResult>("remove_book", { bookId });
+}
+
+export async function saveBookCover(
+  bookId: string,
+  imageBytes: number[],
+  imageFormat: "webp" | "png" | "jpeg",
+): Promise<Book> {
+  if (!hasTauriRuntime()) {
+    const books = getFallbackBooks();
+    const book = books.find((currentBook) => currentBook.id === bookId);
+
+    if (book === undefined) {
+      throw new Error(`Saving a book cover failed. ${DESKTOP_RUNTIME_ERROR}`);
+    }
+
+    const updatedBook: Book = {
+      ...book,
+      coverPath: bytesToDataUrl(imageBytes, imageFormat),
+      coverStatus: "ready",
+      updatedAt: new Date().toISOString(),
+    };
+    setFallbackBooks(
+      books.map((currentBook) =>
+        currentBook.id === bookId ? updatedBook : currentBook,
+      ),
+    );
+    return updatedBook;
+  }
+
+  return invokeCommand<Book>("save_book_cover", {
+    bookId,
+    imageBytes,
+    imageFormat,
+  });
+}
+
+export async function markBookCoverFallback(bookId: string): Promise<Book> {
+  if (!hasTauriRuntime()) {
+    const books = getFallbackBooks();
+    const book = books.find((currentBook) => currentBook.id === bookId);
+
+    if (book === undefined) {
+      throw new Error(`Updating a book cover failed. ${DESKTOP_RUNTIME_ERROR}`);
+    }
+
+    const updatedBook: Book = {
+      ...book,
+      coverPath: undefined,
+      coverStatus: "fallback",
+      updatedAt: new Date().toISOString(),
+    };
+    setFallbackBooks(
+      books.map((currentBook) =>
+        currentBook.id === bookId ? updatedBook : currentBook,
+      ),
+    );
+    return updatedBook;
+  }
+
+  return invokeCommand<Book>("mark_book_cover_fallback", { bookId });
+}
+
+export async function getBookCoverSource(book: Book): Promise<string | null> {
+  if (book.coverStatus !== "ready" || book.coverPath === undefined) {
+    return null;
+  }
+
+  if (!hasTauriRuntime() || /^(?:blob:|data:|https?:)/i.test(book.coverPath)) {
+    return book.coverPath;
+  }
+
+  const { convertFileSrc } = await import("@tauri-apps/api/core");
+  return convertFileSrc(book.coverPath);
 }
 
 export async function pickBookFile(): Promise<string | null> {
@@ -104,10 +184,39 @@ function getFallbackBooks(): Book[] {
   }
 
   try {
-    return JSON.parse(rawBooks) as Book[];
+    return (JSON.parse(rawBooks) as Book[]).map(normalizeBookCoverState);
   } catch {
     return [];
   }
+}
+
+function normalizeBookCoverState(book: Book): Book {
+  if (book.coverStatus !== undefined) {
+    return book;
+  }
+
+  return {
+    ...book,
+    coverStatus:
+      book.coverPath !== undefined
+        ? "ready"
+        : book.format === "txt"
+          ? "fallback"
+          : "pending",
+  };
+}
+
+function bytesToDataUrl(
+  imageBytes: number[],
+  imageFormat: "webp" | "png" | "jpeg",
+): string {
+  let binary = "";
+
+  for (let offset = 0; offset < imageBytes.length; offset += 8192) {
+    binary += String.fromCharCode(...imageBytes.slice(offset, offset + 8192));
+  }
+
+  return `data:image/${imageFormat};base64,${window.btoa(binary)}`;
 }
 
 function setFallbackBooks(books: Book[]): void {

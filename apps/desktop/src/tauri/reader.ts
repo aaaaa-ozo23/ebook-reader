@@ -8,6 +8,8 @@ import {
   type Locator,
   type PdfLocator,
   type ReaderProgress,
+  defaultReaderLayoutPreferences,
+  type ReaderLayoutPreferences,
   type ReaderTheme,
   type TxtDocument,
   type TxtLocator,
@@ -20,13 +22,18 @@ const FALLBACK_TXT_DOCUMENTS_KEY = "reader:fallback:txtDocuments";
 const FALLBACK_ANNOTATIONS_KEY = "reader:fallback:annotations";
 const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
+const FALLBACK_READER_LAYOUT_KEY = "reader:fallback:readerLayout";
+const FALLBACK_READER_CACHE_KEY = "reader:fallback:readerCache";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
 function hasTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
 
   return invoke<T>(command, args);
@@ -103,6 +110,67 @@ export async function saveReaderTheme(theme: ReaderTheme): Promise<ReaderTheme> 
   return invokeCommand<ReaderTheme>("save_reader_theme", { theme });
 }
 
+export async function getReaderLayoutPreferences(): Promise<ReaderLayoutPreferences> {
+  if (!hasTauriRuntime()) {
+    return getFallbackReaderLayoutPreferences();
+  }
+
+  return invokeCommand<ReaderLayoutPreferences>("get_reader_layout_preferences");
+}
+
+export async function saveReaderLayoutPreferences(
+  preferences: ReaderLayoutPreferences,
+): Promise<ReaderLayoutPreferences> {
+  if (!hasTauriRuntime()) {
+    const normalized = normalizeReaderLayoutPreferences(preferences);
+    window.localStorage.setItem(FALLBACK_READER_LAYOUT_KEY, JSON.stringify(normalized));
+    return normalized;
+  }
+
+  return invokeCommand<ReaderLayoutPreferences>("save_reader_layout_preferences", {
+    preferences,
+  });
+}
+
+export async function getReaderCache(
+  book: Book,
+  cacheKey: string,
+): Promise<string | null> {
+  if (!hasTauriRuntime()) {
+    const cache = getFallbackReaderCache();
+    const entry = cache[`${book.id}:${cacheKey}`];
+
+    return entry?.sourceHash === book.fileHash ? entry.valueJson : null;
+  }
+
+  return invokeCommand<string | null>("get_reader_cache", {
+    bookId: book.id,
+    cacheKey,
+  });
+}
+
+export async function saveReaderCache(
+  book: Book,
+  cacheKey: string,
+  valueJson: string,
+): Promise<void> {
+  if (!hasTauriRuntime()) {
+    const cache = getFallbackReaderCache();
+    cache[`${book.id}:${cacheKey}`] = {
+      sourceHash: book.fileHash,
+      valueJson,
+    };
+    window.localStorage.setItem(FALLBACK_READER_CACHE_KEY, JSON.stringify(cache));
+    return;
+  }
+
+  return invokeCommand<void>("save_reader_cache", {
+    bookId: book.id,
+    cacheKey,
+    valueJson,
+  });
+}
+
 export async function getReadingProgress<TLocator extends Locator = Locator>(
   bookId: string,
 ): Promise<ReaderProgress<TLocator> | null> {
@@ -110,7 +178,9 @@ export async function getReadingProgress<TLocator extends Locator = Locator>(
     return getFallbackReadingProgress<TLocator>(bookId);
   }
 
-  return invokeCommand<ReaderProgress<TLocator> | null>("get_reading_progress", { bookId });
+  return invokeCommand<ReaderProgress<TLocator> | null>("get_reading_progress", {
+    bookId,
+  });
 }
 
 export async function saveReadingProgress(
@@ -325,6 +395,61 @@ function getFallbackReaderTheme(): ReaderTheme {
   }
 }
 
+function getFallbackReaderLayoutPreferences(): ReaderLayoutPreferences {
+  if (typeof window === "undefined") {
+    return defaultReaderLayoutPreferences;
+  }
+
+  const rawPreferences = window.localStorage.getItem(FALLBACK_READER_LAYOUT_KEY);
+
+  if (rawPreferences === null) {
+    return defaultReaderLayoutPreferences;
+  }
+
+  try {
+    return normalizeReaderLayoutPreferences({
+      ...defaultReaderLayoutPreferences,
+      ...(JSON.parse(rawPreferences) as Partial<ReaderLayoutPreferences>),
+    });
+  } catch {
+    return defaultReaderLayoutPreferences;
+  }
+}
+
+interface FallbackReaderCacheEntry {
+  sourceHash: string;
+  valueJson: string;
+}
+
+function getFallbackReaderCache(): Record<string, FallbackReaderCacheEntry> {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const rawCache = window.localStorage.getItem(FALLBACK_READER_CACHE_KEY);
+
+  if (rawCache === null) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(rawCache) as Record<string, FallbackReaderCacheEntry>;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeReaderLayoutPreferences(
+  preferences: ReaderLayoutPreferences,
+): ReaderLayoutPreferences {
+  return {
+    sidebarWidth: Math.min(
+      480,
+      Math.max(240, Math.round(preferences.sidebarWidth / 8) * 8),
+    ),
+  };
+}
+
 function setFallbackReaderTheme(theme: ReaderTheme): void {
   if (typeof window === "undefined") {
     return;
@@ -347,7 +472,10 @@ function getFallbackReadingProgress<TLocator extends Locator>(
   }
 
   try {
-    const progressByBook = JSON.parse(rawProgress) as Record<string, ReaderProgress<TLocator>>;
+    const progressByBook = JSON.parse(rawProgress) as Record<
+      string,
+      ReaderProgress<TLocator>
+    >;
     return progressByBook[bookId] ?? null;
   } catch {
     return null;
@@ -363,7 +491,10 @@ function setFallbackReadingProgress(
   }
 
   const rawProgress = window.localStorage.getItem(FALLBACK_READING_PROGRESS_KEY);
-  let progressByBook: Record<string, ReaderProgress<TxtLocator | EpubLocator | PdfLocator>> = {};
+  let progressByBook: Record<
+    string,
+    ReaderProgress<TxtLocator | EpubLocator | PdfLocator>
+  > = {};
 
   if (rawProgress !== null) {
     try {
@@ -377,7 +508,10 @@ function setFallbackReadingProgress(
   }
 
   progressByBook[bookId] = progress;
-  window.localStorage.setItem(FALLBACK_READING_PROGRESS_KEY, JSON.stringify(progressByBook));
+  window.localStorage.setItem(
+    FALLBACK_READING_PROGRESS_KEY,
+    JSON.stringify(progressByBook),
+  );
 }
 
 function getFallbackBookmarks<TLocator extends Locator>(
@@ -417,7 +551,10 @@ function setFallbackBookmarks<TLocator extends Locator>(
 
   if (rawBookmarks !== null) {
     try {
-      bookmarksByBook = JSON.parse(rawBookmarks) as Record<string, Array<Bookmark<Locator>>>;
+      bookmarksByBook = JSON.parse(rawBookmarks) as Record<
+        string,
+        Array<Bookmark<Locator>>
+      >;
     } catch {
       bookmarksByBook = {};
     }
@@ -499,7 +636,10 @@ function setFallbackAnnotations(bookId: string, annotations: Annotation[]): void
   }
 
   annotationsByBook[bookId] = annotations;
-  window.localStorage.setItem(FALLBACK_ANNOTATIONS_KEY, JSON.stringify(annotationsByBook));
+  window.localStorage.setItem(
+    FALLBACK_ANNOTATIONS_KEY,
+    JSON.stringify(annotationsByBook),
+  );
 }
 
 function updateFallbackAnnotation(
@@ -521,7 +661,8 @@ function updateFallbackAnnotation(
 
   for (const [bookId, annotations] of Object.entries(annotationsByBook)) {
     const annotationIndex = annotations.findIndex(
-      (annotation) => annotation.id === annotationId && annotation.deletedAt === undefined,
+      (annotation) =>
+        annotation.id === annotationId && annotation.deletedAt === undefined,
     );
 
     if (annotationIndex === -1) {

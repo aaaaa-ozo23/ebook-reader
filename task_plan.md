@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 5：`codex/stage5-epub-annotation-render-fix` 已完成 EPUB 选区菜单坐标和批注下划线显示修复，并通过全量验收。
+大阶段 6：complete；阅读体验、可访问性、响应式、封面、性能、错误恢复和隐私文档均已验收，尚未开始大阶段 7。
 
 ## 分支策略
 
@@ -265,6 +265,35 @@
 | 6.3 性能优化 | `codex/stage6-performance` | 按需加载 PDF/EPUB 重依赖；避免 React 级联重渲染；缓存解析结果 | 初始包体和阅读交互性能符合预期 |
 | 6.4 错误和空状态 | `codex/stage6-error-states` | 导入失败、文件丢失、解析失败、数据库失败的用户可理解提示 | 常见失败路径有可恢复操作 |
 | 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | 写明本地数据库、书库副本、日志位置；默认不上传数据 | README/docs 可说明数据存放和删除方式 |
+| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | EPUB 内嵌封面、PDF 首页缩略图；无封面时使用 ImageGen 默认背景和代码渲染书名 | 新旧书籍均显示稳定封面，失败不阻塞导入或阅读 |
+
+### 阶段 6 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 6.1 快捷键和输入 | `codex/stage6-keyboard` | complete | `pnpm ... lint`；desktop test 52 tests；desktop build |
+| 6.2 布局响应式 | `codex/stage6-responsive-layout` | complete | Rust 28 tests；Vitest 53 tests；Playwright 5 tests；Browser/视觉检查 |
+| 6.3 性能优化 | `codex/stage6-performance` | complete | 首屏 JS 68.45 kB gzip；懒加载 CSS；Rust 32 tests；Vitest 62 tests；Playwright 6 tests |
+| 6.4 错误和空状态 | `codex/stage6-error-states` | complete | Vitest 65 tests；Playwright 6 tests；axe 主流程无 serious/critical |
+| 6.5 隐私和数据位置文档 | `codex/stage6-privacy-docs` | complete | README 链接；桌面/浏览器存储、删除、网络和日志行为已说明 |
+| 6.6 书架封面 | `codex/stage6-bookshelf-covers` | complete | Rust 30 tests；Vitest 60 tests；PDF/default-cover Playwright；desktop lint/build |
+
+### 阶段 6 最终验收记录
+
+| 验收项 | 状态 |
+|--------|------|
+| 用户级 pnpm 11.1.2 `install --frozen-lockfile` | passed |
+| `pnpm.cmd run format` | passed |
+| `pnpm.cmd --filter @reader/core build` | passed |
+| `pnpm.cmd --filter @reader/desktop lint` | passed |
+| `pnpm.cmd --filter @reader/desktop test` | passed，65 tests |
+| `pnpm.cmd --filter @reader/desktop build` | passed，首屏入口 68.65 kB gzip |
+| `cargo fmt --check` | passed |
+| `cargo test` | passed，32 tests |
+| `pnpm.cmd --filter @reader/desktop test:e2e` | passed，8 tests；1280×800、900×640、640×640、375×760、DPR 2 |
+| axe 主流程 | passed，书架及 TXT/EPUB/PDF 阅读壳无 serious/critical |
+| 视觉检查 | passed，桌面和 375×760 书架无横向溢出、覆盖或裁切 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，生成 release exe、MSI、NSIS installer |
 
 ## 大阶段 7：Windows 打包与首版发布
 

@@ -12,9 +12,11 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
+import { prepareBookCover } from "./covers/bookCovers";
 import { EpubReaderAdapter, type EpubPosition } from "./epub/EpubReaderAdapter";
 import { PdfReaderAdapter, type PdfPosition } from "./pdf/PdfReaderAdapter";
 import {
+  getBookCoverSource,
   importBook,
   listBooks,
   markBookOpened,
@@ -28,13 +30,17 @@ import {
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
+  getReaderCache,
+  getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
   listBookmarks,
   openTxtBook,
   saveReaderTheme,
+  saveReaderCache,
   saveReadingProgress,
+  saveReaderLayoutPreferences,
   updateAnnotation,
 } from "./tauri/reader";
 
@@ -72,8 +78,9 @@ const epubAdapterOpenMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterSearchMock = vi.hoisted(() =>
   vi.fn(
-    async (): Promise<Array<{ id: string; locator: EpubLocator; excerpt: string }>> =>
-      [],
+    async (): Promise<
+      Array<{ id: string; locator: EpubLocator; excerpt: string }>
+    > => [],
   ),
 );
 const epubAdapterPreviewProgressMock = vi.hoisted(() =>
@@ -156,8 +163,9 @@ const pdfAdapterOpenMock = vi.hoisted(() =>
 const pdfAdapterPreviousMock = vi.hoisted(() => vi.fn(async () => undefined));
 const pdfAdapterSearchMock = vi.hoisted(() =>
   vi.fn(
-    async (): Promise<Array<{ id: string; locator: PdfLocator; excerpt: string }>> =>
-      [],
+    async (): Promise<
+      Array<{ id: string; locator: PdfLocator; excerpt: string }>
+    > => [],
   ),
 );
 const pdfAdapterPreviewProgressMock = vi.hoisted(() =>
@@ -217,8 +225,14 @@ const deleteAnnotationMock = vi.hoisted(() => vi.fn());
 const deleteBookmarkMock = vi.hoisted(() => vi.fn());
 const listAnnotationsMock = vi.hoisted(() => vi.fn());
 const listBookmarksMock = vi.hoisted(() => vi.fn());
+const prepareBookCoverMock = vi.hoisted(() => vi.fn());
+
+vi.mock("./covers/bookCovers", () => ({
+  prepareBookCover: prepareBookCoverMock,
+}));
 
 vi.mock("./tauri/library", () => ({
+  getBookCoverSource: vi.fn(),
   importBook: vi.fn(),
   listBooks: vi.fn(),
   markBookOpened: vi.fn(),
@@ -233,13 +247,17 @@ vi.mock("./tauri/reader", () => ({
   deleteBookmark: deleteBookmarkMock,
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
+  getReaderCache: vi.fn(),
+  getReaderLayoutPreferences: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
   listAnnotations: listAnnotationsMock,
   listBookmarks: listBookmarksMock,
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
+  saveReaderCache: vi.fn(),
   saveReadingProgress: vi.fn(),
+  saveReaderLayoutPreferences: vi.fn(),
   updateAnnotation: vi.fn(),
 }));
 
@@ -386,6 +404,8 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
+const getReaderCacheMock = vi.mocked(getReaderCache);
+const getReaderLayoutPreferencesMock = vi.mocked(getReaderLayoutPreferences);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
 const createAnnotationMocked = vi.mocked(createAnnotation);
@@ -393,6 +413,7 @@ const createBookmarkMocked = vi.mocked(createBookmark);
 const deleteAnnotationMocked = vi.mocked(deleteAnnotation);
 const deleteBookmarkMocked = vi.mocked(deleteBookmark);
 const importBookMock = vi.mocked(importBook);
+const getBookCoverSourceMock = vi.mocked(getBookCoverSource);
 const listAnnotationsMocked = vi.mocked(listAnnotations);
 const listBookmarksMocked = vi.mocked(listBookmarks);
 const listBooksMock = vi.mocked(listBooks);
@@ -401,10 +422,13 @@ const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
+const saveReaderCacheMock = vi.mocked(saveReaderCache);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
+const saveReaderLayoutPreferencesMock = vi.mocked(saveReaderLayoutPreferences);
 const updateAnnotationMock = vi.mocked(updateAnnotation);
 const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
+const prepareBookCoverMocked = vi.mocked(prepareBookCover);
 
 describe("App", () => {
   beforeEach(() => {
@@ -445,6 +469,11 @@ describe("App", () => {
     epubAdapterSearchMock.mockResolvedValue([]);
     pdfAdapterSearchMock.mockResolvedValue([]);
     listBooksMock.mockResolvedValue([]);
+    getBookCoverSourceMock.mockResolvedValue(null);
+    prepareBookCoverMocked.mockImplementation(async (book) => ({
+      ...book,
+      coverStatus: "fallback",
+    }));
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({
         id: bookId,
@@ -454,6 +483,8 @@ describe("App", () => {
     );
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
+    getReaderCacheMock.mockResolvedValue(null);
+    getReaderLayoutPreferencesMock.mockResolvedValue({ sidebarWidth: 292 });
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
     listAnnotationsMocked.mockResolvedValue([]);
@@ -498,12 +529,16 @@ describe("App", () => {
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
+    saveReaderCacheMock.mockResolvedValue(undefined);
     saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
       bookId,
       locator,
       progress,
       updatedAt: "2026-06-19T12:00:00.000Z",
     }));
+    saveReaderLayoutPreferencesMock.mockImplementation(
+      async (preferences) => preferences,
+    );
     pickBookFileMock.mockResolvedValue(null);
     removeBookMock.mockImplementation(async (bookId) => ({
       book: createBook({ id: bookId }),
@@ -560,6 +595,86 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("shows a dedicated library error and retries loading", async () => {
+    const user = userEvent.setup();
+    const recoveredBook = createBook({
+      id: "recovered-library",
+      title: "Recovered Library",
+    });
+    listBooksMock
+      .mockRejectedValueOnce(new Error("database unavailable"))
+      .mockResolvedValueOnce([recoveredBook]);
+
+    render(<App />);
+
+    const errorState = await screen.findByRole("alert");
+    expect(errorState).toHaveTextContent("Library could not be loaded");
+    expect(errorState).toHaveTextContent("database unavailable");
+    expect(screen.queryByText("Your library is empty")).not.toBeInTheDocument();
+
+    await user.click(within(errorState).getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", { name: "Recovered Library" }),
+    ).toBeVisible();
+    expect(listBooksMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders the generated fallback background with an HTML book title", async () => {
+    const book = createBook({
+      id: "fallback-cover",
+      title: "A Very Long Local Book Title",
+      format: "txt",
+      coverStatus: "fallback",
+    });
+    listBooksMock.mockResolvedValueOnce([book]);
+
+    render(<App />);
+
+    const card = await screen.findByRole("article", { name: `${book.title} book` });
+    const cover = card.querySelector(".book-card__cover");
+
+    expect((cover as HTMLElement).style.backgroundImage).toContain(
+      "default-book-cover",
+    );
+    expect(cover?.querySelector("strong")).toHaveTextContent(book.title);
+  });
+
+  it("renders a cached extracted cover and falls back when it cannot load", async () => {
+    const book = createBook({
+      id: "ready-cover",
+      title: "Covered Book",
+      coverPath: "D:\\library\\covers\\ready.webp",
+      coverStatus: "ready",
+    });
+    listBooksMock.mockResolvedValueOnce([book]);
+    getBookCoverSourceMock.mockResolvedValueOnce("data:image/webp;base64,UklGRg==");
+
+    render(<App />);
+
+    const card = await screen.findByRole("article", { name: "Covered Book book" });
+    await waitFor(() => expect(card.querySelector("img")).toBeInTheDocument());
+    fireEvent.error(card.querySelector("img") as HTMLImageElement);
+    expect(card.querySelector("img")).not.toBeInTheDocument();
+    expect(card.querySelector("strong")).toHaveTextContent("Covered Book");
+  });
+
+  it("processes pending covers through the single background worker", async () => {
+    const pendingBook = createBook({
+      id: "pending-cover",
+      title: "Pending Cover",
+      coverStatus: "pending",
+    });
+    listBooksMock.mockResolvedValueOnce([pendingBook]);
+
+    render(<App />);
+
+    await screen.findByRole("article", { name: "Pending Cover book" });
+    await waitFor(() =>
+      expect(prepareBookCoverMocked).toHaveBeenCalledWith(pendingBook),
+    );
+    expect(prepareBookCoverMocked).toHaveBeenCalledTimes(1);
   });
 
   it("removes a book through the right-click actions menu after confirmation", async () => {
@@ -688,10 +803,29 @@ describe("App", () => {
     expect(screen.getAllByRole("article")).toHaveLength(1);
   });
 
+  it("reports when re-import repairs a missing library copy", async () => {
+    const user = userEvent.setup();
+    const repairedBook = createBook({ id: "repaired", title: "Recovered Manual" });
+    pickBookFileMock.mockResolvedValueOnce("D:\\books\\recovered.epub");
+    importBookMock.mockResolvedValueOnce(createImportResult("repaired", repairedBook));
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Your library is empty" });
+    await user.click(screen.getByRole("button", { name: "Import book" }));
+
+    expect(await screen.findByText("Library copy repaired")).toBeVisible();
+    expect(screen.getByText("Recovered Manual is available again.")).toBeVisible();
+  });
+
   it("shows import failures without adding a book", async () => {
     const user = userEvent.setup();
-    pickBookFileMock.mockResolvedValueOnce("D:\\books\\notes.md");
-    importBookMock.mockRejectedValueOnce(new Error("unsupported book format"));
+    const recoveredBook = createBook({ id: "retry-import", title: "Retry Import" });
+    pickBookFileMock
+      .mockResolvedValueOnce("D:\\books\\notes.md")
+      .mockResolvedValueOnce("D:\\books\\retry.epub");
+    importBookMock
+      .mockRejectedValueOnce(new Error("unsupported book format"))
+      .mockResolvedValueOnce(createImportResult("imported", recoveredBook));
 
     render(<App />);
     await screen.findByRole("heading", { name: "Your library is empty" });
@@ -704,6 +838,10 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Import failed");
     expect(screen.getByText("unsupported book format")).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Choose another file" }));
+    expect(await screen.findByRole("heading", { name: "Retry Import" })).toBeVisible();
+    expect(importBookMock).toHaveBeenCalledTimes(2);
   });
 
   it("opens a TXT book in the reader shell and returns to the shelf", async () => {
@@ -722,11 +860,11 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
+    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
     expect(markBookOpenedMock).toHaveBeenCalledWith("txt-book");
     expect(openTxtBookMock).toHaveBeenCalledWith("txt-book");
-    expect(await screen.findByRole("main", { name: "TXT reader" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "第一章 初见" })).toBeVisible();
-    expect(screen.getByText("她推开门。")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "第一章 初见" })).toBeVisible();
+    expect(await screen.findByText("她推开门。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Back to shelf" }));
 
@@ -734,6 +872,124 @@ describe("App", () => {
       await screen.findByRole("main", { name: "Ebook Reader bookshelf" }),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "长夜将明" })).toBeVisible();
+  });
+
+  it("routes reader shortcuts without hijacking editable controls", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "keyboard-txt",
+      title: "Keyboard TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    const viewport = await screen.findByLabelText("Keyboard TXT content");
+    const scrollBy = vi.fn();
+    Object.defineProperty(viewport, "clientHeight", {
+      configurable: true,
+      value: 600,
+    });
+    Object.defineProperty(viewport, "scrollBy", {
+      configurable: true,
+      value: scrollBy,
+    });
+
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "smooth", top: 540 });
+
+    fireEvent.keyDown(document, { ctrlKey: true, key: "f" });
+    const searchInput = await screen.findByRole("textbox", {
+      name: "Search in book",
+    });
+    await waitFor(() => expect(searchInput).toHaveFocus());
+    expect(screen.getByRole("tab", { name: "Search" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+
+    fireEvent.keyDown(searchInput, { key: "ArrowRight" });
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.getByLabelText("Table of contents")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Focus" }));
+    expect(screen.getByRole("button", { name: "Exit focus" })).toBeVisible();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: "Exit focus" }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Focus" })).toHaveFocus(),
+    );
+  });
+
+  it("restores and persists the global contents width", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "layout-txt",
+      title: "Layout TXT",
+      format: "txt",
+    });
+    getReaderLayoutPreferencesMock.mockResolvedValueOnce({ sidebarWidth: 336 });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    const reader = await screen.findByRole("main", { name: "TXT reader" });
+    const widthSlider = await screen.findByRole("slider", { name: "Contents width" });
+    await waitFor(() => expect(widthSlider).toHaveValue("336"));
+    expect(reader).toHaveStyle({ "--reader-sidebar-width": "336px" });
+
+    fireEvent.change(widthSlider, { target: { value: "401" } });
+    expect(widthSlider).toHaveValue("400");
+    expect(reader).toHaveStyle({ "--reader-sidebar-width": "400px" });
+    await waitFor(() =>
+      expect(saveReaderLayoutPreferencesMock).toHaveBeenCalledWith({
+        sidebarWidth: 400,
+      }),
+    );
+  });
+
+  it("forwards EPUB iframe keyboard events to page navigation", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "keyboard-epub",
+      title: "Keyboard EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(EpubReaderAdapterMock).toHaveBeenCalled());
+
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as {
+      onKeyDown?: (event: KeyboardEvent) => void;
+    };
+    const nextEvent = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "ArrowRight",
+    });
+    adapterOptions.onKeyDown?.(nextEvent);
+
+    expect(nextEvent.defaultPrevented).toBe(true);
+    expect(epubAdapterNextMock).toHaveBeenCalledTimes(1);
   });
 
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
@@ -815,6 +1071,53 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
     expect(epubAdapterOpenMock).toHaveBeenCalledWith("epub-book");
     expect(getEpubBookSourceMock).toHaveBeenCalledWith(openedBook);
+    expect(saveReaderCacheMock).toHaveBeenCalledWith(
+      openedBook,
+      "epub_toc_v1",
+      expect.stringContaining("Chapter One"),
+    );
+  });
+
+  it("uses a matching EPUB table-of-contents cache without reparsing", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "cached-epub",
+      title: "Cached EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
+      cacheKey === "epub_toc_v1"
+        ? JSON.stringify([{ id: "cached", title: "Cached Chapter" }])
+        : null,
+    );
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("button", { name: "Cached Chapter" })).toBeVisible();
+    expect(epubAdapterGetTocMock).not.toHaveBeenCalled();
+  });
+
+  it("retries an EPUB parse failure without returning to the shelf", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "retry-epub",
+      title: "Retry EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    epubAdapterOpenMock.mockRejectedValueOnce(new Error("invalid EPUB package"));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid EPUB package");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("button", { name: "Chapter One" })).toBeVisible();
+    expect(epubAdapterOpenMock).toHaveBeenCalledTimes(2);
   });
 
   it("shows selection actions for an EPUB selection", async () => {
@@ -828,7 +1131,9 @@ describe("App", () => {
     markBookOpenedMock.mockResolvedValueOnce(epubBook);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Selection EPUB" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Selection EPUB" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
@@ -863,11 +1168,19 @@ describe("App", () => {
       name: "Selection actions",
     });
     expect(selectionActions).toHaveStyle({ left: "140px", top: "220px" });
-    expect(within(selectionActions).getByRole("button", { name: "Highlight" })).toBeVisible();
-    expect(within(selectionActions).getByRole("button", { name: "Note" })).toBeVisible();
-    expect(within(selectionActions).getByRole("button", { name: "Copy" })).toBeVisible();
+    expect(
+      within(selectionActions).getByRole("button", { name: "Highlight" }),
+    ).toBeVisible();
+    expect(
+      within(selectionActions).getByRole("button", { name: "Note" }),
+    ).toBeVisible();
+    expect(
+      within(selectionActions).getByRole("button", { name: "Copy" }),
+    ).toBeVisible();
 
-    await user.click(within(selectionActions).getByRole("button", { name: "Highlight" }));
+    await user.click(
+      within(selectionActions).getByRole("button", { name: "Highlight" }),
+    );
 
     await waitFor(() =>
       expect(createAnnotationMocked).toHaveBeenCalledWith(
@@ -1055,10 +1368,7 @@ describe("App", () => {
     const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
       | {
           onRelocated?: (position: EpubPosition) => void;
-          onSelected?: (selection: {
-            cfiRange: string;
-            selectedText?: string;
-          }) => void;
+          onSelected?: (selection: { cfiRange: string; selectedText?: string }) => void;
           onSelectionCleared?: () => void;
         }
       | undefined;
@@ -1149,7 +1459,9 @@ describe("App", () => {
     const selectionActions = await screen.findByRole("toolbar", {
       name: "Selection actions",
     });
-    await user.click(within(selectionActions).getByRole("button", { name: "Highlight" }));
+    await user.click(
+      within(selectionActions).getByRole("button", { name: "Highlight" }),
+    );
 
     await waitFor(() =>
       expect(createAnnotationMocked).toHaveBeenCalledWith(
@@ -1334,6 +1646,7 @@ describe("App", () => {
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
     openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
     listAnnotationsMocked.mockResolvedValueOnce([highlight]);
+    createAnnotationMocked.mockRejectedValueOnce(new Error("database busy"));
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "New Note TXT" })).toBeVisible();
@@ -1366,20 +1679,26 @@ describe("App", () => {
     await user.type(noteInput, "new note");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    await waitFor(() =>
-      expect(createAnnotationMocked).toHaveBeenCalledWith(
-        "txt-note-new",
-        "note",
-        expect.objectContaining({
-          kind: "txt",
-          chapterId: "chapter-1-0",
-          charOffset: 7,
-          endCharOffset: 11,
-        }),
-        "#f3bc55",
-        "她推开门",
-        "new note",
-      ),
+    const noteEditor = await screen.findByRole("form", { name: "Edit note" });
+    expect(await within(noteEditor).findByRole("alert")).toHaveTextContent(
+      "database busy",
+    );
+    expect(noteInput).toHaveValue("new note");
+    await user.click(within(noteEditor).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(createAnnotationMocked).toHaveBeenCalledTimes(2));
+    expect(createAnnotationMocked).toHaveBeenLastCalledWith(
+      "txt-note-new",
+      "note",
+      expect.objectContaining({
+        kind: "txt",
+        chapterId: "chapter-1-0",
+        charOffset: 7,
+        endCharOffset: 11,
+      }),
+      "#f3bc55",
+      "她推开门",
+      "new note",
     );
     expect(updateAnnotationMock).not.toHaveBeenCalled();
   });
@@ -1407,7 +1726,9 @@ describe("App", () => {
     ]);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Highlight EPUB" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Highlight EPUB" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
@@ -1446,7 +1767,9 @@ describe("App", () => {
     ]);
 
     render(<App />);
-    expect(await screen.findByRole("heading", { name: "Underline EPUB" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Underline EPUB" }),
+    ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
@@ -1608,9 +1931,7 @@ describe("App", () => {
     await waitFor(() =>
       expect(deleteAnnotationMocked).toHaveBeenCalledWith("annotation-note"),
     );
-    await waitFor(() =>
-      expect(screen.queryByText("old note")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText("old note")).not.toBeInTheDocument());
   });
 
   it("searches TXT content and jumps to a result", async () => {
@@ -2077,7 +2398,9 @@ describe("App", () => {
     });
     listBooksMock.mockResolvedValueOnce([txtBook]);
     markBookOpenedMock.mockResolvedValueOnce(txtBook);
-    openTxtBookMock.mockRejectedValueOnce(new Error("failed to decode TXT file"));
+    openTxtBookMock
+      .mockRejectedValueOnce(new Error("failed to decode TXT file"))
+      .mockResolvedValueOnce(createTxtDocument(txtBook));
 
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Broken TXT" })).toBeVisible();
@@ -2089,6 +2412,25 @@ describe("App", () => {
       "Book could not be opened",
     );
     expect(screen.getByText("failed to decode TXT file")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "第一章 初见" })).toBeVisible();
+    expect(openTxtBookMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a PDF parse failure without returning to the shelf", async () => {
+    const user = userEvent.setup();
+    const pdfBook = createBook({ id: "retry-pdf", title: "Retry PDF", format: "pdf" });
+    listBooksMock.mockResolvedValueOnce([pdfBook]);
+    markBookOpenedMock.mockResolvedValueOnce(pdfBook);
+    pdfAdapterOpenMock.mockRejectedValueOnce(new Error("invalid PDF document"));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("invalid PDF document");
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("Page 1 / 3")).toBeVisible();
+    expect(pdfAdapterOpenMock).toHaveBeenCalledTimes(2);
   });
 
   it("applies and saves reader theme changes immediately", async () => {
@@ -2352,6 +2694,7 @@ function createBook(overrides: Partial<Book> = {}): Book {
     libraryPath: "D:\\library\\sample.epub",
     fileHash: "sample-hash",
     coverPath: undefined,
+    coverStatus: "fallback",
     createdAt: "2026-06-18T08:00:00.000Z",
     updatedAt: "2026-06-18T08:00:00.000Z",
     lastOpenedAt: undefined,

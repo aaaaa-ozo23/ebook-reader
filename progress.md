@@ -1305,3 +1305,95 @@
 - DOM Range 初版选中了分页横向列中的屏外首段；改为用 `frameElement rect + paragraph rect` 找主窗口可见段落，并增加 X/Y 像素断言。
 - Codex 内置 pnpm 使用 Node 24，低于仓库 engine；最终验收改用用户级 `C:\Users\许涵予xhy\AppData\Roaming\npm\pnpm.CMD` 和系统 Node 26.1.0。desktop test 脚本内部再次调用裸 `pnpm` 时仍显示该环境 warning，但 50 tests 全部通过。
 - 首次 `tauri:build` 因旧 release `ebook-reader-desktop.exe` PID 27020 锁定产物失败；仅结束该生成产物进程后重跑通过。
+
+## 2026-06-29 大阶段 6：阅读体验完善与可访问性
+
+### 状态
+- **当前状态：** in_progress
+- **集成分支：** `codex/v0.1.0-mvp-integration`
+- **当前分支：** `codex/stage6-keyboard`
+
+### 已执行
+- 读取并恢复 `task_plan.md`、`findings.md`、`progress.md`，确认阶段 5 已完成且工作区干净。
+- 将集成分支从 `cdee2ca` 快进到 `main` 的 `f04c7b9`。
+- 确认阶段 6 产品决策：EPUB 内嵌封面 + PDF 首页缩略图、目录宽度全局持久化、窄屏侧滑抽屉。
+- 使用现有构建记录首屏基线：入口 309.13 kB / 93.63 kB gzip。
+
+### 阶段 6.1：快捷键和输入
+- **状态：** complete
+- **分支：** `codex/stage6-keyboard`
+- **过程问题：** 首次 lint 拒绝在 render 中写入 `shortcutStateRef.current`；改为 effect 同步快捷键状态，保持事件处理函数稳定且符合 React 19 refs 规则。
+- **过程问题：** 新增快捷键测试首次发现 `Document` target 没有 `closest()` 时被误判为可编辑；改为仅在 `closest` 存在时检查 `contenteditable`。
+- **过程问题：** 对话框引入 React `KeyboardEvent` 类型后遮蔽了窗口原生类型，首次 build 在菜单 window listener 报类型不匹配；窗口监听显式改用 `globalThis.KeyboardEvent`。
+- **实现：** 左右方向键统一驱动 TXT 视口翻页和 EPUB/PDF adapter；EPUB iframe keydown 转发到阅读壳。
+- **实现：** `Ctrl+F` 打开 Search tab 并聚焦输入；`Esc` 依次关闭选区/批注浮层、主题、目录和 Focus 模式。
+- **实现：** 输入、按钮、链接和 contenteditable 不触发翻页；菜单/移除对话框增加初始焦点、Escape、焦点回环和关闭后恢复。
+- **实现：** 添加统一 `focus-visible` 与 `prefers-reduced-motion` 样式。
+- **验证：** desktop lint 通过；Vitest 52 tests 通过；desktop build 通过。
+
+### 阶段 6.2：布局响应式
+- **状态：** complete
+- **分支：** `codex/stage6-responsive-layout`
+- **实现：** 新增共享 `ReaderLayoutPreferences`，前端和 Rust 将目录宽度归一到 240–480px、8px 步长，并通过 `app_settings` 持久化。
+- **实现：** 目录宽度滑杆即时更新 CSS variable，250ms 防抖保存；窄屏隐藏滑杆并使用侧滑抽屉、遮罩和关闭按钮。
+- **实现：** TOC 标题强制单行省略，保留完整 title/aria-label；深层缩进上限为 4 层。
+- **实现：** Tauri 最小窗口宽度从 900px 调整为 640px。
+- **验证：** Rust 28 tests、Vitest 53 tests、core build、desktop lint/build 已通过。
+- **Browser QA：** 375×760 书架 body 无横向溢出，console 无 warning/error；阅读器状态将用 seeded Playwright 验证。
+- **过程问题：** 首次 E2E 因工具栏文案统一为 `Contents`，PDF smoke 仍查找旧的 `Hide contents` 而超时；同步更新既有断言后重跑全套。
+- **视觉检查：** `D:\tl-temp\ebook-reader-stage6-responsive-txt.png` 显示 375×760 下目录为 323px 侧滑层，正文不再被目录推到首屏下方，TOC 标题单行显示。
+- **最终验证：** core build、desktop lint/build、Vitest 53 tests、Rust 28 tests、Playwright 5 tests 全部通过。
+
+### 阶段 6.6：书架封面
+- **状态：** complete
+- **分支：** `codex/stage6-bookshelf-covers`
+- **ImageGen：** 使用内置工具生成青绿/炭黑/琥珀纸张层叠风格、无文字的 2:3 默认封面背景。
+- **资产：** 原图位于 Codex generated_images；项目资产优化为 `apps/desktop/src/assets/default-book-cover.jpg`（720×1080，119 KB）。
+- **实现：** 新增 `BookCoverStatus`、`repaired` 导入状态和幂等迁移 `0003_reader_experience.sql`；旧 EPUB/PDF 默认为 pending，TXT 默认为 fallback。
+- **实现：** EPUB 动态读取内嵌封面，PDF 动态渲染首页，统一通过 Canvas 输出 480×720 WebP；Rust 校验格式/签名/2 MiB 上限并原子保存到 `library/covers/`。
+- **实现：** 书架使用串行后台队列处理新旧 pending 记录；真实封面失败和提取失败均回退共享背景，书名继续由 HTML/CSS 渲染；删除书籍同时删除封面缓存。
+- **实现：** 同哈希文件的书库副本丢失时重新导入会修复副本并返回 `repaired`，打开前会检查书库副本存在。
+- **过程问题：** React StrictMode 的 effect 探测清理曾把 mounted ref 永久留在 false，导致 PDF 封面已保存但书架 state 不刷新；effect setup 显式恢复 true 后真实 PDF 首页 E2E 通过。
+- **过程问题：** 首次从仓库根目录直接运行 `cargo fmt/test` 找不到 Cargo.toml；改在 `apps/desktop/src-tauri` 执行。
+- **验证：** core build、desktop lint/build、Vitest 60 tests、Rust 30 tests，以及默认封面长书名/PDF 首页缩略图 Playwright 均通过。
+
+### 阶段 6.3：性能优化
+- **状态：** complete
+- **分支：** `codex/stage6-performance`
+- **实现：** App 使用 `React.lazy`/`Suspense` 延迟加载完整 ReaderShell；阅读器专属 23.09 kB CSS 独立为异步 chunk，书架首屏 CSS 仅 9.03 kB。
+- **实现：** 侧栏、TXT、EPUB、PDF 四个重组件使用 memo；拖动进度、渲染序列、标注重放和待保存位置继续用 ref 隔离高频临时状态。
+- **实现：** 新增 `get_reader_cache`/`save_reader_cache`，缓存 `epub_locations_v1`、`epub_toc_v1`、`pdf_toc_v1`；SQLite 按当前书籍 file hash 判定命中，失配自动视为无缓存，删除书籍级联删除。
+- **包体：** 书架入口从阶段 6 基线 93.63 kB gzip 降到 68.45 kB，下降 26.9%，低于 80 kB 目标；ReaderShell 为独立 29.25 kB gzip chunk。
+- **过程问题：** 懒加载后旧组件测试在 ReaderShell 出现时就同步断言 TXT 内容，造成一次性 mock 未及时消费并级联污染后续用例；将内容断言改为异步等待后恢复稳定。
+- **过程问题：** 快速连续关闭 Search 侧栏和 Focus 模式时，两个 requestAnimationFrame 焦点恢复任务会竞争；统一取消旧任务并只执行最后一次焦点恢复。
+- **验证：** desktop lint/build、Vitest 62 tests、Rust 32 tests、Playwright 6 tests 通过；Playwright 明确断言书架不请求 ReaderShell/epubjs/pdfjs，TXT 打开不请求 EPUB/PDF 运行时。
+
+### 阶段 6.4：错误和空状态
+- **状态：** complete
+- **分支：** `codex/stage6-error-states`
+- **实现：** 书库加载错误使用独立 alert 状态和 Retry，不再与空书架混淆；空书架新增直接选择书籍入口。
+- **实现：** 导入失败提供重新选择，取消导入保持中性 status；打开书库副本失败提供“Choose file to repair”，并复用 6.6 的 repaired 导入链路。
+- **实现：** TXT、EPUB、PDF 解析错误均提供原地 Retry 和 Back to shelf；加载状态统一使用 `role=status`/`aria-live=polite`。
+- **实现：** 批注创建/更新显示 Saving 状态；失败时草稿和编辑器保持不变，错误直接显示在表单内，可再次 Save。
+- **可访问性：** 接入 `@axe-core/playwright`，书架及 TXT/EPUB/PDF 阅读壳无 serious/critical；EPUB 出版物 blob iframe 因内容由书籍提供而从应用壳扫描中排除。
+- **过程问题：** axe 首次发现 Import 按钮白字/橙色对比度仅 3.36:1，改为更深橙红色；TXT 视口和 PDF 页面框架补充键盘焦点后消除 scrollable-region-focusable。
+- **验证：** desktop lint/build、Vitest 65 tests、Playwright 6 tests 通过；错误重试、草稿保留及 axe 均有自动化覆盖。
+
+### 阶段 6.5：隐私和数据位置文档
+- **状态：** complete
+- **分支：** `codex/stage6-privacy-docs`
+- **实现：** 新增 `docs/privacy-and-data.md` 并从 README 链接。
+- **内容：** 说明 SQLite、书库副本、封面缓存、reader cache 和浏览器 fallback 的位置、内容与删除方式。
+- **内容：** 明确无遥测、分析、云同步、自动上传、用户账户或持久化应用日志；移除书籍不会删除原始导入文件。
+- **验证：** 文档路径、应用 identifier、Rust 实际文件名及 localStorage key 前缀均与实现核对。
+
+### 大阶段 6：最终验收
+- **状态：** complete
+- **集成分支：** `codex/v0.1.0-mvp-integration`
+- **工具链：** 用户级 pnpm 11.1.2、Node 26.1.0；`install --frozen-lockfile` 通过。
+- **前端：** format、core build、desktop lint、desktop build 通过；Vitest 65 tests 通过；最终首屏入口 68.65 kB gzip。
+- **Rust：** `cargo fmt --check`、32 tests 通过；迁移重复执行、封面校验/删除、缓存失效/级联和副本修复均覆盖。
+- **E2E：** 8 tests 通过，覆盖 1280×800、900×640、640×640、375×760 与 DPR 2；console 无 warning/error，axe 无 serious/critical。
+- **视觉：** 已用 `view_image` 检查 `D:\tl-temp\ebook-reader-stage6-final-desktop.png` 与 `D:\tl-temp\ebook-reader-stage6-final-mobile.png`，布局清晰且无溢出/裁切。
+- **打包：** Tauri release build 通过，生成 `ebook-reader-desktop.exe`、MSI 和 NSIS installer。
+- **过程问题：** 新增 Playwright project 后首次 format check 发现 config 未格式化；运行仓库 Prettier 后重跑全套通过。

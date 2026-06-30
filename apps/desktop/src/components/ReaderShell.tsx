@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -13,12 +14,14 @@ import {
 import {
   type Annotation,
   type Bookmark,
+  defaultReaderLayoutPreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
   type Locator,
   type PdfLocator,
   type ReaderProgress,
+  type ReaderLayoutPreferences,
   type ReaderTheme,
   type ReaderThemeMode,
   type SearchHit,
@@ -29,6 +32,8 @@ import {
 } from "@reader/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
+import "./ReaderShell.css";
+
 import {
   createAnnotation,
   createBookmark,
@@ -36,6 +41,8 @@ import {
   deleteBookmark,
   getEpubBookSource,
   getPdfBookSource,
+  getReaderLayoutPreferences,
+  getReaderCache,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
@@ -43,6 +50,8 @@ import {
   openTxtBook,
   saveReaderTheme,
   saveReadingProgress,
+  saveReaderLayoutPreferences,
+  saveReaderCache,
   updateAnnotation,
 } from "../tauri/reader";
 import {
@@ -57,6 +66,11 @@ import {
   type PdfPosition,
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
+
+const EPUB_LOCATIONS_CACHE_KEY = "epub_locations_v1";
+const EPUB_TOC_CACHE_KEY = "epub_toc_v1";
+const PDF_TOC_CACHE_KEY = "pdf_toc_v1";
+let pendingFocusFrameId: number | null = null;
 
 const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -260,6 +274,13 @@ interface ReaderMenuAnchor {
   menuY: number;
 }
 
+interface ReaderNavigationActions {
+  next: () => void;
+  previous: () => void;
+}
+
+type ReaderNavigationRegistration = (actions: ReaderNavigationActions | null) => void;
+
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
@@ -270,6 +291,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
+  const [layoutPreferences, setLayoutPreferences] = useState<ReaderLayoutPreferences>(
+    defaultReaderLayoutPreferences,
+  );
+  const [layoutError, setLayoutError] = useState<string | null>(null);
   const [readingProgress, setReadingProgress] =
     useState<ReaderProgress<TxtLocator> | null>(null);
   const [tocItems, setTocItems] = useState<TocItem[]>([]);
@@ -279,6 +304,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotationsBookId, setAnnotationsBookId] = useState(book.id);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [noteSaveError, setNoteSaveError] = useState<string | null>(null);
+  const [isNoteSaving, setIsNoteSaving] = useState(false);
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -294,11 +321,44 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const selectionMenuRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLFormElement | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
+  const navigationActionsRef = useRef<ReaderNavigationActions | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
+  const focusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarCloseButtonRef = useRef<HTMLButtonElement | null>(null);
+  const layoutSaveTimerRef = useRef<number | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
   const [epubJumpRequest, setEpubJumpRequest] = useState<EpubJumpRequest | null>(null);
   const [pdfJumpRequest, setPdfJumpRequest] = useState<PdfJumpRequest | null>(null);
+  const [txtRetryVersion, setTxtRetryVersion] = useState(0);
+  const shortcutStateRef = useRef({
+    isChromeHidden,
+    isSidebarOpen,
+    isThemePanelOpen,
+    noteEditor,
+    notePopover,
+    selectionSnapshot,
+  });
+
+  useEffect(() => {
+    shortcutStateRef.current = {
+      isChromeHidden,
+      isSidebarOpen,
+      isThemePanelOpen,
+      noteEditor,
+      notePopover,
+      selectionSnapshot,
+    };
+  }, [
+    isChromeHidden,
+    isSidebarOpen,
+    isThemePanelOpen,
+    noteEditor,
+    notePopover,
+    selectionSnapshot,
+  ]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -323,6 +383,36 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       isCurrent = false;
     };
   }, [book.id]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getReaderLayoutPreferences()
+      .then((savedPreferences) => {
+        if (isCurrent) {
+          setLayoutPreferences(savedPreferences);
+          setLayoutError(null);
+        }
+      })
+      .catch((layoutLoadError: unknown) => {
+        if (isCurrent) {
+          setLayoutError(getErrorMessage(layoutLoadError));
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book.id]);
+
+  useEffect(
+    () => () => {
+      if (layoutSaveTimerRef.current !== null) {
+        window.clearTimeout(layoutSaveTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let isCurrent = true;
@@ -436,7 +526,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     return () => {
       isCurrent = false;
     };
-  }, [book.format, book.id]);
+  }, [book.format, book.id, txtRetryVersion]);
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -459,14 +549,28 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     () => (annotationsBookId === book.id ? annotations : []),
     [annotations, annotationsBookId, book.id],
   );
-  const visibleAnnotationError =
-    annotationsBookId === book.id ? annotationError : null;
+  const visibleAnnotationError = annotationsBookId === book.id ? annotationError : null;
   const currentBookmarkLocator =
-    currentBookmarkPosition?.bookId === book.id ? currentBookmarkPosition.locator : null;
+    currentBookmarkPosition?.bookId === book.id
+      ? currentBookmarkPosition.locator
+      : null;
+
+  const closeSidebar = useCallback(() => {
+    setIsSidebarOpen(false);
+    focusElementSoon(sidebarToggleRef);
+  }, []);
 
   const toggleSidebar = useCallback(() => {
-    setIsSidebarOpen((currentValue) => !currentValue);
-  }, []);
+    if (isSidebarOpen) {
+      closeSidebar();
+      return;
+    }
+
+    setIsSidebarOpen(true);
+    if (window.matchMedia?.("(max-width: 760px)").matches) {
+      focusElementSoon(sidebarCloseButtonRef);
+    }
+  }, [closeSidebar, isSidebarOpen]);
 
   const toggleThemePanel = useCallback(() => {
     setIsThemePanelOpen((currentValue) => !currentValue);
@@ -480,7 +584,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   const exitFocusMode = useCallback(() => {
     setIsChromeHidden(false);
+    focusElementSoon(focusButtonRef);
   }, []);
+
+  const handleNavigationActionsChange = useCallback<ReaderNavigationRegistration>(
+    (actions) => {
+      navigationActionsRef.current = actions;
+    },
+    [],
+  );
 
   const handleThemeChange = useCallback((nextTheme: ReaderTheme) => {
     setTheme(nextTheme);
@@ -489,6 +601,27 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     void saveReaderTheme(nextTheme).catch((saveError: unknown) => {
       setThemeError(getErrorMessage(saveError));
     });
+  }, []);
+
+  const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
+    const nextPreferences = {
+      sidebarWidth: Math.min(480, Math.max(240, Math.round(sidebarWidth / 8) * 8)),
+    };
+    setLayoutPreferences(nextPreferences);
+    setLayoutError(null);
+
+    if (layoutSaveTimerRef.current !== null) {
+      window.clearTimeout(layoutSaveTimerRef.current);
+    }
+
+    layoutSaveTimerRef.current = window.setTimeout(() => {
+      layoutSaveTimerRef.current = null;
+      void saveReaderLayoutPreferences(nextPreferences).catch(
+        (layoutSaveError: unknown) => {
+          setLayoutError(getErrorMessage(layoutSaveError));
+        },
+      );
+    }, 250);
   }, []);
 
   const handleTxtProgressChange = useCallback(
@@ -531,7 +664,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             requestId: (currentRequest?.requestId ?? 0) + 1,
           }));
           setActiveTocItemId(chapter.id);
-          handleTxtProgressChange(locator, chapter.startChar / Math.max(document.charCount, 1));
+          handleTxtProgressChange(
+            locator,
+            chapter.startChar / Math.max(document.charCount, 1),
+          );
         }
         return;
       }
@@ -785,22 +921,97 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       setNotePopover(null);
     };
 
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setSelectionSnapshot(null);
-        setNoteEditor(null);
-        setNotePopover(null);
-      }
-    };
-
     window.document.addEventListener("pointerdown", handlePointerDown);
-    window.document.addEventListener("keydown", handleKeyDown);
 
     return () => {
       window.document.removeEventListener("pointerdown", handlePointerDown);
-      window.document.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
+
+  const handleReaderKeyDown = useCallback((event: globalThis.KeyboardEvent) => {
+    const shortcutState = shortcutStateRef.current;
+    const normalizedKey = event.key.toLocaleLowerCase();
+
+    if ((event.ctrlKey || event.metaKey) && normalizedKey === "f") {
+      event.preventDefault();
+      setIsChromeHidden(false);
+      setIsThemePanelOpen(false);
+      setIsSidebarOpen(true);
+      setSidebarTab("search");
+      focusElementSoon(searchInputRef);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (
+        shortcutState.selectionSnapshot !== null ||
+        shortcutState.noteEditor !== null ||
+        shortcutState.notePopover !== null
+      ) {
+        event.preventDefault();
+        setSelectionSnapshot(null);
+        setNoteEditor(null);
+        setNotePopover(null);
+        return;
+      }
+
+      if (shortcutState.isThemePanelOpen) {
+        event.preventDefault();
+        setIsThemePanelOpen(false);
+        return;
+      }
+
+      if (shortcutState.isSidebarOpen) {
+        event.preventDefault();
+        setIsSidebarOpen(false);
+        focusElementSoon(sidebarToggleRef);
+        return;
+      }
+
+      if (shortcutState.isChromeHidden) {
+        event.preventDefault();
+        setIsChromeHidden(false);
+        focusElementSoon(focusButtonRef);
+      }
+      return;
+    }
+
+    if (
+      (event.key !== "ArrowLeft" && event.key !== "ArrowRight") ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      isEditableKeyboardTarget(event.target)
+    ) {
+      return;
+    }
+
+    const navigationActions = navigationActionsRef.current;
+
+    if (navigationActions === null) {
+      return;
+    }
+
+    event.preventDefault();
+    setSelectionSnapshot(null);
+    setNoteEditor(null);
+    setNotePopover(null);
+
+    if (event.key === "ArrowLeft") {
+      navigationActions.previous();
+    } else {
+      navigationActions.next();
+    }
+  }, []);
+
+  useEffect(() => {
+    window.document.addEventListener("keydown", handleReaderKeyDown);
+
+    return () => {
+      window.document.removeEventListener("keydown", handleReaderKeyDown);
+    };
+  }, [handleReaderKeyDown]);
 
   const handleCopySelection = useCallback(() => {
     const selectedText = selectionSnapshot?.selectedText;
@@ -849,7 +1060,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      void createAnnotation(book.id, "highlight", snapshot.locator, color, snapshot.selectedText)
+      void createAnnotation(
+        book.id,
+        "highlight",
+        snapshot.locator,
+        color,
+        snapshot.selectedText,
+      )
         .then((annotation) => {
           setAnnotationsBookId(book.id);
           setAnnotations((currentAnnotations) => [
@@ -986,6 +1203,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleNoteDraftChange = useCallback((draft: string) => {
+    setNoteSaveError(null);
     setNoteEditor((currentEditor) =>
       currentEditor === null
         ? null
@@ -997,17 +1215,20 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleCancelNoteEditor = useCallback(() => {
+    setNoteSaveError(null);
     setNoteEditor(null);
   }, []);
 
   const handleSaveNoteEditor = useCallback(() => {
     const editor = noteEditor;
 
-    if (editor === null) {
+    if (editor === null || isNoteSaving) {
       return;
     }
 
     setAnnotationError(null);
+    setNoteSaveError(null);
+    setIsNoteSaving(true);
 
     if (editor.annotationId !== undefined) {
       void updateAnnotation(editor.annotationId, editor.color, editor.draft)
@@ -1015,11 +1236,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           setAnnotations((currentAnnotations) =>
             mergeUpdatedAnnotations(currentAnnotations, [updatedAnnotation]),
           );
+          setNoteSaveError(null);
           setNoteEditor(null);
         })
         .catch((annotationUpdateError: unknown) => {
-          setAnnotationError(getErrorMessage(annotationUpdateError));
-        });
+          const message = getErrorMessage(annotationUpdateError);
+          setAnnotationError(message);
+          setNoteSaveError(message);
+        })
+        .finally(() => setIsNoteSaving(false));
       return;
     }
 
@@ -1039,13 +1264,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             (currentAnnotation) => currentAnnotation.id !== annotation.id,
           ),
         ]);
+        setNoteSaveError(null);
         setNoteEditor(null);
       })
       .catch((annotationCreateError: unknown) => {
         setAnnotationsBookId(book.id);
-        setAnnotationError(getErrorMessage(annotationCreateError));
-      });
-  }, [book.id, noteEditor]);
+        const message = getErrorMessage(annotationCreateError);
+        setAnnotationError(message);
+        setNoteSaveError(message);
+      })
+      .finally(() => setIsNoteSaving(false));
+  }, [book.id, isNoteSaving, noteEditor]);
 
   const readerStyle = useMemo(
     () =>
@@ -1057,9 +1286,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         "--txt-reader-line-height": theme.lineHeight,
         "--txt-reader-paragraph-spacing": `${theme.paragraphSpacing}px`,
         "--txt-reader-page-margin": `${theme.pageMargin}px`,
+        "--reader-sidebar-width": `${layoutPreferences.sidebarWidth}px`,
         ...getReaderThemeTokens(theme),
       }) as CSSProperties,
-    [theme],
+    [layoutPreferences.sidebarWidth, theme],
   );
 
   return (
@@ -1071,7 +1301,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       data-reader-theme={theme.mode}
       aria-label={`${formatBookFormat(book.format)} reader`}
     >
-      <ReaderSidebar
+      {isSidebarOpen ? (
+        <button
+          type="button"
+          className="reader-sidebar-backdrop"
+          aria-label="Close contents"
+          onClick={closeSidebar}
+        />
+      ) : null}
+      <MemoizedReaderSidebar
         activeTocItemId={activeTocItemId}
         activeTab={sidebarTab}
         annotationError={visibleAnnotationError}
@@ -1080,6 +1318,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         bookmarkError={visibleBookmarkError}
         items={tocItems}
         isOpen={isSidebarOpen}
+        layoutError={layoutError}
         label={`${formatBookFormat(book.format)} contents`}
         isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
@@ -1092,8 +1331,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         onJumpToSearchResult={handleJumpToSearchResult}
         onSearchQueryChange={setSearchQuery}
         onSearchSubmit={handleSearchSubmit}
+        onClose={closeSidebar}
+        onSidebarWidthChange={handleSidebarWidthChange}
         onTabChange={setSidebarTab}
+        sidebarCloseButtonRef={sidebarCloseButtonRef}
+        sidebarWidth={layoutPreferences.sidebarWidth}
         searchError={searchError}
+        searchInputRef={searchInputRef}
         searchQuery={searchQuery}
         searchResults={searchResults}
       />
@@ -1101,6 +1345,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <header className="reader-topbar">
           <div className="reader-title-group">
             <button
+              ref={sidebarToggleRef}
               type="button"
               className="reader-link-button"
               onClick={onBackToLibrary}
@@ -1114,11 +1359,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           </div>
           <div className="reader-toolbar" aria-label="Reader tools">
             <button
+              ref={focusButtonRef}
               type="button"
               className="reader-tool-button"
+              aria-expanded={isSidebarOpen}
               onClick={toggleSidebar}
             >
-              {isSidebarOpen ? "Hide contents" : "Contents"}
+              Contents
             </button>
             <button
               type="button"
@@ -1150,7 +1397,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           </button>
         ) : null}
         {book.format === "txt" ? (
-          <TxtReaderContent
+          <MemoizedTxtReaderContent
             annotations={visibleAnnotations}
             blocks={blocks}
             document={document}
@@ -1161,12 +1408,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onActiveChapterChange={setActiveTocItemId}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onProgressChange={handleTxtProgressChange}
+            onRetry={() => setTxtRetryVersion((version) => version + 1)}
+            onNavigationActionsChange={handleNavigationActionsChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
           />
         ) : null}
         {book.format === "epub" ? (
-          <EpubReaderContent
+          <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
             jumpRequest={epubJumpRequest}
@@ -1176,6 +1425,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onNavigationActionsChange={handleNavigationActionsChange}
+            onReaderKeyDown={handleReaderKeyDown}
             onSelectionCleared={handleClearSelectionUi}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
@@ -1183,7 +1434,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           />
         ) : null}
         {book.format === "pdf" ? (
-          <PdfReaderContent
+          <MemoizedPdfReaderContent
             annotations={visibleAnnotations}
             book={book}
             jumpRequest={pdfJumpRequest}
@@ -1193,6 +1444,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
+            onNavigationActionsChange={handleNavigationActionsChange}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
@@ -1214,6 +1466,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <NoteEditor
           editor={noteEditor}
           editorRef={noteEditorRef}
+          error={noteSaveError}
+          isSaving={isNoteSaving}
           onCancel={handleCancelNoteEditor}
           onDraftChange={handleNoteDraftChange}
           onSave={handleSaveNoteEditor}
@@ -1240,8 +1494,10 @@ interface ReaderSidebarProps {
   items: TocItem[];
   isOpen: boolean;
   isSearchLoading: boolean;
+  layoutError: string | null;
   label: string;
   onBackToLibrary: () => void;
+  onClose: () => void;
   onCreateBookmark: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
@@ -1251,10 +1507,14 @@ interface ReaderSidebarProps {
   onJumpToSearchResult: (hit: SearchHit<Locator>) => void;
   onSearchQueryChange: (query: string) => void;
   onSearchSubmit: (query: string) => void;
+  onSidebarWidthChange: (width: number) => void;
   onTabChange: (tab: ReaderSidebarTab) => void;
   searchError: string | null;
+  searchInputRef: RefObject<HTMLInputElement | null>;
   searchQuery: string;
   searchResults: Array<SearchHit<Locator>>;
+  sidebarCloseButtonRef: RefObject<HTMLButtonElement | null>;
+  sidebarWidth: number;
 }
 
 function ReaderSidebar({
@@ -1267,8 +1527,10 @@ function ReaderSidebar({
   items,
   isOpen,
   isSearchLoading,
+  layoutError,
   label,
   onBackToLibrary,
+  onClose,
   onCreateBookmark,
   onDeleteAnnotation,
   onDeleteBookmark,
@@ -1278,10 +1540,14 @@ function ReaderSidebar({
   onJumpToSearchResult,
   onSearchQueryChange,
   onSearchSubmit,
+  onSidebarWidthChange,
   onTabChange,
   searchError,
+  searchInputRef,
   searchQuery,
   searchResults,
+  sidebarCloseButtonRef,
+  sidebarWidth,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
@@ -1311,9 +1577,24 @@ function ReaderSidebar({
       aria-label="Table of contents"
       aria-hidden={!isOpen}
     >
-      <button type="button" className="reader-sidebar__back" onClick={onBackToLibrary}>
-        Back to shelf
-      </button>
+      <div className="reader-sidebar__actions">
+        <button
+          type="button"
+          className="reader-sidebar__back"
+          onClick={onBackToLibrary}
+        >
+          Back to shelf
+        </button>
+        <button
+          ref={sidebarCloseButtonRef}
+          type="button"
+          className="reader-sidebar__close"
+          aria-label="Close contents"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
       <div className="reader-sidebar-tabs" role="tablist" aria-label="Reader sidebar">
         {(["contents", "bookmarks", "notes", "search"] as ReaderSidebarTab[]).map(
           (tab) => (
@@ -1329,6 +1610,25 @@ function ReaderSidebar({
           ),
         )}
       </div>
+      <label className="reader-sidebar-size">
+        <span>
+          Contents width <output>{sidebarWidth}px</output>
+        </span>
+        <input
+          type="range"
+          min="240"
+          max="480"
+          step="8"
+          value={sidebarWidth}
+          aria-label="Contents width"
+          onChange={(event) => onSidebarWidthChange(Number(event.currentTarget.value))}
+        />
+      </label>
+      {layoutError !== null ? (
+        <p className="reader-sidebar__error" role="alert">
+          Layout preference could not be saved. {layoutError}
+        </p>
+      ) : null}
       {activeTab === "contents" ? (
         <>
           <h2>Contents</h2>
@@ -1347,8 +1647,10 @@ function ReaderSidebar({
                     className={`reader-toc__item ${
                       isActive ? "reader-toc__item--active" : ""
                     }`}
-                    style={{ paddingLeft: `${12 + item.depth * 14}px` }}
+                    style={{ paddingLeft: `${12 + Math.min(item.depth, 4) * 14}px` }}
+                    aria-label={item.title}
                     aria-current={isActive ? "location" : undefined}
+                    title={item.title}
                     onClick={() => handleJump(item.id)}
                   >
                     {item.title}
@@ -1363,7 +1665,11 @@ function ReaderSidebar({
         <section className="reader-sidebar-panel" aria-label="Bookmarks">
           <div className="reader-sidebar-panel__header">
             <h2>Bookmarks</h2>
-            <button type="button" className="reader-sidebar__action" onClick={onCreateBookmark}>
+            <button
+              type="button"
+              className="reader-sidebar__action"
+              onClick={onCreateBookmark}
+            >
               Add
             </button>
           </div>
@@ -1438,6 +1744,7 @@ function ReaderSidebar({
             <label>
               <span>Search in book</span>
               <input
+                ref={searchInputRef}
                 aria-label="Search in book"
                 value={searchQuery}
                 onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
@@ -1452,7 +1759,9 @@ function ReaderSidebar({
               {searchError}
             </p>
           ) : null}
-          {searchQuery.trim() !== "" && !isSearchLoading && searchResults.length === 0 ? (
+          {searchQuery.trim() !== "" &&
+          !isSearchLoading &&
+          searchResults.length === 0 ? (
             <p className="reader-sidebar__empty">No results.</p>
           ) : null}
           {searchResults.length > 0 ? (
@@ -1484,11 +1793,7 @@ interface ReaderNoteItemProps {
   onJump: (annotation: Annotation) => void;
 }
 
-function ReaderNoteItem({
-  annotation,
-  onDelete,
-  onJump,
-}: ReaderNoteItemProps) {
+function ReaderNoteItem({ annotation, onDelete, onJump }: ReaderNoteItemProps) {
   const excerpt =
     annotation.selectedText ??
     annotation.locator.selectedText ??
@@ -1502,8 +1807,7 @@ function ReaderNoteItem({
           className="reader-note__swatch"
           style={
             {
-              "--reader-highlight-color":
-                annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+              "--reader-highlight-color": annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
             } as CSSProperties
           }
           aria-hidden="true"
@@ -1588,6 +1892,8 @@ function SelectionMenu({
 interface NoteEditorProps {
   editor: ReaderNoteEditorState | null;
   editorRef: RefObject<HTMLFormElement | null>;
+  error: string | null;
+  isSaving: boolean;
   onCancel: () => void;
   onDraftChange: (draft: string) => void;
   onSave: () => void;
@@ -1596,6 +1902,8 @@ interface NoteEditorProps {
 function NoteEditor({
   editor,
   editorRef,
+  error,
+  isSaving,
   onCancel,
   onDraftChange,
   onSave,
@@ -1621,12 +1929,16 @@ function NoteEditor({
       <textarea
         aria-label={`Note for ${editor.selectedText}`}
         autoFocus
+        disabled={isSaving}
         value={editor.draft}
         onChange={(event) => onDraftChange(event.currentTarget.value)}
       />
+      {error !== null ? <p role="alert">{error}</p> : null}
       <div className="reader-note-editor__actions">
-        <button type="submit">Save</button>
-        <button type="button" onClick={onCancel}>
+        <button type="submit" disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save"}
+        </button>
+        <button type="button" disabled={isSaving} onClick={onCancel}>
           Cancel
         </button>
       </div>
@@ -1692,11 +2004,7 @@ function NotePopover({
           );
         })}
       </div>
-      <button
-        type="button"
-        className="reader-note-popover__add"
-        onClick={onAddNote}
-      >
+      <button type="button" className="reader-note-popover__add" onClick={onAddNote}>
         Add note
       </button>
     </div>
@@ -1713,7 +2021,9 @@ interface TxtReaderContentProps {
   jumpRequest: TxtJumpRequest | null;
   onActiveChapterChange: (chapterId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
+  onRetry: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onBackToLibrary: () => void;
 }
@@ -1728,7 +2038,9 @@ function TxtReaderContent({
   jumpRequest,
   onActiveChapterChange,
   onAnnotationActivate,
+  onNavigationActionsChange,
   onProgressChange,
+  onRetry,
   onSelectionChange,
   onBackToLibrary,
 }: TxtReaderContentProps) {
@@ -1788,6 +2100,40 @@ function TxtReaderContent({
     pendingProgressRef.current = null;
     onProgressChange(pendingProgress.locator, pendingProgress.progress);
   }, [onProgressChange]);
+
+  const scrollByPage = useCallback((direction: -1 | 1) => {
+    const viewport = viewportRef.current;
+
+    if (viewport === null) {
+      return;
+    }
+
+    const delta = Math.max(viewport.clientHeight * 0.9, 1) * direction;
+    const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth";
+
+    if (typeof viewport.scrollBy === "function") {
+      viewport.scrollBy({
+        behavior,
+        top: delta,
+      });
+      return;
+    }
+
+    viewport.scrollTop += delta;
+  }, []);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: () => scrollByPage(1),
+      previous: () => scrollByPage(-1),
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [onNavigationActionsChange, scrollByPage]);
 
   useEffect(
     () => () => {
@@ -1949,7 +2295,12 @@ function TxtReaderContent({
 
   if (isLoading) {
     return (
-      <section className="reader-state" aria-label="Loading TXT book">
+      <section
+        className="reader-state"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading TXT book"
+      >
         <div className="loading-line" aria-hidden="true" />
         <p>Opening TXT book...</p>
       </section>
@@ -1961,9 +2312,18 @@ function TxtReaderContent({
       <section className="reader-state reader-state--error" role="alert">
         <h2>Book could not be opened</h2>
         <p>{error}</p>
-        <button type="button" className="reader-tool-button" onClick={onBackToLibrary}>
-          Back to shelf
-        </button>
+        <div className="reader-state__actions">
+          <button type="button" className="reader-tool-button" onClick={onRetry}>
+            Retry
+          </button>
+          <button
+            type="button"
+            className="reader-tool-button"
+            onClick={onBackToLibrary}
+          >
+            Back to shelf
+          </button>
+        </div>
       </section>
     );
   }
@@ -1977,6 +2337,7 @@ function TxtReaderContent({
       ref={viewportRef}
       className="reader-viewport"
       aria-label={`${document.book.title} content`}
+      tabIndex={0}
       onKeyUp={handleTextSelection}
       onMouseUp={handleTextSelection}
       onScroll={handleScroll}
@@ -2010,7 +2371,9 @@ function TxtReaderContent({
                 }}
               >
                 {block.kind === "heading" ? (
-                  <h2>{renderAnnotatedText(block, annotations, onAnnotationActivate)}</h2>
+                  <h2>
+                    {renderAnnotatedText(block, annotations, onAnnotationActivate)}
+                  </h2>
                 ) : (
                   <p>{renderAnnotatedText(block, annotations, onAnnotationActivate)}</p>
                 )}
@@ -2033,6 +2396,8 @@ interface EpubReaderContentProps {
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: EpubLocator) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
+  onReaderKeyDown: (event: globalThis.KeyboardEvent) => void;
   onSelectionCleared: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
@@ -2049,6 +2414,8 @@ function EpubReaderContent({
   onAnnotationActivate,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onNavigationActionsChange,
+  onReaderKeyDown,
   onSelectionCleared,
   onSelectionChange,
   onSearchProviderChange,
@@ -2066,11 +2433,11 @@ function EpubReaderContent({
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
-  const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] =
-    useState(false);
+  const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] = useState(false);
   const [position, setPosition] = useState<EpubPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
@@ -2196,10 +2563,13 @@ function EpubReaderContent({
           throw new Error("EPUB reader viewport is unavailable.");
         }
 
-        const [sourceUrl, savedProgress] = await Promise.all([
-          getEpubBookSource(book),
-          getReadingProgress<EpubLocator>(book.id),
-        ]);
+        const [sourceUrl, savedProgress, cachedLocations, cachedToc] =
+          await Promise.all([
+            getEpubBookSource(book),
+            getReadingProgress<EpubLocator>(book.id),
+            getReaderCache(book, EPUB_LOCATIONS_CACHE_KEY).catch(() => null),
+            getReaderCache(book, EPUB_TOC_CACHE_KEY).catch(() => null),
+          ]);
 
         if (!isCurrent || hostRef.current === null) {
           return;
@@ -2207,11 +2577,20 @@ function EpubReaderContent({
 
         const adapter = new EpubReaderAdapter({
           bookId: book.id,
+          cachedLocations: cachedLocations ?? undefined,
           sourceUrl,
           container: hostRef.current,
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
+          onKeyDown: onReaderKeyDown,
+          onLocationsGenerated: (serializedLocations) => {
+            void saveReaderCache(
+              book,
+              EPUB_LOCATIONS_CACHE_KEY,
+              serializedLocations,
+            ).catch(() => undefined);
+          },
           onSelectionCleared,
           onSelected: (selection) => {
             const currentPosition = positionRef.current;
@@ -2244,13 +2623,23 @@ function EpubReaderContent({
         adapterRef.current = adapter;
 
         await adapter.open(book.id);
-        onSearchProviderChange((searchQuery) =>
-          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        onSearchProviderChange(
+          (searchQuery) =>
+            adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
         );
         appliedEpubHighlightSignaturesRef.current = new Map();
         appliedEpubUnderlineSignaturesRef.current = new Map();
         setIsAdapterReadyForHighlights(true);
-        const nextTocItems = await adapter.getToc();
+        const cachedTocItems = parseCachedToc(cachedToc);
+        const nextTocItems = cachedTocItems ?? (await adapter.getToc());
+
+        if (cachedTocItems === null) {
+          void saveReaderCache(
+            book,
+            EPUB_TOC_CACHE_KEY,
+            JSON.stringify(nextTocItems),
+          ).catch(() => undefined);
+        }
 
         if (isCurrent) {
           onTocChange(nextTocItems);
@@ -2283,9 +2672,11 @@ function EpubReaderContent({
     book,
     handleRelocated,
     onSearchProviderChange,
+    onReaderKeyDown,
     onSelectionChange,
     onSelectionCleared,
     onTocChange,
+    retryVersion,
   ]);
 
   useEffect(() => {
@@ -2379,6 +2770,17 @@ function EpubReaderContent({
     setPreviewPosition(null);
     void adapterRef.current?.next();
   }, []);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: handleNext,
+      previous: handlePrevious,
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
   const handleSpreadModeChange = useCallback((mode: EpubSpreadMode) => {
     setRequestedSpreadMode(mode);
@@ -2512,6 +2914,8 @@ function EpubReaderContent({
           {isLoading ? (
             <section
               className="reader-state reader-state--overlay"
+              role="status"
+              aria-live="polite"
               aria-label="Loading EPUB book"
             >
               <div className="loading-line" aria-hidden="true" />
@@ -2525,13 +2929,22 @@ function EpubReaderContent({
             >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button
-                type="button"
-                className="reader-tool-button"
-                onClick={onBackToLibrary}
-              >
-                Back to shelf
-              </button>
+              <div className="reader-state__actions">
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={() => setRetryVersion((version) => version + 1)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={onBackToLibrary}
+                >
+                  Back to shelf
+                </button>
+              </div>
             </section>
           ) : null}
           <div
@@ -2644,6 +3057,7 @@ interface PdfReaderContentProps {
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
+  onNavigationActionsChange: ReaderNavigationRegistration;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
@@ -2659,6 +3073,7 @@ function PdfReaderContent({
   onAnnotationActivate,
   onBackToLibrary,
   onCurrentLocatorChange,
+  onNavigationActionsChange,
   onSelectionChange,
   onSearchProviderChange,
   onTocChange,
@@ -2678,6 +3093,7 @@ function PdfReaderContent({
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
@@ -2991,9 +3407,10 @@ function PdfReaderContent({
       onTocChange([]);
 
       try {
-        const [sourceUrl, savedProgress] = await Promise.all([
+        const [sourceUrl, savedProgress, cachedToc] = await Promise.all([
           getPdfBookSource(book),
           getReadingProgress<PdfLocator>(book.id),
+          getReaderCache(book, PDF_TOC_CACHE_KEY).catch(() => null),
         ]);
 
         if (!isCurrent) {
@@ -3017,11 +3434,21 @@ function PdfReaderContent({
         }
 
         adapterRef.current = adapter;
-        onSearchProviderChange((searchQuery) =>
-          adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
+        onSearchProviderChange(
+          (searchQuery) =>
+            adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
         );
         await adapter.setTheme(themeRef.current);
-        const nextTocItems = await adapter.getToc();
+        const cachedTocItems = parseCachedToc(cachedToc);
+        const nextTocItems = cachedTocItems ?? (await adapter.getToc());
+
+        if (cachedTocItems === null) {
+          void saveReaderCache(
+            book,
+            PDF_TOC_CACHE_KEY,
+            JSON.stringify(nextTocItems),
+          ).catch(() => undefined);
+        }
 
         if (!isCurrent) {
           return;
@@ -3061,6 +3488,7 @@ function PdfReaderContent({
     onSearchProviderChange,
     onTocChange,
     renderVisiblePages,
+    retryVersion,
   ]);
 
   useEffect(() => {
@@ -3146,6 +3574,17 @@ function PdfReaderContent({
   const handleNext = useCallback(() => {
     runPdfAction((adapter) => adapter.next());
   }, [runPdfAction]);
+
+  useEffect(() => {
+    onNavigationActionsChange({
+      next: handleNext,
+      previous: handlePrevious,
+    });
+
+    return () => {
+      onNavigationActionsChange(null);
+    };
+  }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
   const handleViewModeChange = useCallback(
     (mode: PdfViewMode) => {
@@ -3282,10 +3721,17 @@ function PdfReaderContent({
       aria-label={`${book.title} content`}
     >
       <article className="reader-page reader-page--pdf">
-        <div ref={frameRef} className="reader-pdf-frame">
+        <div
+          ref={frameRef}
+          className="reader-pdf-frame"
+          aria-label="PDF pages"
+          tabIndex={0}
+        >
           {isLoading ? (
             <section
               className="reader-state reader-state--overlay"
+              role="status"
+              aria-live="polite"
               aria-label="Loading PDF book"
             >
               <div className="loading-line" aria-hidden="true" />
@@ -3299,13 +3745,22 @@ function PdfReaderContent({
             >
               <h2>Book could not be opened</h2>
               <p>{error}</p>
-              <button
-                type="button"
-                className="reader-tool-button"
-                onClick={onBackToLibrary}
-              >
-                Back to shelf
-              </button>
+              <div className="reader-state__actions">
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={() => setRetryVersion((version) => version + 1)}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="reader-tool-button"
+                  onClick={onBackToLibrary}
+                >
+                  Back to shelf
+                </button>
+              </div>
             </section>
           ) : null}
           <div
@@ -3342,7 +3797,9 @@ function PdfReaderContent({
                   {(pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []).map(
                     (highlight) => {
                       const className = `reader-pdf-highlight-rect ${
-                        highlight.hasHighlight ? "reader-pdf-highlight-rect--highlight" : ""
+                        highlight.hasHighlight
+                          ? "reader-pdf-highlight-rect--highlight"
+                          : ""
                       } ${highlight.hasNote ? "reader-pdf-highlight-rect--note" : ""}`;
                       const style = {
                         "--reader-highlight-color": highlight.color,
@@ -3827,7 +4284,11 @@ function searchTxtDocument(
   return hits;
 }
 
-function buildSearchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+function buildSearchExcerpt(
+  text: string,
+  matchIndex: number,
+  queryLength: number,
+): string {
   const excerptStart = Math.max(0, matchIndex - 28);
   const excerptEnd = Math.min(text.length, matchIndex + queryLength + 48);
   const prefix = excerptStart > 0 ? "..." : "";
@@ -3942,34 +4403,32 @@ function getTxtAnnotationSegments(
   const blockStart = block.charOffset;
   const blockEnd = block.charOffset + block.text.length;
 
-  const coverages = annotations
-    .filter(isVisibleAnnotation)
-    .flatMap((annotation) => {
-      const locator = annotation.locator;
+  const coverages = annotations.filter(isVisibleAnnotation).flatMap((annotation) => {
+    const locator = annotation.locator;
 
-      if (locator.kind !== "txt" || locator.endCharOffset === undefined) {
-        return [];
-      }
+    if (locator.kind !== "txt" || locator.endCharOffset === undefined) {
+      return [];
+    }
 
-      const highlightStart = Math.max(blockStart, locator.charOffset);
-      const highlightEnd = Math.min(blockEnd, locator.endCharOffset);
+    const highlightStart = Math.max(blockStart, locator.charOffset);
+    const highlightEnd = Math.min(blockEnd, locator.endCharOffset);
 
-      if (highlightEnd <= highlightStart) {
-        return [];
-      }
+    if (highlightEnd <= highlightStart) {
+      return [];
+    }
 
-      return [
-        {
-          id: annotation.id,
-          annotation,
-          start: highlightStart - blockStart,
-          end: highlightEnd - blockStart,
-          color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
-          hasHighlight: annotation.type === "highlight",
-          hasNote: annotationHasNote(annotation),
-        },
-      ];
-    });
+    return [
+      {
+        id: annotation.id,
+        annotation,
+        start: highlightStart - blockStart,
+        end: highlightEnd - blockStart,
+        color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+        hasHighlight: annotation.type === "highlight",
+        hasNote: annotationHasNote(annotation),
+      },
+    ];
+  });
 
   if (coverages.length === 0) {
     return [];
@@ -4017,9 +4476,7 @@ function getTxtAnnotationSegments(
 
     segments.push({
       color:
-        highlightRange?.color ??
-        noteAnnotations[0]?.color ??
-        DEFAULT_HIGHLIGHT_COLOR,
+        highlightRange?.color ?? noteAnnotations[0]?.color ?? DEFAULT_HIGHLIGHT_COLOR,
       hasHighlight: highlightRange !== undefined,
       hasNote: noteAnnotations.length > 0,
       id: coveringRanges.map((coverage) => coverage.id).join("-"),
@@ -4162,7 +4619,10 @@ function locatorsMatchAnnotation(
   return false;
 }
 
-function txtLocatorsOverlap(firstLocator: TxtLocator, secondLocator: TxtLocator): boolean {
+function txtLocatorsOverlap(
+  firstLocator: TxtLocator,
+  secondLocator: TxtLocator,
+): boolean {
   if (
     firstLocator.endCharOffset === undefined ||
     secondLocator.endCharOffset === undefined
@@ -4232,7 +4692,10 @@ function epubLocatorsMatchAnnotation(
   );
 }
 
-function pdfLocatorsOverlap(firstLocator: PdfLocator, secondLocator: PdfLocator): boolean {
+function pdfLocatorsOverlap(
+  firstLocator: PdfLocator,
+  secondLocator: PdfLocator,
+): boolean {
   if (firstLocator.page !== secondLocator.page) {
     return false;
   }
@@ -4299,9 +4762,7 @@ function getEpubAnnotationSignature(annotation: Annotation): string {
 }
 
 function getSelectionMenuAnchor(
-  rect:
-    | Pick<DOMRect, "height" | "left" | "top" | "width">
-    | undefined,
+  rect: Pick<DOMRect, "height" | "left" | "top" | "width"> | undefined,
 ): ReaderMenuAnchor {
   if (rect === undefined) {
     return {
@@ -4411,10 +4872,7 @@ function captureTxtSelection(): ReaderSelectionSnapshot | null {
         Math.max(0, firstSegment.start - 80),
         firstSegment.start,
       ),
-      contextAfter: lastSegment.blockText.slice(
-        lastSegment.end,
-        lastSegment.end + 80,
-      ),
+      contextAfter: lastSegment.blockText.slice(lastSegment.end, lastSegment.end + 80),
     },
     selectedText,
     contextBefore: firstSegment.blockText.slice(
@@ -4439,7 +4897,9 @@ function getTxtSelectionRowSegments(range: Range): Array<{
       ? range.commonAncestorContainer
       : range.commonAncestorContainer.parentElement;
   const viewport = ancestor?.closest(".reader-viewport") ?? document;
-  const rows = Array.from(viewport.querySelectorAll<HTMLElement>(".reader-virtual-row"));
+  const rows = Array.from(
+    viewport.querySelectorAll<HTMLElement>(".reader-virtual-row"),
+  );
   const segments: Array<{
     blockCharOffset: number;
     blockText: string;
@@ -4861,6 +5321,62 @@ function formatBookFormat(format: Book["format"]): string {
   return format.toUpperCase();
 }
 
+function focusElementSoon<TElement extends HTMLElement>(
+  ref: RefObject<TElement | null>,
+): void {
+  if (pendingFocusFrameId !== null) {
+    window.cancelAnimationFrame(pendingFocusFrameId);
+  }
+
+  const tryFocus = (remainingAttempts: number) => {
+    pendingFocusFrameId = window.requestAnimationFrame(() => {
+      const element = ref.current;
+
+      if (element !== null) {
+        pendingFocusFrameId = null;
+        element.focus();
+        return;
+      }
+
+      if (remainingAttempts > 0) {
+        tryFocus(remainingAttempts - 1);
+      } else {
+        pendingFocusFrameId = null;
+      }
+    });
+  };
+
+  tryFocus(2);
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null): boolean {
+  if (target === null || typeof target !== "object") {
+    return false;
+  }
+
+  const element = target as {
+    closest?: (selector: string) => Element | null;
+    isContentEditable?: boolean;
+    tagName?: string;
+  };
+  const tagName = element.tagName?.toLocaleLowerCase();
+
+  if (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    tagName === "button" ||
+    tagName === "a" ||
+    element.isContentEditable === true
+  ) {
+    return true;
+  }
+
+  return typeof element.closest === "function"
+    ? element.closest("[contenteditable='true']") !== null
+    : false;
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -4872,3 +5388,36 @@ function getErrorMessage(error: unknown): string {
 
   return "An unexpected error occurred.";
 }
+
+function parseCachedToc(serializedToc: string | null): TocItem[] | null {
+  if (serializedToc === null) {
+    return null;
+  }
+
+  try {
+    const value = JSON.parse(serializedToc) as unknown;
+    return Array.isArray(value) && value.every(isCachedTocItem) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function isCachedTocItem(value: unknown): value is TocItem {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const item = value as Partial<TocItem>;
+  return (
+    typeof item.id === "string" &&
+    typeof item.title === "string" &&
+    (item.href === undefined || typeof item.href === "string") &&
+    (item.children === undefined ||
+      (Array.isArray(item.children) && item.children.every(isCachedTocItem)))
+  );
+}
+
+const MemoizedReaderSidebar = memo(ReaderSidebar);
+const MemoizedTxtReaderContent = memo(TxtReaderContent);
+const MemoizedEpubReaderContent = memo(EpubReaderContent);
+const MemoizedPdfReaderContent = memo(PdfReaderContent);

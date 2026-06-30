@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
 function collectConsoleIssues(page: Page): string[] {
   const issues: string[] = [];
@@ -34,6 +35,17 @@ async function readEpubPageState(
   };
 }
 
+async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
+  const results = await new AxeBuilder({ page })
+    .exclude(".reader-epub-host iframe")
+    .analyze();
+  const violations = results.violations.filter(
+    (violation) => violation.impact === "serious" || violation.impact === "critical",
+  );
+
+  expect(violations).toEqual([]);
+}
+
 test("renders the bookshelf-first desktop UI", async ({ page }) => {
   await page.goto("/");
 
@@ -48,6 +60,44 @@ test("renders the bookshelf-first desktop UI", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("Sorted by Recent reading")).toBeVisible();
   await expect(page.getByText("Desktop shell initialized.")).toHaveCount(0);
+  const shelfResources = await page.evaluate(() =>
+    performance.getEntriesByType("resource").map((entry) => entry.name),
+  );
+  expect(shelfResources.some((resource) => resource.includes("ReaderShell"))).toBe(
+    false,
+  );
+  expect(shelfResources.some((resource) => resource.includes("epubjs"))).toBe(false);
+  expect(
+    shelfResources.some((resource) => resource.includes("pdfjs-dist/build/pdf.mjs")),
+  ).toBe(false);
+  await expectNoSeriousAccessibilityViolations(page);
+});
+
+test("renders the shared default cover with a long HTML title", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "reader:fallback:books",
+      JSON.stringify([
+        {
+          id: "e2e-default-cover",
+          title:
+            "A Deliberately Long Book Title Rendered Above the Shared Cover Background",
+          format: "txt",
+          libraryPath: "D:\\library\\default-cover.txt",
+          fileHash: "default-cover-hash",
+          coverStatus: "fallback",
+          createdAt: "2026-06-29T08:00:00.000Z",
+          updatedAt: "2026-06-29T08:00:00.000Z",
+        },
+      ]),
+    );
+  });
+
+  await page.goto("/");
+
+  const cover = page.locator(".book-card__cover");
+  await expect(cover.locator("strong")).toHaveText(/A Deliberately Long Book Title/);
+  await expect(cover).toHaveCSS("background-image", /default-book-cover/);
 });
 
 test("removes a seeded book through the right-click actions menu", async ({ page }) => {
@@ -162,8 +212,16 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("main", { name: "TXT reader" })).toBeVisible();
+  const txtResources = await page.evaluate(() =>
+    performance.getEntriesByType("resource").map((entry) => entry.name),
+  );
+  expect(txtResources.some((resource) => resource.includes("epubjs"))).toBe(false);
+  expect(
+    txtResources.some((resource) => resource.includes("pdfjs-dist/build/pdf.mjs")),
+  ).toBe(false);
   await expect(page.getByRole("button", { name: "Theme" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "第一章 长文本" })).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");
 
   const renderedParagraphCount = await page
@@ -189,6 +247,17 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "style",
     /--txt-reader-heading: #f0e8d7/,
   );
+  await page.getByRole("button", { name: "Theme" }).click();
+
+  const contentsWidth = page.getByRole("slider", { name: "Contents width" });
+  await contentsWidth.fill("400");
+  await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
+    "style",
+    /--reader-sidebar-width: 400px/,
+  );
+  const firstTocItem = page.getByRole("button", { name: "第一章 长文本" });
+  await expect(firstTocItem).toHaveCSS("white-space", "nowrap");
+  await expect(firstTocItem).toHaveCSS("text-overflow", "ellipsis");
 
   await page.locator(".reader-viewport").evaluate((element) => {
     element.scrollTop = element.scrollHeight;
@@ -198,6 +267,27 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "aria-current",
     "location",
   );
+
+  await page.setViewportSize({ width: 375, height: 760 });
+  await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
+  const narrowLayout = await page.evaluate(() => {
+    const sidebar = document.querySelector<HTMLElement>(".reader-sidebar");
+    const main = document.querySelector<HTMLElement>(".reader-main");
+
+    return {
+      bodyClientWidth: document.body.clientWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      mainLeft: main?.getBoundingClientRect().left ?? -1,
+      sidebarWidth: sidebar?.getBoundingClientRect().width ?? 0,
+    };
+  });
+  expect(narrowLayout.bodyScrollWidth).toBe(narrowLayout.bodyClientWidth);
+  expect(narrowLayout.mainLeft).toBe(0);
+  expect(narrowLayout.sidebarWidth).toBeLessThanOrEqual(360);
+  await page.locator(".reader-sidebar__close").click();
+  await expect(page.locator(".reader-sidebar")).toBeHidden();
+  await page.getByRole("button", { name: "Contents" }).click();
+  await expect(page.locator(".reader-sidebar")).toBeVisible();
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
   await expect(
@@ -405,6 +495,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   const reader = page.getByRole("main", { name: "EPUB reader" });
   await expect(reader).toBeVisible();
   await expect(page.locator(".reader-epub-host iframe")).toHaveCount(1);
+  await expectNoSeriousAccessibilityViolations(page);
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
   const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
@@ -559,7 +650,11 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       expect(menuGap).toBeGreaterThanOrEqual(4);
       expect(menuGap).toBeLessThanOrEqual(10);
       expect(
-        Math.abs(selectionAnchor.left + selectionAnchor.width / 2 - (menuRect.x + menuRect.width / 2)),
+        Math.abs(
+          selectionAnchor.left +
+            selectionAnchor.width / 2 -
+            (menuRect.x + menuRect.width / 2),
+        ),
       ).toBeLessThanOrEqual(2);
     }
 
@@ -619,6 +714,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
       sourcePath: "D:\\books\\generated.pdf",
       libraryPath: "D:\\library\\generated.pdf",
       fileHash: "generated-pdf-hash",
+      coverStatus: "pending",
       createdAt: "2026-06-20T08:00:00.000Z",
       updatedAt: "2026-06-20T08:00:00.000Z",
     };
@@ -692,6 +788,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Generated PDF" })).toBeVisible();
+  await expect(page.locator(".book-card__cover img")).toBeVisible({ timeout: 20_000 });
   await page.getByRole("button", { name: "Continue" }).click();
 
   const reader = page.getByRole("main", { name: "PDF reader" });
@@ -699,6 +796,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await expect(page.getByRole("button", { name: "Page 1" })).toBeVisible();
   await expect(page.locator(".reader-pdf-canvas").first()).toBeVisible();
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
   await expect.poll(() => firstPdfCanvasHasInk(page), { timeout: 20_000 }).toBe(true);
 
   await page.getByRole("button", { name: "Next" }).click();
@@ -734,7 +832,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await pageInput.press("Enter");
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
-  await page.getByRole("button", { name: "Hide contents" }).click();
+  await page.getByRole("button", { name: "Contents" }).click();
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
     "aria-pressed",

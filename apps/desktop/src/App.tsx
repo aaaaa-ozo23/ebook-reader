@@ -1,22 +1,40 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type MouseEvent,
 } from "react";
 import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/core";
 
 import "./App.css";
-import { ReaderShell } from "./components/ReaderShell";
-import { importBook, listBooks, markBookOpened, pickBookFile, removeBook } from "./tauri/library";
+import defaultBookCover from "./assets/default-book-cover.jpg";
+import { prepareBookCover } from "./covers/bookCovers";
+import {
+  getBookCoverSource,
+  importBook,
+  listBooks,
+  markBookOpened,
+  pickBookFile,
+  removeBook,
+} from "./tauri/library";
+
+const LazyReaderShell = lazy(() =>
+  import("./components/ReaderShell").then((module) => ({
+    default: module.ReaderShell,
+  })),
+);
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
 
 interface Feedback {
+  actionLabel?: string;
   kind: FeedbackKind;
   title: string;
   message: string;
@@ -24,6 +42,7 @@ interface Feedback {
 
 interface BookActionMenuState {
   book: Book;
+  trigger: HTMLElement | null;
   x: number;
   y: number;
 }
@@ -44,46 +63,115 @@ const dateFormatter = new Intl.DateTimeFormat("en", {
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [openingBookId, setOpeningBookId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [readerBook, setReaderBook] = useState<Book | null>(null);
-  const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(null);
+  const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
+    null,
+  );
   const [bookPendingRemoval, setBookPendingRemoval] = useState<Book | null>(null);
   const [removingBookId, setRemovingBookId] = useState<string | null>(null);
+  const lastBookActionTriggerRef = useRef<HTMLElement | null>(null);
+  const coverQueueRef = useRef<Book[]>([]);
+  const queuedCoverIdsRef = useRef(new Set<string>());
+  const isCoverWorkerActiveRef = useRef(false);
+  const isAppMountedRef = useRef(true);
+  const libraryRequestIdRef = useRef(0);
 
-  useEffect(() => {
-    let isCurrent = true;
-
-    async function loadLibrary() {
-      try {
-        const loadedBooks = await listBooks();
-
-        if (isCurrent) {
-          setBooks(sortBooksForShelf(loadedBooks));
-        }
-      } catch (error) {
-        if (isCurrent) {
-          setFeedback({
-            kind: "error",
-            title: "Library unavailable",
-            message: getErrorMessage(error),
-          });
-        }
-      } finally {
-        if (isCurrent) {
-          setIsLoading(false);
-        }
-      }
+  const processCoverQueue = useCallback(async () => {
+    if (isCoverWorkerActiveRef.current) {
+      return;
     }
 
-    void loadLibrary();
+    isCoverWorkerActiveRef.current = true;
+
+    try {
+      while (coverQueueRef.current.length > 0) {
+        const queuedBook = coverQueueRef.current.shift();
+
+        if (queuedBook === undefined) {
+          continue;
+        }
+
+        try {
+          const updatedBook = await prepareBookCover(queuedBook);
+
+          if (isAppMountedRef.current) {
+            setBooks((currentBooks) =>
+              currentBooks.some((book) => book.id === updatedBook.id)
+                ? upsertBook(currentBooks, updatedBook)
+                : currentBooks,
+            );
+          }
+        } finally {
+          queuedCoverIdsRef.current.delete(queuedBook.id);
+        }
+      }
+    } finally {
+      isCoverWorkerActiveRef.current = false;
+    }
+  }, []);
+
+  useEffect(() => {
+    isAppMountedRef.current = true;
 
     return () => {
-      isCurrent = false;
+      isAppMountedRef.current = false;
     };
   }, []);
+
+  const loadLibrary = useCallback(async () => {
+    const requestId = libraryRequestIdRef.current + 1;
+    libraryRequestIdRef.current = requestId;
+    setIsLoading(true);
+    setLibraryError(null);
+
+    try {
+      const loadedBooks = await listBooks();
+
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setBooks(sortBooksForShelf(loadedBooks));
+      }
+    } catch (error) {
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setLibraryError(getErrorMessage(error));
+      }
+    } finally {
+      if (isAppMountedRef.current && libraryRequestIdRef.current === requestId) {
+        setIsLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      void loadLibrary();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadLibrary]);
+
+  useEffect(() => {
+    for (const book of books) {
+      if (book.coverStatus !== "pending" || queuedCoverIdsRef.current.has(book.id)) {
+        continue;
+      }
+
+      queuedCoverIdsRef.current.add(book.id);
+      coverQueueRef.current.push(book);
+    }
+
+    if (coverQueueRef.current.length > 0) {
+      const timeoutId = window.setTimeout(() => {
+        void processCoverQueue();
+      }, 0);
+
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [books, processCoverQueue]);
 
   const sortedBooks = useMemo(() => sortBooksForShelf(books), [books]);
 
@@ -108,6 +196,7 @@ function App() {
       setFeedback(getImportFeedback(result));
     } catch (error) {
       setFeedback({
+        actionLabel: "Choose another file",
         kind: "error",
         title: "Import failed",
         message: getErrorMessage(error),
@@ -129,6 +218,7 @@ function App() {
       setReaderBook(openedBook);
     } catch (error) {
       setFeedback({
+        actionLabel: "Choose file to repair",
         kind: "error",
         title: "Book could not be opened",
         message: getErrorMessage(error),
@@ -139,16 +229,23 @@ function App() {
   }, []);
 
   const closeBookActionMenu = useCallback(() => {
+    const trigger = bookActionMenu?.trigger ?? null;
     setBookActionMenu(null);
-  }, []);
+    focusElementSoon(trigger);
+  }, [bookActionMenu]);
 
-  const showBookActionMenu = useCallback((book: Book, x: number, y: number) => {
-    setBookActionMenu({
-      book,
-      x,
-      y,
-    });
-  }, []);
+  const showBookActionMenu = useCallback(
+    (book: Book, x: number, y: number, trigger: HTMLElement | null) => {
+      lastBookActionTriggerRef.current = trigger;
+      setBookActionMenu({
+        book,
+        trigger,
+        x,
+        y,
+      });
+    },
+    [],
+  );
 
   const requestBookRemoval = useCallback((book: Book) => {
     setBookActionMenu(null);
@@ -157,6 +254,7 @@ function App() {
 
   const cancelBookRemoval = useCallback(() => {
     setBookPendingRemoval(null);
+    focusElementSoon(lastBookActionTriggerRef.current);
   }, []);
 
   const confirmBookRemoval = useCallback(async () => {
@@ -202,11 +300,25 @@ function App() {
   }, []);
 
   if (readerBook !== null) {
-    return <ReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />;
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading reader...
+          </main>
+        }
+      >
+        <LazyReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />
+      </Suspense>
+    );
   }
 
   return (
-    <main className="app-shell" style={readerThemeStyle} aria-label="Ebook Reader bookshelf">
+    <main
+      className="app-shell"
+      style={readerThemeStyle}
+      aria-label="Ebook Reader bookshelf"
+    >
       <LibraryRail bookCount={sortedBooks.length} />
       <section className="library-workspace" aria-labelledby="library-title">
         <LibraryHeader
@@ -217,15 +329,18 @@ function App() {
           onShowGridView={showGridView}
           onShowListView={showListView}
         />
-        <FeedbackBanner feedback={feedback} />
+        <FeedbackBanner feedback={feedback} onAction={handleImportBook} />
         <ShelfBody
           books={sortedBooks}
           isLoading={isLoading}
+          libraryError={libraryError}
           openingBookId={openingBookId}
           activeMenuBookId={bookActionMenu?.book.id ?? null}
           removingBookId={removingBookId}
           viewMode={viewMode}
           onOpenBook={handleOpenBook}
+          onImportBook={handleImportBook}
+          onRetryLibrary={loadLibrary}
           onShowBookMenu={showBookActionMenu}
         />
         <BookActionMenu
@@ -337,9 +452,10 @@ function LibraryHeader({
 
 interface FeedbackBannerProps {
   feedback: Feedback | null;
+  onAction: () => void;
 }
 
-function FeedbackBanner({ feedback }: FeedbackBannerProps) {
+function FeedbackBanner({ feedback, onAction }: FeedbackBannerProps) {
   if (feedback === null) {
     return null;
   }
@@ -352,6 +468,11 @@ function FeedbackBanner({ feedback }: FeedbackBannerProps) {
     >
       <strong>{feedback.title}</strong>
       <span>{feedback.message}</span>
+      {feedback.actionLabel !== undefined ? (
+        <button type="button" onClick={onAction}>
+          {feedback.actionLabel}
+        </button>
+      ) : null}
     </section>
   );
 }
@@ -359,35 +480,63 @@ function FeedbackBanner({ feedback }: FeedbackBannerProps) {
 interface ShelfBodyProps {
   books: Book[];
   isLoading: boolean;
+  libraryError: string | null;
   openingBookId: string | null;
   activeMenuBookId: string | null;
   removingBookId: string | null;
   viewMode: ViewMode;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number) => void;
+  onImportBook: () => void;
+  onRetryLibrary: () => void;
+  onShowBookMenu: (
+    book: Book,
+    x: number,
+    y: number,
+    trigger: HTMLElement | null,
+  ) => void;
 }
 
 function ShelfBody({
   books,
   isLoading,
+  libraryError,
   openingBookId,
   activeMenuBookId,
   removingBookId,
   viewMode,
   onOpenBook,
+  onImportBook,
+  onRetryLibrary,
   onShowBookMenu,
 }: ShelfBodyProps) {
   if (isLoading) {
     return (
-      <section className="shelf-state" aria-label="Loading library">
+      <section
+        className="shelf-state"
+        role="status"
+        aria-live="polite"
+        aria-label="Loading library"
+      >
         <div className="loading-line" aria-hidden="true" />
         <p>Loading library...</p>
       </section>
     );
   }
 
+  if (libraryError !== null) {
+    return (
+      <section className="shelf-state shelf-state--error" role="alert">
+        <h2>Library could not be loaded</h2>
+        <p>{libraryError}</p>
+        <button type="button" onClick={onRetryLibrary}>
+          Retry
+        </button>
+      </section>
+    );
+  }
+
   if (books.length === 0) {
-    return <EmptyShelf />;
+    return <EmptyShelf onImportBook={onImportBook} />;
   }
 
   return (
@@ -411,7 +560,7 @@ function ShelfBody({
   );
 }
 
-function EmptyShelf() {
+function EmptyShelf({ onImportBook }: { onImportBook: () => void }) {
   return (
     <section className="empty-shelf" aria-labelledby="empty-shelf-title">
       <div className="empty-shelf__mark" aria-hidden="true">
@@ -419,6 +568,9 @@ function EmptyShelf() {
       </div>
       <h2 id="empty-shelf-title">Your library is empty</h2>
       <p>No books in your local shelf yet.</p>
+      <button type="button" onClick={onImportBook}>
+        Choose a book
+      </button>
     </section>
   );
 }
@@ -429,7 +581,12 @@ interface BookCardProps {
   isOpening: boolean;
   isRemoving: boolean;
   onOpenBook: (book: Book) => void;
-  onShowBookMenu: (book: Book, x: number, y: number) => void;
+  onShowBookMenu: (
+    book: Book,
+    x: number,
+    y: number,
+    trigger: HTMLElement | null,
+  ) => void;
 }
 
 function BookCard({
@@ -447,7 +604,7 @@ function BookCard({
   const handleContextMenu = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       event.preventDefault();
-      onShowBookMenu(book, event.clientX, event.clientY);
+      onShowBookMenu(book, event.clientX, event.clientY, event.currentTarget);
     },
     [book, onShowBookMenu],
   );
@@ -455,16 +612,18 @@ function BookCard({
   const handleMenuButtonClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {
       const rect = event.currentTarget.getBoundingClientRect();
-      onShowBookMenu(book, rect.left, rect.bottom + 8);
+      onShowBookMenu(book, rect.left, rect.bottom + 8, event.currentTarget);
     },
     [book, onShowBookMenu],
   );
 
   return (
-    <article className="book-card" aria-label={`${book.title} book`} onContextMenu={handleContextMenu}>
-      <div className="book-card__cover" aria-hidden="true">
-        <span>{formatBookFormat(book.format)}</span>
-      </div>
+    <article
+      className="book-card"
+      aria-label={`${book.title} book`}
+      onContextMenu={handleContextMenu}
+    >
+      <BookCover book={book} />
       <div className="book-card__body">
         <div className="book-card__top">
           <div className="book-card__copy">
@@ -496,6 +655,52 @@ function BookCard({
   );
 }
 
+function BookCover({ book }: { book: Book }) {
+  const [source, setSource] = useState<string | null>(null);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getBookCoverSource(book).then(
+      (nextSource) => {
+        if (isCurrent) {
+          setSource(nextSource);
+        }
+      },
+      () => {
+        if (isCurrent) {
+          setSource(null);
+        }
+      },
+    );
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book]);
+
+  const showsExtractedCover = source !== null && source !== failedSource;
+  const fallbackStyle = {
+    backgroundImage: `linear-gradient(180deg, rgba(17, 31, 33, 0.04), rgba(17, 31, 33, 0.5)), url(${defaultBookCover})`,
+  } as CSSProperties;
+
+  return (
+    <div
+      className={`book-card__cover${showsExtractedCover ? " book-card__cover--image" : ""}`}
+      style={showsExtractedCover ? undefined : fallbackStyle}
+      aria-hidden="true"
+    >
+      {showsExtractedCover ? (
+        <img src={source} alt="" onError={() => setFailedSource(source)} />
+      ) : (
+        <strong title={book.title}>{book.title}</strong>
+      )}
+      <span>{formatBookFormat(book.format)}</span>
+    </div>
+  );
+}
+
 interface BookActionMenuProps {
   menu: BookActionMenuState | null;
   onClose: () => void;
@@ -520,7 +725,7 @@ function BookActionMenu({ menu, onClose, onRemove }: BookActionMenuProps) {
       }
     }
 
-    function handleKeyDown(event: KeyboardEvent) {
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === "Escape") {
         onClose();
       }
@@ -528,6 +733,7 @@ function BookActionMenu({ menu, onClose, onRemove }: BookActionMenuProps) {
 
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleKeyDown);
+    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
 
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
@@ -566,26 +772,72 @@ interface RemoveBookDialogProps {
   onConfirm: () => void;
 }
 
-function RemoveBookDialog({ book, isRemoving, onCancel, onConfirm }: RemoveBookDialogProps) {
+function RemoveBookDialog({
+  book,
+  isRemoving,
+  onCancel,
+  onConfirm,
+}: RemoveBookDialogProps) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+
   if (book === null) {
     return null;
   }
 
+  const handleDialogKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && !isRemoving) {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const buttons = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ??
+        [],
+    );
+
+    if (buttons.length === 0) {
+      return;
+    }
+
+    const firstButton = buttons[0];
+    const lastButton = buttons[buttons.length - 1];
+
+    if (event.shiftKey && document.activeElement === firstButton) {
+      event.preventDefault();
+      lastButton?.focus();
+    } else if (!event.shiftKey && document.activeElement === lastButton) {
+      event.preventDefault();
+      firstButton?.focus();
+    }
+  };
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="remove-book-dialog"
         role="alertdialog"
         aria-labelledby="remove-book-title"
         aria-describedby="remove-book-description"
+        onKeyDown={handleDialogKeyDown}
       >
         <h2 id="remove-book-title">Remove from shelf?</h2>
         <p id="remove-book-description">
-          This removes {book.title} from this app and deletes its library copy. The original file
-          you imported will not be deleted.
+          This removes {book.title} from this app and deletes its library copy. The
+          original file you imported will not be deleted.
         </p>
         <div className="remove-book-dialog__actions">
-          <button type="button" className="dialog-button dialog-button--secondary" onClick={onCancel}>
+          <button
+            type="button"
+            className="dialog-button dialog-button--secondary"
+            autoFocus
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button
@@ -608,6 +860,14 @@ function getImportFeedback(result: ImportBookResult): Feedback {
       kind: "info",
       title: "Already in library",
       message: `${result.book.title} is already on this shelf.`,
+    };
+  }
+
+  if (result.status === "repaired") {
+    return {
+      kind: "success",
+      title: "Library copy repaired",
+      message: `${result.book.title} is available again.`,
     };
   }
 
@@ -648,9 +908,13 @@ function getRecentTime(book: Book): number {
 }
 
 function getBookActivityLabel(book: Book): string {
-  const activityDate = dateFormatter.format(new Date(book.lastOpenedAt ?? book.createdAt));
+  const activityDate = dateFormatter.format(
+    new Date(book.lastOpenedAt ?? book.createdAt),
+  );
 
-  return book.lastOpenedAt === undefined ? `Added ${activityDate}` : `Opened ${activityDate}`;
+  return book.lastOpenedAt === undefined
+    ? `Added ${activityDate}`
+    : `Opened ${activityDate}`;
 }
 
 function formatBookFormat(format: Book["format"]): string {
@@ -667,6 +931,16 @@ function getErrorMessage(error: unknown): string {
   }
 
   return "An unexpected error occurred.";
+}
+
+function focusElementSoon(element: HTMLElement | null): void {
+  if (element === null) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    element.focus();
+  });
 }
 
 export default App;

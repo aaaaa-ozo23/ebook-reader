@@ -1,4 +1,5 @@
 export type BookFormat = "epub" | "txt" | "pdf";
+export type BookCoverStatus = "pending" | "ready" | "fallback";
 
 export type AnnotationKind = "highlight" | "note";
 
@@ -13,12 +14,13 @@ export interface Book {
   libraryPath: string;
   fileHash: string;
   coverPath?: string;
+  coverStatus: BookCoverStatus;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
 }
 
-export type ImportBookStatus = "imported" | "duplicate";
+export type ImportBookStatus = "imported" | "duplicate" | "repaired";
 
 export interface ImportBookResult {
   status: ImportBookStatus;
@@ -65,6 +67,14 @@ export interface ReaderTheme {
   backgroundColor: string;
   textColor: string;
 }
+
+export interface ReaderLayoutPreferences {
+  sidebarWidth: number;
+}
+
+export const defaultReaderLayoutPreferences: ReaderLayoutPreferences = {
+  sidebarWidth: 292,
+};
 
 export interface LocatorContext {
   selectedText?: string;
@@ -147,8 +157,7 @@ export interface ReaderAdapter<TLocator extends Locator = Locator> {
 
 export const defaultReaderTheme: ReaderTheme = {
   mode: "sepia",
-  fontFamily:
-    '"Noto Serif SC", "Songti SC", "Microsoft YaHei", Georgia, serif',
+  fontFamily: '"Noto Serif SC", "Songti SC", "Microsoft YaHei", Georgia, serif',
   fontSize: 18,
   lineHeight: 1.75,
   paragraphSpacing: 12,

@@ -9,7 +9,9 @@ import type { Plugin } from "vite";
 
 const host = process.env.TAURI_DEV_HOST;
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
-const pdfjsDistRoot = dirname(fileURLToPath(import.meta.resolve("pdfjs-dist/package.json")));
+const pdfjsDistRoot = dirname(
+  fileURLToPath(import.meta.resolve("pdfjs-dist/package.json")),
+);
 const pdfjsResourceDirectories = ["cmaps", "standard_fonts"] as const;
 const pdfjsResourceRoute = "/pdfjs/";
 
@@ -102,13 +104,17 @@ function resolvePdfjsResource(requestedPath: string): string | null {
   if (
     resourceDirectory === undefined ||
     resourceSegments.length === 0 ||
-    !pdfjsResourceDirectories.includes(resourceDirectory as (typeof pdfjsResourceDirectories)[number])
+    !pdfjsResourceDirectories.includes(
+      resourceDirectory as (typeof pdfjsResourceDirectories)[number],
+    )
   ) {
     return null;
   }
 
   const resolvedPath = resolve(pdfjsDistRoot, resourceDirectory, ...resourceSegments);
-  const relativePath = normalize(relative(join(pdfjsDistRoot, resourceDirectory), resolvedPath));
+  const relativePath = normalize(
+    relative(join(pdfjsDistRoot, resourceDirectory), resolvedPath),
+  );
 
   if (relativePath.startsWith("..") || relativePath.includes(`..${sep}`)) {
     return null;
@@ -117,7 +123,10 @@ function resolvePdfjsResource(requestedPath: string): string | null {
   return resolvedPath;
 }
 
-function setPdfjsResourceContentType(response: ServerResponse, resourcePath: string): void {
+function setPdfjsResourceContentType(
+  response: ServerResponse,
+  resourcePath: string,
+): void {
   if (resourcePath.endsWith(".bcmap")) {
     response.setHeader("Content-Type", "application/octet-stream");
     return;
