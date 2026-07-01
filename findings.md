@@ -25,6 +25,8 @@
 - NSIS currentUser 安装到 `%LOCALAPPDATA%\Ebook Reader`，注册表版本/发布者正确；首次启动创建 schema 3 数据库且 books=0，静默卸载清除程序目录但不主动删除用户数据。
 - MSI 默认静默安装首次返回 1603；显式传入 `ALLUSERS=2 MSIINSTALLPERUSER=1` 后日志确认 dual-mode per-user 且安装成功，启动 books=0、卸载和目录清理均通过。MSI 详细日志位于 `D:\tl-temp\ebook-reader-stage7-msi-install.log`。
 - Tauri NSIS 为 `.epub`、`.txt`、`.pdf` 写入 HKCU `Software\Classes` ProgID 与 `shell\open\command`，三者都指向安装目录中的 `ebook-reader-desktop.exe "%1"`。
+- NSIS 与 MSI 的 0.0.0 → 0.1.0 覆盖升级均保留 schema 3、4 本书、4 条进度、1 个 QA 书签、64 条标注（其中 9 条未删除）、2 项设置及全部 4 个书库副本；主题 JSON 和 328px 侧栏宽度也与基线一致。
+- MSI 升级验证必须每次从只读原始备份重建 QA 数据；重用前一个原生 QA 的工作数据库会把后续交互写入误判为升级丢数据。
 - 真实关联 QA：EPUB 经 Windows Shell 冷启动成功，数据库写入并更新 `last_opened_at`；运行中向安装 EXE 传入 TXT/PDF 后第二实例退出码 0、主实例始终只有 1 个，两种文件均导入并打开。
 - 重复传入同一 TXT 后 books 计数保持 1，`last_opened_at` 从 `15:25:22.680Z` 更新到 `15:25:55.256Z`，证明 duplicate 路径直接打开已有记录。
 
