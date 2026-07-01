@@ -1168,6 +1168,10 @@
 | 2026-06-30 | MSI 0.1.0 使用默认静默参数安装返回 1603 | 1 | 生成详细 MSI 日志并尝试显式 per-user 属性，按日志根因修正配置或安装参数 |
 | 2026-06-30 | 文件关联测试导致既有 TXT mock 污染及新增 viewport 断言错误 | 3 | 恢复下一 tick 初始化、等待新增用例消费异步 TXT mock，并将 aria-label 断言修正为实际的“书名 + content” |
 | 2026-06-30 | 7.3 探索时读取了不存在的 `src/tauri/runtime.ts` | 1 | 现有 runtime 检测实际位于各 bridge 文件内；新增文件关联 bridge 沿用同一轻量检测模式 |
+| 2026-06-30 | NSIS 0.0.0 → 0.1.0 自动化脚本中途无 stdout 以 -1 结束 | 1 | 保留当前安装和 QA 数据，先读取注册表、进程与 SQLite 摘要定位停止阶段，再从现状继续而非盲目重跑 |
+| 2026-06-30 | 升级 QA 书签 INSERT 通过 PowerShell 参数传递时 JSON 引号被破坏 | 1 | 不改备份；改为将完整 SQL 通过标准输入交给 sqlite3，并在继续前核对 bookmarks=1 |
+| 2026-07-01 | MSI 升级后快照脚本通过 PowerShell 标准输入发送 `.mode json` 时带入 BOM，SQLite 未执行查询 | 1 | 数据未写入；改用 `sqlite3 -json <db> <query>` 参数输出 JSON 后重新比对 |
+| 2026-07-01 | MSI 首次对比误用了被后续 NSIS/文件关联 QA 改写的工作数据库 | 1 | 核对快照与 SQLite 文件时间，卸载并清空 QA 环境，从只读原始备份重新独立执行 MSI 升级 |
 
 ## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
 
@@ -1213,8 +1217,13 @@
 - QA fixture 仅位于 `D:\tl-temp\ebook-reader-stage7-file-association-qa`，不会进入仓库或安装包。
 
 ### 阶段 7.4：升级验证
-- **状态：** in_progress
-- **分支：** `codex/stage7-upgrade-check`（下一步创建）
+- **状态：** complete
+- **分支：** `codex/stage7-upgrade-check`
+- NSIS 0.0.0 → 0.1.0 覆盖安装通过；新版启动后 schema=3、books=4、progress=4、bookmarks=1、annotations=64、active annotations=9、settings=2，与升级前一致，4 个书库副本均存在。
+- MSI 使用 `ALLUSERS=2 MSIINSTALLPERUSER=1` 完成 0.0.0 → 0.1.0 major upgrade；旧 ProductCode 移除，新 EXE FileVersion/ProductVersion 为 0.1.0。
+- MSI 从原始备份独立重跑：安装后未启动时、启动新版后的数据快照均与旧版启动后基线完全相等，书库缺失文件为 0。
+- QA 安装已卸载，Roaming/Local QA 数据已再次清空；仓库外原始备份保持不变。
+- **下一步：** 合入集成分支后创建 `codex/stage7-release-checklist`，补齐 MIT、CHANGELOG、第三方许可、发布检查和 README。
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
