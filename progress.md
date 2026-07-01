@@ -1161,6 +1161,84 @@
 
 | 时间戳 | 错误 | 尝试次数 | 解决方案 |
 |--------|------|---------|---------|
+| 2026-06-30 | 阶段 7 首次备份 Local AppData 时 WebView2 `Cookies` 文件被占用 | 1 | 保留原数据不清理；定位并关闭仅属于 Ebook Reader 的 WebView2 进程，改用新的备份目录重新完整复制和核验 |
+| 2026-06-30 | Image Gen 色键处理与 `tauri icon --help` 合并命令超时 | 1 | 分离检查透明 PNG 与 Tauri CLI 调用，若去背产物有效则不重复处理 |
+| 2026-06-30 | NSIS 安装后 QA 脚本使用 `Get-ChildItem -File` 被当前 PowerShell 拒绝 | 1 | 安装已成功，改用 `Where-Object { -not $_.PSIsContainer }` 从当前安装状态继续，不重复安装 |
+| 2026-06-30 | NSIS 注册表 `InstallLocation` 包含外层引号，脚本将 `"C:` 误判为驱动器 | 1 | 对 InstallLocation 与 UninstallString 显式 `Trim('"')` 后继续当前安装验证 |
+| 2026-06-30 | MSI 0.1.0 使用默认静默参数安装返回 1603 | 1 | 生成详细 MSI 日志并尝试显式 per-user 属性，按日志根因修正配置或安装参数 |
+| 2026-06-30 | 文件关联测试导致既有 TXT mock 污染及新增 viewport 断言错误 | 3 | 恢复下一 tick 初始化、等待新增用例消费异步 TXT mock，并将 aria-label 断言修正为实际的“书名 + content” |
+| 2026-06-30 | 7.3 探索时读取了不存在的 `src/tauri/runtime.ts` | 1 | 现有 runtime 检测实际位于各 bridge 文件内；新增文件关联 bridge 沿用同一轻量检测模式 |
+| 2026-06-30 | NSIS 0.0.0 → 0.1.0 自动化脚本中途无 stdout 以 -1 结束 | 1 | 保留当前安装和 QA 数据，先读取注册表、进程与 SQLite 摘要定位停止阶段，再从现状继续而非盲目重跑 |
+| 2026-06-30 | 升级 QA 书签 INSERT 通过 PowerShell 参数传递时 JSON 引号被破坏 | 1 | 不改备份；改为将完整 SQL 通过标准输入交给 sqlite3，并在继续前核对 bookmarks=1 |
+| 2026-07-01 | MSI 升级后快照脚本通过 PowerShell 标准输入发送 `.mode json` 时带入 BOM，SQLite 未执行查询 | 1 | 数据未写入；改用 `sqlite3 -json <db> <query>` 参数输出 JSON 后重新比对 |
+| 2026-07-01 | MSI 首次对比误用了被后续 NSIS/文件关联 QA 改写的工作数据库 | 1 | 核对快照与 SQLite 文件时间，卸载并清空 QA 环境，从只读原始备份重新独立执行 MSI 升级 |
+| 2026-07-01 | Node/pnpm 路径探测中递归搜索版本管理目录超时 | 1 | 已由 `where.exe`、`node --version` 和显式路径定位 Node 26.1.0；发布命令将 `%APPDATA%\npm` 与 `C:\Program Files\nodejs` 置于 PATH 最前 |
+| 2026-07-01 | Browser QA 按测试技能示例调用 `tab.playwright.screenshot`，当前 Browser runtime 未提供该方法 | 1 | 交互状态已生效；按 Browser 完整 API 改用 `tab.screenshot({ fullPage: false })` 继续取证 |
+| 2026-07-01 | 发布候选 MSI 元数据读取在 Windows Installer COM `OpenDatabase` 处报 `DISP_E_TYPEMISMATCH` | 1 | 产物已生成且未开始安装；将路径/模式显式转为 string/int 并用 BindingFlags 调用，必要时核对 WiX 生成源 |
+
+## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
+
+### 状态
+- **当前状态：** in_progress
+- **当前小阶段：** 7.1 应用元信息
+
+### 发布前保护
+- 保存当前 0.0.0 MSI 与 NSIS 到 `D:\tl-temp\ebook-reader-stage7-backup-20260630-225613\upgrade-fixtures`。
+- 关闭仅属于 Ebook Reader 的 release/WebView2 进程后，完整备份 Roaming 与 Local 应用数据。
+- 核对 Roaming 6 文件 / 21,505,580 bytes，Local 362 文件 / 39,615,213 bytes，备份一致后清空原目录。
+- 备份清单与旧安装包 SHA-256 位于 `D:\tl-temp\ebook-reader-stage7-backup-20260630-225613\backup-manifest.json`。
+
+### 阶段 7.1：应用元信息与正式图标
+- **状态：** complete
+- **分支：** `codex/stage7-app-metadata`
+- 将根 package、desktop package、Cargo 和 Tauri 版本统一为 `0.1.0`，新增 `pnpm.cmd run verify:release` 一致性门禁。
+- 使用 Image Gen 内置模式生成暖橙开放书页/深灰书脊、无文字、绿色色键背景的正式源图；用技能自带脚本去背为 `icons/app-icon-v0.1.0.png`。
+- Tauri CLI 已重建 ICO、ICNS、Windows Appx PNG、32/128/256 图标；移除本阶段额外生成且未使用的 Android/iOS 目录。
+- 视觉验证：透明四角、主体覆盖范围、32×32 和 128×128 小尺寸辨识度通过。
+- 验证：`pnpm.cmd run verify:release`、`pnpm.cmd run format`、`pnpm.cmd --filter @reader/desktop build` 通过。
+
+### 阶段 7.2：Windows installer
+- **状态：** complete
+- **分支：** `codex/stage7-windows-installer`
+- Tauri bundle 目标明确为 NSIS + MSI，publisher 为 `Ebook Reader Contributors`，禁止降级，NSIS 固定 currentUser，WebView2 采用静默 downloadBootstrapper。
+- 清理限定在工作区 release EXE、bundle、NSIS/WiX 中间目录后执行完整 Tauri release build。
+- 构建成功：`ebook-reader-desktop.exe`、`Ebook Reader_0.1.0_x64-setup.exe`、`Ebook Reader_0.1.0_x64_en-US.msi`。
+- EXE/NSIS FileVersion 与 ProductVersion 均为 0.1.0；MSI ProductName、ProductVersion、Manufacturer、ProductCode、UpgradeCode 已通过 Windows Installer API 核对。
+- NSIS 安装、启动空书架数据库（books=0）、静默卸载通过。
+- MSI 使用 `ALLUSERS=2 MSIINSTALLPERUSER=1` 安装、启动空书架数据库（books=0）、静默卸载通过。
+- 两种安装测试结束后均清理本轮 QA AppData；原用户数据备份未恢复。
+
+### 阶段 7.3：文件关联
+- **状态：** complete
+- **分支：** `codex/stage7-file-associations`
+- Tauri bundle 注册 EPUB、TXT、PDF ProgID、MIME、Viewer role 和 Windows 描述。
+- Rust 新增 pending open queue 与 frontend-ready 握手；冷启动参数先入队，运行中第二实例聚焦主窗口并发送 `open-book-files`。
+- 前端新增动态 event bridge；监听建立后加载书库，再取冷启动队列；路径去重后按序导入，首个成功项立即打开，duplicate 复用已有书籍，失败显示可恢复错误。
+- React StrictMode 下沿用下一 tick 初始化与 cleanup 清理，避免重复订阅和重复书库加载。
+- 自动验证：71 Vitest、34 Rust tests、desktop lint/build、format、release version gate 全部通过。
+- 原生验证：NSIS 注册表三种关联存在；EPUB Shell 冷启动成功；TXT/PDF 运行中第二实例传递成功且主进程数保持 1；重复 TXT 不新增记录并更新最后打开时间。
+- QA fixture 仅位于 `D:\tl-temp\ebook-reader-stage7-file-association-qa`，不会进入仓库或安装包。
+
+### 阶段 7.4：升级验证
+- **状态：** complete
+- **分支：** `codex/stage7-upgrade-check`
+- NSIS 0.0.0 → 0.1.0 覆盖安装通过；新版启动后 schema=3、books=4、progress=4、bookmarks=1、annotations=64、active annotations=9、settings=2，与升级前一致，4 个书库副本均存在。
+- MSI 使用 `ALLUSERS=2 MSIINSTALLPERUSER=1` 完成 0.0.0 → 0.1.0 major upgrade；旧 ProductCode 移除，新 EXE FileVersion/ProductVersion 为 0.1.0。
+- MSI 从原始备份独立重跑：安装后未启动时、启动新版后的数据快照均与旧版启动后基线完全相等，书库缺失文件为 0。
+- QA 安装已卸载，Roaming/Local QA 数据已再次清空；仓库外原始备份保持不变。
+- **下一步：** 合入集成分支后创建 `codex/stage7-release-checklist`，补齐 MIT、CHANGELOG、第三方许可、发布检查和 README。
+
+### 阶段 7.5：发布清单
+- **状态：** in_progress
+- **分支：** `codex/stage7-release-checklist`
+- 新增 MIT `LICENSE`，并为 root/desktop/core package 与 Cargo package 补齐 `MIT` SPDX 字段。
+- 新增 `CHANGELOG.md`、`THIRD_PARTY_NOTICES.md`、`RELEASE_CHECKLIST.md`；README 已补充 NSIS/MSI 下载、SmartScreen、校验值、覆盖升级、卸载和 AppData 位置。
+- pnpm 许可审计 285 包，无 unknown group；Cargo metadata 审计 487 包，补齐工作区包许可后 missing=0。
+- `verify:release` 已扩展检查 MIT 字段、EPUB/TXT/PDF 关联、正式图标源图和发布文档，当前通过。
+- 全量代码门禁使用 Node 26.1.0 / pnpm 11.1.2 通过：冻结安装、format、release verify、core build、desktop lint/build、71 Vitest、34 Rust tests、8 Playwright tests。
+- Build Web Apps Browser QA 通过：页面身份为 Ebook Reader，空书架非空白、无 overlay/控制台告警，List/Grid 切换状态正确；1280×720 和 375×760 截图已保存到仓库外。
+- 已合入 `codex/v0.1.0-mvp-integration` 并创建 `release/v0.1.0`；候选分支上的干净 Tauri build 生成最新 release EXE、NSIS 和 MSI。
+- 候选原生检查通过：MSI ProductVersion=0.1.0 且 UpgradeCode 稳定；NSIS 安装的应用首启 books=0、library 书籍文件=0，当前本机保留空书架 v0.1.0。
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |

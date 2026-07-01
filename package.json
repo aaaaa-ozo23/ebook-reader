@@ -1,6 +1,7 @@
 {
   "name": "ebook-reader",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.1.2",
@@ -14,7 +15,8 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "lint": "eslint .",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "verify:release": "node scripts/verify-release.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
