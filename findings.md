@@ -27,6 +27,10 @@
 - Tauri NSIS 为 `.epub`、`.txt`、`.pdf` 写入 HKCU `Software\Classes` ProgID 与 `shell\open\command`，三者都指向安装目录中的 `ebook-reader-desktop.exe "%1"`。
 - NSIS 与 MSI 的 0.0.0 → 0.1.0 覆盖升级均保留 schema 3、4 本书、4 条进度、1 个 QA 书签、64 条标注（其中 9 条未删除）、2 项设置及全部 4 个书库副本；主题 JSON 和 328px 侧栏宽度也与基线一致。
 - MSI 升级验证必须每次从只读原始备份重建 QA 数据；重用前一个原生 QA 的工作数据库会把后续交互写入误判为升级丢数据。
+- v0.1.0 锁定依赖许可审计覆盖 285 个 pnpm 包与 487 个 Cargo workspace/传递包；补齐应用自身 MIT SPDX 后，两边均无 unknown 或缺失许可字段。
+- pnpm 中 MPL-2.0 的 axe-core 和 CC-BY-4.0 的 caniuse-lite 仅属于开发/测试；运行时 epub.js 为 BSD-2-Clause、PDF.js 为 Apache-2.0，JSZip 选用 MIT 选项，未发现与 MIT 项目分发冲突。
+- Stage 7 Build Web Apps Browser QA 在 `http://127.0.0.1:1420/` 验证空书架：1280×720 桌面和 375×760 窄屏均有完整首屏、无 framework overlay、无 console warning/error；List 切换后 `aria-pressed=true`。
+- 375×760 下 body/document clientWidth 与 scrollWidth 均为 360px，无横向溢出；视觉截图保存于 `D:\tl-temp\ebook-reader-stage7-browser-desktop.png` 和 `D:\tl-temp\ebook-reader-stage7-browser-mobile-375x760.png`。
 - 真实关联 QA：EPUB 经 Windows Shell 冷启动成功，数据库写入并更新 `last_opened_at`；运行中向安装 EXE 传入 TXT/PDF 后第二实例退出码 0、主实例始终只有 1 个，两种文件均导入并打开。
 - 重复传入同一 TXT 后 books 计数保持 1，`last_opened_at` 从 `15:25:22.680Z` 更新到 `15:25:55.256Z`，证明 duplicate 路径直接打开已有记录。
 
