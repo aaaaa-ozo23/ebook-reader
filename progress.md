@@ -1224,6 +1224,14 @@
 - MSI 从原始备份独立重跑：安装后未启动时、启动新版后的数据快照均与旧版启动后基线完全相等，书库缺失文件为 0。
 - QA 安装已卸载，Roaming/Local QA 数据已再次清空；仓库外原始备份保持不变。
 - **下一步：** 合入集成分支后创建 `codex/stage7-release-checklist`，补齐 MIT、CHANGELOG、第三方许可、发布检查和 README。
+
+### 阶段 7.5：发布清单
+- **状态：** in_progress
+- **分支：** `codex/stage7-release-checklist`
+- 新增 MIT `LICENSE`，并为 root/desktop/core package 与 Cargo package 补齐 `MIT` SPDX 字段。
+- 新增 `CHANGELOG.md`、`THIRD_PARTY_NOTICES.md`、`RELEASE_CHECKLIST.md`；README 已补充 NSIS/MSI 下载、SmartScreen、校验值、覆盖升级、卸载和 AppData 位置。
+- pnpm 许可审计 285 包，无 unknown group；Cargo metadata 审计 487 包，补齐工作区包许可后 missing=0。
+- `verify:release` 已扩展检查 MIT 字段、EPUB/TXT/PDF 关联、正式图标源图和发布文档，当前通过。
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |
