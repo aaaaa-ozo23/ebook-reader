@@ -33,6 +33,9 @@
 - 375×760 下 body/document clientWidth 与 scrollWidth 均为 360px，无横向溢出；视觉截图保存于 `D:\tl-temp\ebook-reader-stage7-browser-desktop.png` 和 `D:\tl-temp\ebook-reader-stage7-browser-mobile-375x760.png`。
 - `release/v0.1.0` 候选构建在清理旧 release EXE/bundle/NSIS/WiX 后成功；EXE 15,825,920 bytes、NSIS 5,730,928 bytes、MSI 7,237,632 bytes，三者时间均晚于候选提交。
 - 候选 MSI 的 ProductVersion=0.1.0、Manufacturer=`Ebook Reader Contributors`、UpgradeCode=`{8F58B45A-3CE9-5D50-9D17-C523C621A7C5}`；候选 NSIS 安装/启动后 EXE 为 0.1.0、books=0、library 测试书文件=0。
+- GitHub Release 已发布到 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.1.0`；为 Latest、非 draft、非 prerelease，标签指向 main 的 `9e27e93a6ec6552772eba10f86b731a84a627e85`。
+- GitHub 会把 asset 文件名中的空格规范化为点号；最终下载名为 `Ebook.Reader_0.1.0_x64-setup.exe`、`Ebook.Reader_0.1.0_x64_en-US.msi` 与 `SHA256SUMS.txt`，发布说明和校验文件已同步。
+- 最终 NSIS SHA-256 为 `8B3703F6831CC2F9B725FBAEC3395922BB526E154C0F72BC32BBEAC4D360EDCD`，MSI 为 `DB08502EFCDD30C4AA78EC96137777409AC2C57C9DCA61A48B2911D96AEE87BB`；GitHub 远程 `SHA256SUMS.txt` 与本地最终文件逐字匹配。
 - 真实关联 QA：EPUB 经 Windows Shell 冷启动成功，数据库写入并更新 `last_opened_at`；运行中向安装 EXE 传入 TXT/PDF 后第二实例退出码 0、主实例始终只有 1 个，两种文件均导入并打开。
 - 重复传入同一 TXT 后 books 计数保持 1，`last_opened_at` 从 `15:25:22.680Z` 更新到 `15:25:55.256Z`，证明 duplicate 路径直接打开已有记录。
 

@@ -39,16 +39,16 @@
 
 ## Artifacts and publication
 
-- [ ] Generate `SHA256SUMS.txt` for only the final NSIS and MSI installers.
-- [ ] Verify installer names, sizes, timestamps, versions, and SHA-256 values.
-- [ ] Create and validate `release/v0.1.0`, then merge it to `main`.
-- [ ] Create and push annotated tag `v0.1.0` plus integration, release, and main branches.
-- [ ] Create GitHub Release `Ebook Reader v0.1.0` from `v0.1.0` on `main`.
-- [ ] Upload NSIS, MSI, and `SHA256SUMS.txt`; publish as non-prerelease and Latest.
-- [ ] Reopen the public release page and verify the tag, Latest status, and all three assets.
+- [x] Generate `SHA256SUMS.txt` for only the final NSIS and MSI installers.
+- [x] Verify installer names, sizes, timestamps, versions, and SHA-256 values.
+- [x] Create and validate `release/v0.1.0`, then merge it to `main`.
+- [x] Create and push annotated tag `v0.1.0` plus integration, release, and main branches.
+- [x] Create GitHub Release `Ebook Reader v0.1.0` from `v0.1.0` on `main`.
+- [x] Upload NSIS, MSI, and `SHA256SUMS.txt`; publish as non-prerelease and Latest.
+- [x] Reopen the public release page and verify the tag, Latest status, and all three assets.
 
 ## Final local state
 
 - [x] QA data is deleted; the pre-release user-data backup remains outside the repository.
 - [x] Final NSIS v0.1.0 remains installed with an empty shelf.
-- [ ] Git working tree is clean.
+- [x] Git working tree is clean.

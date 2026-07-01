@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 7：in_progress；正在实施 Windows v0.1.0 元信息、正式图标、安装包、文件关联、覆盖升级验证和 GitHub 首版发布。
+大阶段 7：complete；Windows v0.1.0 元信息、正式图标、安装包、文件关联、覆盖升级验证和 GitHub 首版发布全部完成。
 
 ## 分支策略
 
@@ -316,7 +316,7 @@
 | 7.2 Windows installer | `codex/stage7-windows-installer` | complete | EXE、NSIS、MSI 0.1.0 干净构建；两种安装包安装/启动空库/卸载通过 |
 | 7.3 文件关联 | `codex/stage7-file-associations` | complete | EPUB 冷启动、TXT/PDF 运行中打开、重复文件单实例与注册表命令验证通过 |
 | 7.4 升级验证 | `codex/stage7-upgrade-check` | complete | NSIS/MSI 0.0.0 → 0.1.0 覆盖升级通过；书籍、书库副本、进度、书签、标注、主题和布局完整保留，schema 为 3 |
-| 7.5 发布清单 | `codex/stage7-release-checklist` | in_progress | MIT、CHANGELOG、第三方声明、README 与检查表已完成；待全量 QA、最终构建和 GitHub Release |
+| 7.5 发布清单 | `codex/stage7-release-checklist` | complete | MIT/第三方审计、全量 QA、最终构建、SHA-256、分支/标签推送及 GitHub Latest Release 已完成 |
 
 ## 大阶段 8：v0.2 预留方向
 
