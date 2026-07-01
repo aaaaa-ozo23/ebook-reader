@@ -31,6 +31,8 @@
 - pnpm 中 MPL-2.0 的 axe-core 和 CC-BY-4.0 的 caniuse-lite 仅属于开发/测试；运行时 epub.js 为 BSD-2-Clause、PDF.js 为 Apache-2.0，JSZip 选用 MIT 选项，未发现与 MIT 项目分发冲突。
 - Stage 7 Build Web Apps Browser QA 在 `http://127.0.0.1:1420/` 验证空书架：1280×720 桌面和 375×760 窄屏均有完整首屏、无 framework overlay、无 console warning/error；List 切换后 `aria-pressed=true`。
 - 375×760 下 body/document clientWidth 与 scrollWidth 均为 360px，无横向溢出；视觉截图保存于 `D:\tl-temp\ebook-reader-stage7-browser-desktop.png` 和 `D:\tl-temp\ebook-reader-stage7-browser-mobile-375x760.png`。
+- `release/v0.1.0` 候选构建在清理旧 release EXE/bundle/NSIS/WiX 后成功；EXE 15,825,920 bytes、NSIS 5,730,928 bytes、MSI 7,237,632 bytes，三者时间均晚于候选提交。
+- 候选 MSI 的 ProductVersion=0.1.0、Manufacturer=`Ebook Reader Contributors`、UpgradeCode=`{8F58B45A-3CE9-5D50-9D17-C523C621A7C5}`；候选 NSIS 安装/启动后 EXE 为 0.1.0、books=0、library 测试书文件=0。
 - 真实关联 QA：EPUB 经 Windows Shell 冷启动成功，数据库写入并更新 `last_opened_at`；运行中向安装 EXE 传入 TXT/PDF 后第二实例退出码 0、主实例始终只有 1 个，两种文件均导入并打开。
 - 重复传入同一 TXT 后 books 计数保持 1，`last_opened_at` 从 `15:25:22.680Z` 更新到 `15:25:55.256Z`，证明 duplicate 路径直接打开已有记录。
 

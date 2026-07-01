@@ -1174,6 +1174,7 @@
 | 2026-07-01 | MSI 首次对比误用了被后续 NSIS/文件关联 QA 改写的工作数据库 | 1 | 核对快照与 SQLite 文件时间，卸载并清空 QA 环境，从只读原始备份重新独立执行 MSI 升级 |
 | 2026-07-01 | Node/pnpm 路径探测中递归搜索版本管理目录超时 | 1 | 已由 `where.exe`、`node --version` 和显式路径定位 Node 26.1.0；发布命令将 `%APPDATA%\npm` 与 `C:\Program Files\nodejs` 置于 PATH 最前 |
 | 2026-07-01 | Browser QA 按测试技能示例调用 `tab.playwright.screenshot`，当前 Browser runtime 未提供该方法 | 1 | 交互状态已生效；按 Browser 完整 API 改用 `tab.screenshot({ fullPage: false })` 继续取证 |
+| 2026-07-01 | 发布候选 MSI 元数据读取在 Windows Installer COM `OpenDatabase` 处报 `DISP_E_TYPEMISMATCH` | 1 | 产物已生成且未开始安装；将路径/模式显式转为 string/int 并用 BindingFlags 调用，必要时核对 WiX 生成源 |
 
 ## 2026-06-30 大阶段 7：Windows 打包与 v0.1.0 首版发布
 
@@ -1236,6 +1237,8 @@
 - `verify:release` 已扩展检查 MIT 字段、EPUB/TXT/PDF 关联、正式图标源图和发布文档，当前通过。
 - 全量代码门禁使用 Node 26.1.0 / pnpm 11.1.2 通过：冻结安装、format、release verify、core build、desktop lint/build、71 Vitest、34 Rust tests、8 Playwright tests。
 - Build Web Apps Browser QA 通过：页面身份为 Ebook Reader，空书架非空白、无 overlay/控制台告警，List/Grid 切换状态正确；1280×720 和 375×760 截图已保存到仓库外。
+- 已合入 `codex/v0.1.0-mvp-integration` 并创建 `release/v0.1.0`；候选分支上的干净 Tauri build 生成最新 release EXE、NSIS 和 MSI。
+- 候选原生检查通过：MSI ProductVersion=0.1.0 且 UpgradeCode 稳定；NSIS 安装的应用首启 books=0、library 书籍文件=0，当前本机保留空书架 v0.1.0。
 | 2026-06-19 | `DEVELOPMENT.md` 第 3-4 行存在尾随空格 | 1 | 移除 Markdown 硬换行尾随空格，改为普通换行 |
 | 2026-06-19 | `pnpm.cmd install` 返回 `ERR_PNPM_IGNORED_BUILDS`，拦截 `esbuild@0.27.7` build script | 1 | 使用 `pnpm.cmd approve-builds esbuild` 最小审批后重跑安装 |
 | 2026-06-19 | `tsc -b` 要求 `tsconfig.node.json` 使用 `composite` 且不能 `noEmit`，会导致 Vite 配置副产物问题 | 1 | 改为 build script 分别运行 `tsc -p tsconfig.json`、`tsc -p tsconfig.node.json`、`vite build` |

@@ -34,8 +34,8 @@
 - [x] NSIS and MSI 0.0.0 to 0.1.0 upgrades retain books, files, progress, bookmarks,
   annotations, theme, and layout.
 - [x] EPUB cold-start association and TXT/PDF running-instance associations pass.
-- [ ] Final clean NSIS/MSI/EXE build is newer than the release commit and reports 0.1.0.
-- [ ] Final NSIS install starts with zero books and no app-managed test book files.
+- [x] Final clean NSIS/MSI/EXE build is newer than the release commit and reports 0.1.0.
+- [x] Final NSIS install starts with zero books and no app-managed test book files.
 
 ## Artifacts and publication
 
@@ -49,6 +49,6 @@
 
 ## Final local state
 
-- [ ] QA data is deleted; the pre-release user-data backup remains outside the repository.
-- [ ] Final NSIS v0.1.0 remains installed with an empty shelf.
+- [x] QA data is deleted; the pre-release user-data backup remains outside the repository.
+- [x] Final NSIS v0.1.0 remains installed with an empty shelf.
 - [ ] Git working tree is clean.
