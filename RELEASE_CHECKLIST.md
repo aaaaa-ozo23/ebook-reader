@@ -17,16 +17,16 @@
 
 ## Quality gates
 
-- [ ] `pnpm.cmd install --frozen-lockfile`
-- [ ] `pnpm.cmd run format`
-- [ ] `pnpm.cmd --filter @reader/core build`
-- [ ] `pnpm.cmd --filter @reader/desktop lint`
-- [ ] `pnpm.cmd --filter @reader/desktop test`
-- [ ] `pnpm.cmd --filter @reader/desktop build`
-- [ ] `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check`
-- [ ] `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
-- [ ] `pnpm.cmd --filter @reader/desktop test:e2e`
-- [ ] Build Web Apps Browser QA: empty shelf, desktop/mobile layout, interaction, console, overlay.
+- [x] `pnpm.cmd install --frozen-lockfile`
+- [x] `pnpm.cmd run format`
+- [x] `pnpm.cmd --filter @reader/core build`
+- [x] `pnpm.cmd --filter @reader/desktop lint`
+- [x] `pnpm.cmd --filter @reader/desktop test`
+- [x] `pnpm.cmd --filter @reader/desktop build`
+- [x] `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check`
+- [x] `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`
+- [x] `pnpm.cmd --filter @reader/desktop test:e2e`
+- [x] Build Web Apps Browser QA: empty shelf, desktop/mobile layout, interaction, console, overlay.
 
 ## Native acceptance
 
