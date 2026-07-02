@@ -511,15 +511,24 @@ Rust 测试：
 - 本地数据库路径要写入文档。
 - 后续若做同步，必须先做导出和删除能力。
 
-## 14. 当前推荐下一步
+## 14. v0.2 技术方向
 
-建议下一步直接进入阶段 0：
+v0.1.0 已完成 Windows 发布。v0.2 的完整范围、接口、风险、优先级和验收矩阵见 [`docs/v0.2-roadmap.md`](docs/v0.2-roadmap.md)。实施顺序固定为：
 
-1. 初始化 `apps/desktop` Tauri 项目。
-2. 建立 `packages/core`，定义 `Book`、`TocItem`、`ReaderTheme`、`Locator`、`Annotation` 类型。
-3. 建立 SQLite migration。
-4. 实现一个空书架页面和 Tauri 启动验证。
-5. 再开始 TXT 导入和阅读器原型。
+1. 阅读体验共享类型、设置持久化、动效控制层和渐进设计系统。
+2. EPUB 出版物页码、位置回退、图片查看器和分页动画。
+3. TXT 分页模式、布局缓存和分页动画。
+4. PDF 虚拟化连续滚动、页内恢复和分页动画。
+5. UI 收口、备份恢复、更新发布轨道及可选产品增强。
+
+架构约束：
+
+- `PageTransitionMode` 规划为 `none | slide | page-curl`。EPUB、TXT 分页和 PDF single/double 支持三种模式；PDF continuous 不使用翻页动画。
+- TXT 连续滚动、EPUB paginated、PDF single 和 slide 是升级后的默认值；reduced motion 在运行时强制无动画，但不覆盖保存设置。
+- TXT 页边界继续由 `charOffset` 锚定；EPUB 自带页码来自可选 page-list，缺失时显示 Location；PDF continuous 用可选 `pageOffsetRatio` 恢复页内位置。
+- 阅读体验设置继续使用 `app_settings` 的版本化 JSON，不为这些全局偏好新增表或列。
+- UI 保留现有信息架构与品牌色，先审批完整概念和建立 token，再按模块拆分 ReaderShell，禁止一次性重写。
+- v0.2 不同时启动 MOBI/AZW3、跨平台、移动端、TTS、词典/翻译或云同步实现。
 
 ## 15. 参考资料
 

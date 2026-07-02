@@ -1504,3 +1504,33 @@
 - **最终验证：** format、core build、desktop lint/build、68 Vitest、32 Rust tests、8 Playwright tests 全部通过；Browser 页面身份/DOM/console/桌面与 375px 检查通过。
 - **视觉证据：** `D:\tl-temp\ebook-reader-stage6-cover-popover.png`、`D:\tl-temp\ebook-reader-stage6-resizer-desktop.png`、`D:\tl-temp\ebook-reader-stage6-resizer-mobile.png` 已用 `view_image` 检查。
 - **代码复查：** 修正全局阅读快捷键未尊重 `defaultPrevented` 的问题，避免 separator 方向键同时翻页；新增 TXT `scrollBy` 零调用断言。
+
+## 2026-07-02 大阶段 8：v0.2 预留方向规划
+
+### 状态
+
+- **当前状态：** complete
+- **分支：** `codex/stage8-v0.2-roadmap`
+- **范围：** 只研究、评估和更新文档；不修改代码、依赖、schema、版本号、README 功能声明或 CHANGELOG。
+
+### 已执行
+
+- 读取并恢复 `task_plan.md`、`findings.md`、`progress.md`，运行 session catchup，确认无未同步上下文。
+- 确认 `main` 与 `origin/main` 同步，工作区干净，v0.1.0 已发布。
+- 从 `main` 创建单一文档分支 `codex/stage8-v0.2-roadmap`。
+- 审计共享 locator、`app_settings`、EPUB locations/page-list、TXT 虚拟化、PDF continuous 预留和 ReaderShell 模块边界。
+- 新增 `docs/v0.2-roadmap.md`，锁定接口、默认值、动画状态机、EPUB/TXT/PDF 方案、渐进 UI、后续阶段和验收矩阵。
+- 更新 `task_plan.md`，把阶段 8 拆为五个文档子阶段，并新增阶段 9–14+ 的实施顺序。
+- 更新 `DEVELOPMENT.md`，用 v0.2 技术方向替换已过期的“进入阶段 0”建议。
+- 更新 `findings.md`，记录本地实现事实、外部规范/候选依赖和优先级评估。
+
+### 最终验证
+
+- 提交前首次 `git diff --cached --check` 发现新路线图元数据两行使用 Markdown 硬换行尾空格；提交未执行，已改为普通段落并重新验证。
+- Node 26.1.0、pnpm 11.1.2 执行 `pnpm.cmd run format`：passed。
+- `git diff --check`：passed。
+- 无上下文读者问题检查：9/9 passed；EPUB 页码回退、默认模式、reduced motion、PDF 页内恢复、page-flip 门槛、TXT locator、阶段边界、UI 迁移和 v0.3+ 范围均能直接回答。
+- 跨文档一致性检查：passed；`PageTransitionMode`、`pageOffsetRatio`、Location 回退、阶段 9–14+ 和分支名一致。
+- 变更范围审计：passed；仅修改 `task_plan.md`、`DEVELOPMENT.md`、`findings.md`、`progress.md` 并新增 `docs/v0.2-roadmap.md`。
+- 禁止项审计：passed；无代码、依赖、lockfile、schema、版本、README 或 CHANGELOG 变更。
+- 大阶段 8 到此停止；不创建 `codex/v0.2.0-integration`，不开始阶段 9。

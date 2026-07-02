@@ -306,3 +306,48 @@
 | 最终封面截图中 82×123px 默认封面保持不变，浮层三行完整显示中英文长标题且无重复文字 | list 模式的书名可读性问题已解决 | 截图保存在 `D:\tl-temp\ebook-reader-stage6-cover-popover.png` |
 | 最终目录截图中桌面宽度为 401px、移动抽屉为 323px 且无分隔条 | 连续像素拖拽、宽度持久化和移动端抽屉规则均符合计划 | 截图保存在 `D:\tl-temp\ebook-reader-stage6-resizer-desktop.png` 与 `D:\tl-temp\ebook-reader-stage6-resizer-mobile.png` |
 | 全局阅读快捷键监听原先不检查子控件是否已 `preventDefault` | separator 的 ArrowLeft/Right 可能同时调整宽度和翻页 | 全局控制器先检查 `defaultPrevented`，并用 Vitest 断言键盘调宽不会触发 TXT `scrollBy` |
+
+## 2026-07-02 大阶段 8：v0.2 路线图研究
+
+### 本地架构发现
+
+| 发现 | 影响 | 规划决策 |
+|------|------|----------|
+| EPUB 当前每 1500 字符生成 locations，并把 progression 映射为显示页码 | 当前 `Page x / y` 不是出版物自带页码 | 有 page-list 时显示原始出版物标签；缺失时明确显示 `Location x / y` |
+| epub.js 0.3.93 能解析 page-list，但实现会 `parseInt` 标签，href-only 条目也不能完全依赖 `pageFromCfi` | 罗马数字和非 CFI 边界可能丢失 | adapter 层保留原始导航标签并建立 href/fragment/CFI 边界表 |
+| TXT 已用 TanStack Virtual 和 `charOffset` 保存进度 | 可增加分页而不改变持久定位 | 分页结果只作为布局缓存，主题或 viewport 改变后按 charOffset 重新定位 |
+| `PdfViewMode` 已包含 `continuous`，但 `resolveRenderedMode` 只返回 single/double | 类型预留未形成连续页面渲染 | 继续使用当前 PDF.js display layer，用 TanStack Virtual 管理可见 Canvas/文本/标注层 |
+| `PdfLocator` 使用 JSON 保存 page/scale/zoomMode | 能向后兼容扩展页内位置 | 增加可选 `pageOffsetRatio`，旧 locator 默认页首，无 schema migration |
+| `app_settings` 已支持 JSON 键值设置 | 阅读模式和动效不需要新表 | 保存版本化 `ReaderExperiencePreferences`，前后端使用同一默认值和归一规则 |
+| `ReaderShell.tsx` 已超过 5500 行且包含三种阅读器与多个浮层 | 新模式继续叠加会扩大回归面 | 阶段 9 先提取 token、控制层和格式组件，保持行为逐步拆分，不一次性重写 |
+
+### 外部规范与依赖发现
+
+| 来源 | 发现 | 规划影响 |
+|------|------|----------|
+| W3C EPUB 3.3 page-list | page-list 表示静态页面边界，但在 EPUB 导航文档中是可选项 | 不能承诺每本 EPUB 都有自带页码，必须保留 Location 回退 |
+| epub.js render methods | 支持 paginated、scrolled 和 continuous manager；continuous 会预载更多 section 且性能成本更高 | v0.2 保持 EPUB paginated，不同时增加 EPUB 连续滚动 |
+| StPageFlip | MIT、无依赖，支持 HTML 与 Canvas 展示层 | 只作为真实翻页候选；必须通过 iframe/Canvas、性能、a11y 和稳定性门槛后才能加入依赖 |
+| PDF.js | 官方提供 display layer 和完整 Viewer | 现有应用已在 display layer 上实现自定义标注和 UI，不整体替换 Viewer，避免大规模回归 |
+
+参考：
+
+- https://www.w3.org/TR/epub-33/#sec-nav-pagelist
+- https://github.com/futurepress/epub.js/#render-methods
+- https://github.com/Nodlik/StPageFlip
+- https://github.com/mozilla/pdf.js
+
+### 产品范围评估
+
+- v0.2 must-have：三格式离散分页动画、EPUB page-list/Location、EPUB 图片查看器、TXT 分页、PDF 连续滚动、备份/恢复。
+- v0.2 should-have：应用内更新、元数据/封面编辑、文件夹/拖放批量导入。
+- v0.2 could-have：自定义字体、全书库全文索引、阅读历史和统计。
+- v0.3+：TTS、词典/翻译、云同步、移动端、MOBI/AZW3；跨平台只做前置评估，不进入 v0.2 核心关键路径。
+
+### 已锁定默认值
+
+- EPUB：`paginated + slide`。
+- TXT：`scroll + slide`；slide 只在切换到 paginated 后生效。
+- PDF：`single + slide`；continuous 模式运行时 transition 为 none。
+- reduced motion：运行时禁用动画，不修改用户保存的选择。
+- UI：保留现有信息架构和炭黑/琥珀/青绿/纸张色，采用概念审批、token、逐模块迁移。
