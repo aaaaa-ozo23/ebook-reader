@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 7：complete；Windows v0.1.0 元信息、正式图标、安装包、文件关联、覆盖升级验证和 GitHub 首版发布全部完成。
+大阶段 8：complete；v0.2 阅读体验、UI、数据与平台方向已形成决策完整的文档路线图，未进行功能实现，阶段 9 尚未开始。
 
 ## 分支策略
 
@@ -12,6 +12,7 @@
 |------|------|------|
 | `main` | 稳定主线 | 只合入已验证的阶段成果、规划文档和发布修复 |
 | `codex/v0.1.0-mvp-integration` | MVP 集成分支 | 每个小阶段完成后合入此分支，统一跑端到端验证 |
+| `codex/v0.2.0-integration` | v0.2 集成分支 | 阶段 9 开始时从最新 `main` 创建；阶段 8 不提前创建 |
 | `codex/stageN-*` | 小阶段功能分支 | 从最新集成分支拉出，单一目标开发，完成后合回集成分支 |
 | `release/v0.1.0` | 首版发布候选 | Windows 打包、安装、升级验证通过后从集成分支切出 |
 
@@ -320,14 +321,62 @@
 
 ## 大阶段 8：v0.2 预留方向
 
-目标：不阻塞 MVP，但提前明确后续方向，避免首版架构封死。
+目标：在不修改功能代码的前提下锁定 v0.2 架构、范围、默认值、依赖门槛、实施顺序和验收标准，避免 v0.1 架构封死。
 
 | 小阶段 | 分支 | 工作内容 | 验收 |
 |--------|------|----------|------|
-| 8.1 MOBI/AZW3 方案评估 | `codex/stage8-mobi-azw3-research` | 评估导入时转换为 EPUB、外部工具许可、体积和分发方式 | 形成方案文档，不进入 v0.1 默认功能 |
-| 8.2 跨平台适配 | `codex/stage8-cross-platform-prep` | 梳理 macOS/Linux 路径、文件权限、打包差异 | 不影响 Windows MVP |
-| 8.3 移动端共享核心 | `codex/stage8-mobile-shared-core` | 评估 `packages/core` 与未来 React Native/Expo 的边界 | 共享类型不依赖 Tauri 或 DOM |
-| 8.4 数据导出 | `codex/stage8-export-data` | 设计书签、笔记、进度导出格式 | 为未来同步前置，不做云服务 |
+| 8.1 架构基线 | `codex/stage8-v0.2-roadmap` | 审计 locator、reader adapter、设置持久化、EPUB/TXT/PDF 渲染和 ReaderShell 边界 | 明确兼容点和必须先补齐的共享接口 |
+| 8.2 阅读体验规格 | `codex/stage8-v0.2-roadmap` | 规划三格式翻页动画、EPUB 自带页码和图片查看器、TXT 分页、PDF 无缝滚动 | 每项都有默认值、降级、风险和验收矩阵 |
+| 8.3 UI 与质量规格 | `codex/stage8-v0.2-roadmap` | 规划渐进 UI 统一、概念审批、设计 token、可访问性和性能门槛 | 不改变核心信息架构，不进行一次性重写 |
+| 8.4 数据与平台方向 | `codex/stage8-v0.2-roadmap` | 规划备份恢复、更新/签名、MOBI/AZW3、跨平台和移动共享核心 | 区分 v0.2 must/should/could 与 v0.3+ |
+| 8.5 路线图收口 | `codex/stage8-v0.2-roadmap` | 新增 `docs/v0.2-roadmap.md` 并同步 DEVELOPMENT、findings、progress | 文档验证通过，diff 不含代码/依赖/schema/版本/CHANGELOG |
+
+### 阶段 8 执行记录
+
+| 小阶段 | 状态 | 验证 |
+|--------|------|------|
+| 8.1 架构基线 | complete | 已核对共享 locator、`app_settings`、epub.js locations/page-list、TXT 虚拟化、PDF continuous 预留和 ReaderShell 组件边界 |
+| 8.2 阅读体验规格 | complete | 已写入接口、默认值、动画状态机、格式策略、兼容和失败降级 |
+| 8.3 UI 与质量规格 | complete | 已锁定渐进统一、四组概念审批、token、响应式、a11y 和性能矩阵 |
+| 8.4 数据与平台方向 | complete | 已划分 v0.2 与 v0.3+，保留 Windows-first 和纯 TS core 边界 |
+| 8.5 路线图收口 | complete | Prettier、`git diff --check`、9 项读者问题和变更范围审计通过；仅修改 5 个约定文档文件 |
+
+详细决策与后续实施验收见 `docs/v0.2-roadmap.md`。
+
+### 阶段 8 最终验收
+
+| 验收项 | 状态 |
+|--------|------|
+| `pnpm.cmd run format` | passed，Node 26.1.0 / pnpm 11.1.2 |
+| `git diff --check` | passed |
+| 无上下文读者问题检查 | passed，9/9 个关键问题可直接回答 |
+| 文档一致性检查 | passed，默认值、阶段顺序、Location 回退、pageOffsetRatio 和 v0.3+ 边界一致 |
+| 变更范围审计 | passed，仅 `task_plan.md`、`DEVELOPMENT.md`、`findings.md`、`progress.md`、`docs/v0.2-roadmap.md` |
+| 禁止项审计 | passed，无代码、依赖、lockfile、schema、版本、README 或 CHANGELOG 变更 |
+
+## 大阶段 9：阅读体验基础与设计系统
+
+目标：建立 v0.2 集成分支，落地阅读模式、动效和能力接口，审批 UI 概念并在无行为回归前提下开始拆分 ReaderShell。
+
+## 大阶段 10：EPUB 增强
+
+目标：实现出版物 page-list 与 Location 回退、图片查看器，以及 EPUB single/double 的平滑和真实翻页。
+
+## 大阶段 11：TXT 分页
+
+目标：在保留连续滚动的同时增加基于 charOffset 的分页、缓存、模式切换和分页动画。
+
+## 大阶段 12：PDF 连续模式
+
+目标：完成虚拟化无缝滚动、页内位置恢复、跳转整合，以及 PDF single/double 的分页动画。
+
+## 大阶段 13：产品收口与数据安全
+
+目标：完成渐进 UI 统一、备份/恢复、更新发布轨道，并择机加入元数据/封面编辑和批量导入。
+
+## 大阶段 14+：格式与平台扩展
+
+目标：在 v0.2 核心阅读体验稳定后，再评估 MOBI/AZW3、macOS/Linux、移动端、TTS、词典/翻译和云同步。
 
 ## 全局验收命令
 
@@ -381,6 +430,7 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 阶段 6.x 分隔条 `pointerdown` 阻止默认聚焦，键盘回归测试仍停留在 292px | 1 | 拖动开始时显式聚焦 separator，确保拖动后方向键继续可用 |
 | 阶段 6.x E2E 在 900px 断言侧栏受 40vw 限制，但媒体区间实际到 899px | 1 | 分别断言 900px 保留设置宽度、899px 开始限制为 40vw |
 | 阶段 6.x 首次封面浮层截图与右侧卡片标题发生叠字 | 1 | 悬停时提升封面 grid item 的 stacking context，确保不透明浮层覆盖正文列 |
+| 阶段 8 首次 staged diff 检查发现路线图元数据行有 Markdown 尾空格 | 1 | 提交未执行；改为普通段落并重新运行 Prettier 与 `git diff --cached --check` |
 
 ## 备注
 
