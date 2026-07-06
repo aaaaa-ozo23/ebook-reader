@@ -373,3 +373,5 @@
 - 用户批准 UI 概念的视觉方向，同时明确以路线图契约校正 MOBI、EPUB scrolled、Fade、重复阅读器侧栏等生成偏差。
 - 阶段 6.x 的最终基线为 68 Vitest、32 Rust tests、8 Playwright tests；书架入口约 68.46 kB gzip，ReaderShell 保持异步加载。
 - `page-flip@2.0.7` 当前元数据为 MIT、零运行时依赖；是否保留仍须通过阶段 9.5 的稳定性、性能、iframe/Canvas 和可访问性门槛。
+- 9.1 将 PDF view mode 的唯一公共类型源移到 `@reader/core`，adapter 仅重导出该类型；`ReaderAdapter` 本身未增加动画或布局职责。
+- 9.1 desktop build 测得书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip；相较阶段 8 文档基线略高，阶段 9.6 必须通过模块边界和导入审计压回或解释工具链差异。

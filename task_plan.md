@@ -374,6 +374,18 @@
 | 9.6 ReaderShell 模块拆分 | `codex/stage9-reader-shell-modules` | 按壳层、侧栏、浮层、格式阅读器、设置、导航控制器拆分，保持公开行为和懒加载边界 | 现有 68 个 Vitest 和 8 个 Playwright 基线不回归；入口包体不超过阶段 8 基线 |
 | 9.7 阶段 9 验收 | `codex/stage9-acceptance` | 补齐跨模块测试、文档和集成分支验收，记录最终 page-curl 依赖决策 | 全局门禁、Browser 桌面/窄屏、axe 和 Tauri build 通过；合入 `main` 后将集成分支快进到最新 `main` |
 
+### 阶段 9 实施状态
+
+| 小阶段 | 状态 | 验证摘要 |
+|--------|------|----------|
+| 9.1 阅读体验契约 | complete | core 5 tests、core build、desktop lint/build、format 与 diff check 通过 |
+| 9.2 设置持久化 | pending | — |
+| 9.3 UI 概念审批 | pending | 用户已批准“视觉方向并按契约校正”，待归档 |
+| 9.4 设计 token 与基础组件 | pending | — |
+| 9.5 翻页控制器原型 | pending | — |
+| 9.6 ReaderShell 模块拆分 | pending | — |
+| 9.7 阶段 9 验收 | pending | — |
+
 ## 大阶段 10：EPUB 增强
 
 目标：实现出版物 page-list 与 Location 回退、图片查看器，以及 EPUB single/double 的平滑和真实翻页。
