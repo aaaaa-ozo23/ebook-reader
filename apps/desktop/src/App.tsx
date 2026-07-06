@@ -14,6 +14,8 @@ import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/co
 
 import "./App.css";
 import defaultBookCover from "./assets/default-book-cover.jpg";
+import { Button } from "./components/ui/Button";
+import { SegmentedControl } from "./components/ui/SegmentedControl";
 import { prepareBookCover } from "./covers/bookCovers";
 import { listenForOpenBookFiles, takePendingOpenFiles } from "./tauri/fileOpen";
 import {
@@ -33,6 +35,11 @@ const LazyReaderShell = lazy(() =>
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
+
+const VIEW_MODE_OPTIONS = [
+  { label: "Grid", value: "grid" },
+  { label: "List", value: "list" },
+] as const;
 
 interface Feedback {
   actionLabel?: string;
@@ -528,33 +535,29 @@ function LibraryHeader({
         </p>
       </div>
       <div className="library-actions">
-        <div className="view-toggle" role="group" aria-label="View mode">
-          <button
-            type="button"
-            className="view-toggle__button"
-            aria-pressed={viewMode === "grid"}
-            onClick={onShowGridView}
-          >
-            Grid
-          </button>
-          <button
-            type="button"
-            className="view-toggle__button"
-            aria-pressed={viewMode === "list"}
-            onClick={onShowListView}
-          >
-            List
-          </button>
-        </div>
-        <button
-          type="button"
+        <SegmentedControl
+          className="view-toggle"
+          optionClassName="view-toggle__button"
+          label="View mode"
+          options={VIEW_MODE_OPTIONS}
+          value={viewMode}
+          onChange={(nextViewMode) => {
+            if (nextViewMode === "grid") {
+              onShowGridView();
+            } else {
+              onShowListView();
+            }
+          }}
+        />
+        <Button
           className="import-button"
           disabled={isImporting}
           onClick={onImportBook}
+          variant="danger"
         >
           <span className="import-button__icon" aria-hidden="true" />
           {isImporting ? "Importing..." : "Import book"}
-        </button>
+        </Button>
       </div>
     </header>
   );

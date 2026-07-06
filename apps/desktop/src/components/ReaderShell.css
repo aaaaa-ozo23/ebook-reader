@@ -31,8 +31,8 @@
   min-width: 0;
   flex-direction: column;
   gap: 16px;
-  border-right: 1px solid #d5ccb9;
-  background: #243438;
+  border-right: 1px solid var(--ds-color-border);
+  background: var(--ds-color-chrome);
   padding: 18px;
   color: #f7f2e8;
 }
@@ -43,12 +43,12 @@
 .reader-focus-exit {
   min-height: 40px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   font-weight: 800;
 }
 
 .reader-sidebar__back {
-  background: #f3bc55;
+  background: var(--ds-color-accent);
   color: #1d282d;
 }
 
@@ -62,7 +62,7 @@
   display: none;
   min-height: 40px;
   border: 1px solid rgba(247, 242, 232, 0.24);
-  border-radius: 8px;
+  border-radius: var(--ds-radius-control);
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
   font-weight: 800;
@@ -485,7 +485,7 @@
 
 .reader-tool-button,
 .reader-focus-exit {
-  background: #2f5d62;
+  background: var(--ds-color-action);
   color: #ffffff;
   padding: 0 13px;
 }
