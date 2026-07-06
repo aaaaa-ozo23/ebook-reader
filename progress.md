@@ -1534,3 +1534,29 @@
 - 变更范围审计：passed；仅修改 `task_plan.md`、`DEVELOPMENT.md`、`findings.md`、`progress.md` 并新增 `docs/v0.2-roadmap.md`。
 - 禁止项审计：passed；无代码、依赖、lockfile、schema、版本、README 或 CHANGELOG 变更。
 - 大阶段 8 到此停止；不创建 `codex/v0.2.0-integration`，不开始阶段 9。
+
+## 2026-07-06 阶段 9–17+ 详细开发计划
+
+### 状态
+
+- **当前状态：** complete
+- **分支：** `codex/v0.2-detailed-roadmap`
+- **范围：** 只扩充规划文档；不创建任何未来集成/功能分支，不实现阶段 9。
+
+### 已执行
+
+- 运行 session catchup，确认上次阶段 8 的未同步对话内容已由提交 `90bb547` 反映，当前 `main` 与 `origin/main` 同步且工作区干净。
+- 从 `main` 创建纯文档分支 `codex/v0.2-detailed-roadmap`。
+- 将 `task_plan.md` 的阶段 9–14+ 目标扩充为阶段 9–17+ 的完整小阶段表，固定每个分支、工作内容、前置依赖和验收条件。
+- 在 `docs/v0.2-roadmap.md` 同步版本归属、分支清单、关键交付和 gate，并明确 `task_plan.md` 是执行状态唯一来源。
+- 固定 v0.2/v0.3/v0.4/v0.5+ 集成分支和 `release/v0.2.0` 的创建时机；当前不创建这些分支。
+
+### 最终验证
+
+- 分支集合检查：`task_plan.md` 与 `docs/v0.2-roadmap.md` 各包含 62 个唯一阶段分支，差集为 0、重复名为 0。
+- 阶段计数：9–12 各 7 个、13 为 9 个、14 为 7 个、15–17 各 6 个。
+- 无上下文读者问题：12/12 passed，覆盖集成分支创建、共享契约、UI gate、EPUB/TXT/PDF、备份冲突、RC、MOBI、跨平台、移动 core 和远程默认行为。
+- Node 26.1.0、pnpm 11.1.2 执行 `pnpm.cmd run format`：passed。
+- `git diff --check`：passed。
+- 变更范围：仅 `task_plan.md`、`docs/v0.2-roadmap.md`、`findings.md`、`progress.md`；无代码、依赖、schema、版本、README 或 CHANGELOG 变更。
+- 未创建 `codex/v0.2.0-integration` 或任何阶段 9–17 功能分支；阶段 9 仍为未开始。
