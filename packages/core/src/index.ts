@@ -5,6 +5,34 @@ export type AnnotationKind = "highlight" | "note";
 
 export type ReaderThemeMode = "light" | "dark" | "sepia" | "green";
 
+export type PageTransitionMode = "none" | "slide" | "page-curl";
+export type EpubViewMode = "paginated";
+export type TxtViewMode = "scroll" | "paginated";
+export type PdfViewMode = "single" | "double" | "continuous";
+export type ReaderViewMode = EpubViewMode | TxtViewMode | PdfViewMode;
+
+export interface ReaderCapabilities {
+  viewModes: readonly ReaderViewMode[];
+  pageTransitions: readonly PageTransitionMode[];
+  supportsPublicationPageLabels: boolean;
+  supportsImageViewer: boolean;
+}
+
+export interface ReaderExperiencePreferences {
+  epub: {
+    viewMode: EpubViewMode;
+    transition: PageTransitionMode;
+  };
+  txt: {
+    viewMode: TxtViewMode;
+    transition: PageTransitionMode;
+  };
+  pdf: {
+    viewMode: PdfViewMode;
+    transition: PageTransitionMode;
+  };
+}
+
 export interface Book {
   id: string;
   title: string;
@@ -99,6 +127,7 @@ export interface EpubLocator extends LocatorContext {
 export interface PdfLocator extends LocatorContext {
   kind: "pdf";
   page: number;
+  pageOffsetRatio?: number;
   zoomMode?: "fit-width" | "custom";
   rects?: Array<{
     x: number;
@@ -165,3 +194,106 @@ export const defaultReaderTheme: ReaderTheme = {
   backgroundColor: "#f7f1e3",
   textColor: "#25211d",
 };
+
+const PAGE_TRANSITIONS = ["none", "slide", "page-curl"] as const;
+
+export const readerCapabilitiesByFormat: Readonly<
+  Record<BookFormat, ReaderCapabilities>
+> = {
+  epub: {
+    viewModes: ["paginated"],
+    pageTransitions: PAGE_TRANSITIONS,
+    supportsPublicationPageLabels: true,
+    supportsImageViewer: true,
+  },
+  txt: {
+    viewModes: ["scroll", "paginated"],
+    pageTransitions: PAGE_TRANSITIONS,
+    supportsPublicationPageLabels: false,
+    supportsImageViewer: false,
+  },
+  pdf: {
+    viewModes: ["single", "double", "continuous"],
+    pageTransitions: PAGE_TRANSITIONS,
+    supportsPublicationPageLabels: false,
+    supportsImageViewer: false,
+  },
+};
+
+export const defaultReaderExperiencePreferences: ReaderExperiencePreferences = {
+  epub: { viewMode: "paginated", transition: "slide" },
+  txt: { viewMode: "scroll", transition: "slide" },
+  pdf: { viewMode: "single", transition: "slide" },
+};
+
+export function normalizeReaderExperiencePreferences(
+  value: unknown,
+): ReaderExperiencePreferences {
+  const input = isRecord(value) ? value : {};
+  const epub = isRecord(input.epub) ? input.epub : {};
+  const txt = isRecord(input.txt) ? input.txt : {};
+  const pdf = isRecord(input.pdf) ? input.pdf : {};
+
+  return {
+    epub: {
+      viewMode: "paginated",
+      transition: normalizePageTransition(epub.transition),
+    },
+    txt: {
+      viewMode:
+        txt.viewMode === "paginated" || txt.viewMode === "scroll"
+          ? txt.viewMode
+          : defaultReaderExperiencePreferences.txt.viewMode,
+      transition: normalizePageTransition(txt.transition),
+    },
+    pdf: {
+      viewMode:
+        pdf.viewMode === "double" ||
+        pdf.viewMode === "continuous" ||
+        pdf.viewMode === "single"
+          ? pdf.viewMode
+          : defaultReaderExperiencePreferences.pdf.viewMode,
+      transition: normalizePageTransition(pdf.transition),
+    },
+  };
+}
+
+export function resolveEffectivePageTransition(
+  format: BookFormat,
+  preferences: ReaderExperiencePreferences,
+  prefersReducedMotion: boolean,
+): PageTransitionMode {
+  if (
+    prefersReducedMotion ||
+    (format === "txt" && preferences.txt.viewMode === "scroll") ||
+    (format === "pdf" && preferences.pdf.viewMode === "continuous")
+  ) {
+    return "none";
+  }
+
+  return preferences[format].transition;
+}
+
+export function normalizePdfLocator(locator: PdfLocator): PdfLocator {
+  const ratio = locator.pageOffsetRatio;
+
+  if (ratio === undefined || !Number.isFinite(ratio)) {
+    const { pageOffsetRatio: _pageOffsetRatio, ...rest } = locator;
+    return rest;
+  }
+
+  return {
+    ...locator,
+    pageOffsetRatio: Math.min(1, Math.max(0, ratio)),
+  };
+}
+
+function normalizePageTransition(value: unknown): PageTransitionMode {
+  return value === "none" || value === "page-curl" || value === "slide"
+    ? value
+    : "slide";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

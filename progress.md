@@ -1570,3 +1570,14 @@
 - 从最新 `main` / `origin/main` 的 `64dc750` 创建 v0.2 集成分支，确认工作区干净且分支祖先正确。
 - 恢复 `task_plan.md`、`findings.md`、`progress.md` 和阶段 8 路线图上下文；按 9.1–9.7 固定分支顺序执行。
 - UI 概念采用“视觉批准并校正”：保留炭黑、琥珀、青绿、纸张色和布局方向，功能与文案以 `docs/v0.2-roadmap.md` 为准。
+
+### 9.1 阅读体验契约
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-experience-contracts`
+- 在 `@reader/core` 新增三格式 view mode、`PageTransitionMode`、`ReaderCapabilities`、`ReaderExperiencePreferences`、默认偏好、能力矩阵、偏好/PDF locator 归一和有效动效解析。
+- `PdfLocator` 新增可选 `pageOffsetRatio`；旧 locator 保持有效。TXT scroll、PDF continuous 和 reduced motion 的运行时有效动效为 `none`，保存偏好不被覆盖。
+- PDF adapter 改为复用 core 的 `PdfViewMode`，未修改 `ReaderAdapter` 协议。
+- 新增 core Vitest 配置入口和 5 tests；core test/build、desktop lint/build、format、diff check 通过。
+- **过程问题：** 首次 `apply_patch` 因 PDF adapter import 上下文与预期不一致而未应用；读取文件头后拆分补丁成功。首次 format check 发现 4 个新改文件未格式化；定向运行 Prettier 后通过。
+- **包体观测：** 本轮 desktop build 为书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip，作为 9.6 的实测比较点。
