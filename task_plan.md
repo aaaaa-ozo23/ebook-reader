@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 8：complete；v0.2 阅读体验、UI、数据与平台方向已形成决策完整的文档路线图，未进行功能实现，阶段 9 尚未开始。
+大阶段 8：complete；v0.2 路线图及阶段 9–17+ 的小阶段/分支计划已完成，未进行功能实现，阶段 9 尚未开始。
 
 ## 分支策略
 
@@ -13,8 +13,12 @@
 | `main` | 稳定主线 | 只合入已验证的阶段成果、规划文档和发布修复 |
 | `codex/v0.1.0-mvp-integration` | MVP 集成分支 | 每个小阶段完成后合入此分支，统一跑端到端验证 |
 | `codex/v0.2.0-integration` | v0.2 集成分支 | 阶段 9 开始时从最新 `main` 创建；阶段 8 不提前创建 |
+| `codex/v0.3.0-integration` | v0.3 集成分支 | v0.2 发布后按需创建，承载阶段 14 |
+| `codex/v0.4.0-integration` | v0.4 集成分支 | 阶段 14 完成后按需创建，承载阶段 15 |
+| `codex/v0.5.0-integration` | v0.5+ 集成分支 | 跨平台桌面稳定后按需创建，承载阶段 16–17+ |
 | `codex/stageN-*` | 小阶段功能分支 | 从最新集成分支拉出，单一目标开发，完成后合回集成分支 |
 | `release/v0.1.0` | 首版发布候选 | Windows 打包、安装、升级验证通过后从集成分支切出 |
+| `release/v0.2.0` | v0.2 发布候选 | 阶段 13 全量验收通过后从 `codex/v0.2.0-integration` 切出 |
 
 提交节奏：
 - 每个小阶段至少包含实现、测试、文档/计划更新三类提交。
@@ -358,25 +362,148 @@
 
 目标：建立 v0.2 集成分支，落地阅读模式、动效和能力接口，审批 UI 概念并在无行为回归前提下开始拆分 ReaderShell。
 
+前置：从最新 `main` 创建 `codex/v0.2.0-integration`；以下分支均从该集成分支最新提交创建并按顺序合回。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 9.1 阅读体验契约 | `codex/stage9-reader-experience-contracts` | 在 core 定义 `PageTransitionMode`、格式视图模式、`ReaderCapabilities`、`ReaderExperiencePreferences`、默认值及可选 `PdfLocator.pageOffsetRatio` | core 类型测试覆盖默认值、联合类型和旧 locator 兼容；core/desktop build 通过 |
+| 9.2 设置持久化 | `codex/stage9-reader-experience-settings` | 在 Rust、Tauri bridge 和浏览器 fallback 中读写版本化阅读体验设置；通过 `app_settings` 保存并归一非法值 | 无 schema migration；Rust/TS 测试覆盖默认、保存、恢复、未知字段和降级 |
+| 9.3 UI 概念审批 | `codex/stage9-ui-concepts` | 生成书架、阅读器、图片查看器、375px 窄屏四组完整概念，记录可见文案、状态、图标和响应式规则 | 用户明确批准概念；源图和设计说明进入 `docs/design/v0.2/`；批准前不修改产品 UI |
+| 9.4 设计 token 与基础组件 | `codex/stage9-design-tokens` | 提取颜色、排版、间距、层级、动效 token，统一按钮、分段控件、工具栏、模态框、滑杆和 focus 样式 | Story/fixture 状态覆盖 hover/focus/disabled/dark/reduced-motion；现有流程无视觉破坏 |
+| 9.5 翻页控制器原型 | `codex/stage9-page-transition-spike` | 实现一次导航事务、单槽待处理输入、slide；比较自研 CSS 3D 与 page-flip，按既定门槛决定 page-curl 方案 | 30 次连续导航无丢页/重复提交；性能、iframe/Canvas、a11y、reduced-motion 门槛有记录和自动化覆盖 |
+| 9.6 ReaderShell 模块拆分 | `codex/stage9-reader-shell-modules` | 按壳层、侧栏、浮层、格式阅读器、设置、导航控制器拆分，保持公开行为和懒加载边界 | 现有 68 个 Vitest 和 8 个 Playwright 基线不回归；入口包体不超过阶段 8 基线 |
+| 9.7 阶段 9 验收 | `codex/stage9-acceptance` | 补齐跨模块测试、文档和集成分支验收，记录最终 page-curl 依赖决策 | 全局门禁、Browser 桌面/窄屏、axe 和 Tauri build 通过；合入 `main` 后将集成分支快进到最新 `main` |
+
 ## 大阶段 10：EPUB 增强
 
 目标：实现出版物 page-list 与 Location 回退、图片查看器，以及 EPUB single/double 的平滑和真实翻页。
+
+前置：大阶段 9 complete；所有分支从最新 `codex/v0.2.0-integration` 创建。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 10.1 page-list 模型 | `codex/stage10-epub-page-list` | 解析导航文档原始 page-list 标签，将 href/fragment/CFI 映射为有序出版物页面边界并缓存 | 数字、罗马数字、href-only、CFI、空和损坏 fixture 通过；不依赖 epub.js `parseInt` 结果作为最终标签 |
+| 10.2 页码与 Location UI | `codex/stage10-epub-page-labels` | 扩展 EPUB position/display label；有 page-list 显示 `Page <label>`，否则显示 `Location x / y` | 拖动、目录跳转、重启恢复和 single/double 下标签正确；估算位置不再称为 Page |
+| 10.3 图片资源桥接 | `codex/stage10-epub-image-bridge` | 在 rendition iframe 注册/清理事件代理，解析 `img`、SVG `image` 和键盘激活，复用已加载资源 | 不主动请求新外部 URL；章节切换不泄漏 listener/blob；装饰性/损坏图片安全忽略 |
+| 10.4 图片查看器 | `codex/stage10-epub-image-viewer` | 实现模态查看、适应窗口、100%–500% 缩放、滚轮/触控、拖动、重置、Esc 和焦点恢复 | 键鼠触控和 reduced-motion 路径通过；背景不可交互；桌面/375px 无裁切 |
+| 10.5 EPUB 平滑切换 | `codex/stage10-epub-slide-transition` | 将统一 transition controller 接入 EPUB single/double，处理 resize、主题、目录跳转和浮层互斥 | slide/none、快速输入、首末页、双页 spread 和进度单次提交测试通过 |
+| 10.6 EPUB 真实翻页 | `codex/stage10-epub-page-curl` | 按阶段 9 决策实现隔离展示层 page-curl，不接管实时 iframe/选择/标注 DOM | 选择、高亮、批注、键盘和图片查看器无回归；不可捕获资源自动无动画降级 |
+| 10.7 阶段 10 验收 | `codex/stage10-epub-acceptance` | 汇总 EPUB fixtures、性能、视觉、a11y、文档和完整回归 | core/lint/Vitest/Rust/Playwright/Browser/axe/Tauri build 通过；合入 main 并同步集成分支 |
 
 ## 大阶段 11：TXT 分页
 
 目标：在保留连续滚动的同时增加基于 charOffset 的分页、缓存、模式切换和分页动画。
 
+前置：大阶段 10 complete；所有分支从最新 `codex/v0.2.0-integration` 创建。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 11.1 分页测量引擎 | `codex/stage11-txt-paginator-measurement` | 对标题/段落离屏测量，长段落用 Range/二分法按可见高度切分，输出 charOffset 页边界 | 中英混排、超长段落、空段、不同字体/行高/边距 fixture 的边界连续且不丢字/重复 |
+| 11.2 分页缓存 | `codex/stage11-txt-pagination-cache` | 按 file hash、viewport、DPI、主题指纹缓存页边界并处理失效 | 任一输入变化即失效；命中/失配/损坏缓存测试通过；缓存不成为持久 locator |
+| 11.3 三页渲染窗口 | `codex/stage11-txt-page-window` | 只挂载前页、当前页、后页并预取相邻边界；复用标注切片 | 大型 TXT 不生成整书 DOM；翻页无空白闪烁；标注范围跨页显示正确 |
+| 11.4 阅读模式切换 | `codex/stage11-txt-reading-modes` | 增加 scroll/paginated 控件和偏好恢复，切换前后用 chapterId + charOffset 锚定 | 默认仍为 scroll；模式切换、重启、主题/窗口变化回到相同文本附近 |
+| 11.5 定位与跳转整合 | `codex/stage11-txt-locator-integrations` | 统一目录、搜索、书签、批注和进度滑杆到分页器 charOffset 路径 | 所有入口能定位正确页/滚动位置；数据库不保存临时页号 |
+| 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
+| 11.7 阶段 11 验收 | `codex/stage11-txt-acceptance` | 执行长文本性能、视觉、a11y、定位和三格式回归 | 既有 TXT 滚动性能不回退；全局门禁和 Tauri build 通过；合入 main 并同步集成分支 |
+
 ## 大阶段 12：PDF 连续模式
 
 目标：完成虚拟化无缝滚动、页内位置恢复、跳转整合，以及 PDF single/double 的分页动画。
 
+前置：大阶段 11 complete；所有分支从最新 `codex/v0.2.0-integration` 创建。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 12.1 连续模式与 locator | `codex/stage12-pdf-continuous-locator` | 让 adapter 真正支持 continuous，读写并归一 `pageOffsetRatio`，保持旧 locator 页首回退 | 旧/新 locator、非法比例、single/double/continuous 切换和重启恢复测试通过 |
+| 12.2 虚拟页面列表 | `codex/stage12-pdf-virtual-pages` | 用 TanStack Virtual 根据 PDF 原始尺寸建立页面列表，只挂载可见页和前后 overscan | 500 页 fixture 不创建整书 Canvas/文本层；页面高度估算和滚动范围正确 |
+| 12.3 渲染任务生命周期 | `codex/stage12-pdf-render-lifecycle` | render task 改为按页管理，离开窗口取消任务并释放大 Canvas，文本/标注层同生命周期 | 快速滚动/缩放无陈旧页面覆盖、竞态或持续内存增长；错误页可重试 |
+| 12.4 当前页与滚动锚定 | `codex/stage12-pdf-scroll-anchoring` | 以 viewport 中心确定当前页；缩放、fit-width、resize 后按 pageOffsetRatio 恢复 | 当前页/进度稳定；不同尺寸和 DPR 下锚点误差在验收阈值内 |
+| 12.5 导航与标注整合 | `codex/stage12-pdf-navigation-integrations` | 目录、搜索、页码输入、书签、批注跳转滚动到目标页/rect，保留单页文本选择限制 | 所有跳转在 continuous 正确；高亮重放和选择菜单只绑定可见层；无跨页选择承诺 |
+| 12.6 PDF 分页动画 | `codex/stage12-pdf-page-transitions` | single/double 接入 none/slide/page-curl；continuous 强制自然滚动 | Canvas 展示层结束后文本/标注恢复；双页奇偶、末页、快速输入和降级测试通过 |
+| 12.7 阶段 12 验收 | `codex/stage12-pdf-acceptance` | 完成 500 页性能、内存、视觉、a11y 和三模式回归 | 全局门禁、Browser/Playwright/axe/Tauri build 通过；合入 main 并同步集成分支 |
+
 ## 大阶段 13：产品收口与数据安全
 
-目标：完成渐进 UI 统一、备份/恢复、更新发布轨道，并择机加入元数据/封面编辑和批量导入。
+目标：完成渐进 UI 统一、备份/恢复、更新发布轨道、元数据/封面编辑、批量导入和 v0.2 发布候选。
 
-## 大阶段 14+：格式与平台扩展
+前置：大阶段 12 complete；所有分支从最新 `codex/v0.2.0-integration` 创建。
 
-目标：在 v0.2 核心阅读体验稳定后，再评估 MOBI/AZW3、macOS/Linux、移动端、TTS、词典/翻译和云同步。
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 13.1 书架视觉收口 | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1280/900/640/375/DPR2 通过 |
+| 13.2 阅读器视觉收口 | `codex/stage13-reader-polish` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效 | 四主题、三格式、focus/reduced-motion、窄屏抽屉和图片查看器视觉/a11y 通过 |
+| 13.3 备份导出 | `codex/stage13-backup-export` | 定义版本化备份 manifest/JSON，导出书库元数据、设置、进度、书签、标注；原书/封面为显式选项 | 可校验版本、checksum 和缺失文件；导出不修改数据库；大书库有进度/取消 |
+| 13.4 备份恢复 | `codex/stage13-backup-restore` | 校验备份后事务恢复；书籍按 file hash 去重，记录按 UUID 合并，冲突以 `updated_at` 新者为准 | 失败原子回滚；旧/重复/部分/损坏备份、无原书和跨路径恢复测试通过 |
+| 13.5 元数据与封面编辑 | `codex/stage13-book-metadata-editor` | 编辑标题/作者和用户封面；区分提取值与用户覆盖值，支持恢复自动封面 | 重启/升级保持覆盖；格式/尺寸校验、删除书籍和备份恢复一致 |
+| 13.6 文件夹与拖放导入 | `codex/stage13-batch-import` | 支持拖放文件/文件夹、递归扫描 EPUB/TXT/PDF、预览、去重、取消和逐项结果 | 大批量导入不阻塞 UI；非法/重复/丢失文件隔离；不跟随符号链接越界 |
+| 13.7 应用内更新 | `codex/stage13-app-updater` | 接入 Tauri updater、签名清单、检查/下载/安装状态和手动回退说明 | 无更新、下载失败、签名失败、取消、重启安装和数据库兼容路径通过 |
+| 13.8 发布安全与签名 | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
+| 13.9 v0.2 发布候选 | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | RC 仅含已验收功能；全套门禁和安装矩阵通过；发布需用户明确授权后执行 |
+
+## 大阶段 14：v0.3 格式与阅读能力扩展
+
+目标：v0.2 发布后，在 `codex/v0.3.0-integration` 上评估 MOBI/AZW3，并按容量加入自定义字体、全书库检索和阅读统计。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 14.1 MOBI/AZW3 决策 | `codex/stage14-mobi-azw3-evaluation` | 比较 Calibre/KindleUnpack/其他转换器的许可、体积、离线性、DRM 边界和分发方式 | 输出 go/no-go；DRM 文件明确拒绝；未过许可/体积门槛不进入实现 |
+| 14.2 转换原型 | `codex/stage14-mobi-conversion-spike` | 在隔离临时目录将无 DRM 样本转换为 EPUB，验证元数据、目录、图片、编码和清理 | 转换失败不污染书库；进程取消/超时/残留清理通过；记录安装包增量 |
+| 14.3 MOBI/AZW3 导入 | `codex/stage14-mobi-import` | 仅在 14.1/14.2 go 后接入导入、转换进度、去重和错误反馈，内部继续走 EPUB adapter | 原文件保留；转换产物可追踪/删除；书库、文件关联、备份和许可证清单通过 |
+| 14.4 自定义字体 | `codex/stage14-custom-fonts` | 导入本地字体、校验许可提示/格式、管理启停并映射到 TXT/EPUB | 损坏字体不影响启动；卸载字体有回退；PDF 不承诺替换文档字体 |
+| 14.5 全书库全文检索 | `codex/stage14-library-search-index` | 建立可失效本地索引、后台队列、搜索结果和跳转；不上传内容 | 导入/删除/修复触发增量索引；大书库搜索可取消；索引损坏可重建 |
+| 14.6 阅读历史与统计 | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 默认本地、可关闭/删除/导出；休眠和后台时间不计入有效阅读 |
+| 14.7 阶段 14 验收 | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | 未通过 gate 的能力不进入发布；完整门禁和升级测试通过 |
+
+## 大阶段 15：v0.4 macOS/Linux 桌面扩展
+
+目标：在 `codex/v0.4.0-integration` 上完成平台抽象、macOS/Linux 运行和可分发安装包。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 15.1 平台抽象审计 | `codex/stage15-platform-abstraction` | 清理 Windows-only 路径/命令/文件关联假设，建立平台 capability 和目录/权限矩阵 | Windows 行为不回归；core 不引入 OS/DOM/Tauri 依赖 |
+| 15.2 macOS 运行适配 | `codex/stage15-macos-runtime` | 适配 app data、sandbox/文件权限、窗口、菜单、快捷键、字体和 WebKit 行为 | Intel/Apple Silicon 支持策略明确；三格式阅读和数据恢复通过 |
+| 15.3 macOS 打包发布 | `codex/stage15-macos-packaging` | 配置 universal/分架构 bundle、文件关联、签名、公证和升级 | 签名/公证 gate 通过才公开发布；安装、升级、卸载和双击打开验证 |
+| 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | 适配 XDG 路径、WebKitGTK、文件选择、字体、桌面集成和发行版差异 | 选定最低支持发行版；三格式阅读、导入、备份恢复通过 |
+| 15.5 Linux 打包发布 | `codex/stage15-linux-packaging` | 配置 AppImage/deb/rpm 中经评估的目标格式、MIME/desktop 文件和升级说明 | 每个发布格式有安装/卸载/文件关联验证；不承诺未测试发行版 |
+| 15.6 跨平台 CI 与验收 | `codex/stage15-cross-platform-ci` | 建立 Windows/macOS/Linux 构建矩阵、平台 fixture、条件测试和发布清单 | 三平台核心测试、打包 smoke、路径/权限/升级矩阵通过 |
+
+## 大阶段 16：v0.5 移动共享核心与客户端
+
+目标：在 `codex/v0.5.0-integration` 上抽取平台无关逻辑并建立 React Native/Expo 移动基线，不复用 DOM renderer。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 16.1 共享核心边界 | `codex/stage16-shared-core-boundary` | 抽取模型、locator、设置归一、导出协议和纯业务规则；建立禁止 DOM/Tauri/Node import 的门禁 | desktop 继续通过；core 可在 RN TypeScript 环境编译和测试 |
+| 16.2 数据可移植协议 | `codex/stage16-portability-protocol` | 将阶段 13 备份模型演进为跨平台版本化协议，定义 capability、迁移和冲突元数据 | desktop/mobile 双向 fixture 兼容；未知字段保留；无云服务依赖 |
+| 16.3 React Native/Expo 壳 | `codex/stage16-mobile-shell` | 建立导航、书架、设置、主题、错误状态和平台 capability 注入 | Android/iOS 开发构建启动；无营销首页；基础 a11y/深浅主题通过 |
+| 16.4 移动存储与导入 | `codex/stage16-mobile-storage-import` | 接入文档选择、应用沙盒副本、SQLite/等价存储、去重、删除和备份导入 | 重启恢复、空间不足、权限拒绝、重复导入和删除清理通过 |
+| 16.5 移动阅读器适配 | `codex/stage16-mobile-readers` | 为 EPUB/TXT/PDF 选择移动原生/WebView adapter，复用 locator/annotation 协议而非桌面 DOM | 手势、旋转、后台恢复、选择/标注和大文件性能达到移动验收线 |
+| 16.6 移动端验收 | `codex/stage16-mobile-acceptance` | Android/iOS 设备矩阵、离线、功耗、内存、备份互通和隐私验收 | 关键流程真实设备通过；不支持的格式/能力明确降级 |
+
+## 大阶段 17+：语音、词典、翻译与可选同步
+
+目标：移动/桌面共享协议稳定后，再用可插拔服务扩展辅助阅读；默认继续本地优先、无账号、无上传。
+
+| 小阶段 | 分支 | 工作内容 | 验收 |
+|--------|------|----------|------|
+| 17.1 TTS | `codex/stage17-tts` | 抽象系统 TTS，支持段落/句子跟随、速度/声音、暂停恢复和后台策略 | Windows/macOS/Linux/移动按 capability 降级；高亮与 locator 同步；离线优先 |
+| 17.2 本地词典 | `codex/stage17-dictionary` | 定义词典 provider，先支持离线词典包、选词查询、历史和数据清理 | 无词典时不阻塞阅读；索引可卸载；选词/键盘/触控流程通过 |
+| 17.3 可选翻译 | `codex/stage17-translation` | 抽象本地/远程翻译 provider，显式展示发送文本范围和隐私开关 | 默认关闭远程；每次/每 provider 有同意与错误降级；不上传原书全文 |
+| 17.4 同步协议 | `codex/stage17-sync-protocol` | 基于 UUID、updatedAt、deletedAt 定义版本化增量同步、冲突和加密 envelope | 模拟离线并发、删除、时钟偏差和未知字段；协议不绑定单一后端 |
+| 17.5 可选同步服务 | `codex/stage17-sync-service` | 在用户明确启用后同步进度、书签、标注和设置；书文件默认不同步 | 端到端加密/认证/注销/导出/删除完成前不发布；本地模式完全独立可用 |
+| 17.6 阶段 17+ 验收 | `codex/stage17-acceptance` | 隐私、安全、跨平台、离线和辅助功能验收 | 默认网络静默；远程功能均可关闭和清除；威胁模型与用户文档完成 |
+
+### 阶段 9–17+ 详细计划验收
+
+| 验收项 | 状态 |
+|--------|------|
+| 固定小阶段/分支总数 | passed，62 个 |
+| 分支集合一致性 | passed，`task_plan.md` 与 `docs/v0.2-roadmap.md` 各 62 个，差集 0 |
+| 分支唯一性 | passed，两份文档均无重复分支名 |
+| 阶段计数 | passed，9–12 各 7，13 为 9，14 为 7，15–17 各 6 |
+| 版本边界 | passed，9–13=v0.2、14=v0.3、15=v0.4、16–17+=v0.5+ |
+| 无上下文读者问题 | passed，12/12 可直接回答 |
+| 实施边界 | passed，未创建未来集成/功能分支，阶段 9 未开始 |
 
 ## 全局验收命令
 
