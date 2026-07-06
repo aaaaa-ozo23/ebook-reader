@@ -1560,3 +1560,13 @@
 - `git diff --check`：passed。
 - 变更范围：仅 `task_plan.md`、`docs/v0.2-roadmap.md`、`findings.md`、`progress.md`；无代码、依赖、schema、版本、README 或 CHANGELOG 变更。
 - 未创建 `codex/v0.2.0-integration` 或任何阶段 9–17 功能分支；阶段 9 仍为未开始。
+
+## 2026-07-06 大阶段 9：阅读体验基础与设计系统
+
+### 启动
+
+- **状态：** in_progress
+- **集成分支：** `codex/v0.2.0-integration`
+- 从最新 `main` / `origin/main` 的 `64dc750` 创建 v0.2 集成分支，确认工作区干净且分支祖先正确。
+- 恢复 `task_plan.md`、`findings.md`、`progress.md` 和阶段 8 路线图上下文；按 9.1–9.7 固定分支顺序执行。
+- UI 概念采用“视觉批准并校正”：保留炭黑、琥珀、青绿、纸张色和布局方向，功能与文案以 `docs/v0.2-roadmap.md` 为准。

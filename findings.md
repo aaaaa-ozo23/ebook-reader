@@ -366,3 +366,10 @@
 | 发布动作继续需要明确授权 | 规划可以创建 release candidate，但公开 Release、商店提交或证书购买属于外部状态变更 | 13.9 只在用户明确授权后执行最终发布 |
 
 详细拆分数量：阶段 9/10/11/12 各 7 个小阶段，阶段 13 为 9 个，阶段 14 为 7 个，阶段 15/16/17+ 各 6 个；共 62 个固定分支。阶段 9/10/11/12/14/16/17 设置显式 acceptance 分支，阶段 13 由 release-candidate、阶段 15 由 cross-platform-ci 完成收口。
+
+## 2026-07-06 大阶段 9 实施基线
+
+- `main` 与 `origin/main` 同步于 `64dc750`，工作区干净；`codex/v0.2.0-integration` 从该提交创建。
+- 用户批准 UI 概念的视觉方向，同时明确以路线图契约校正 MOBI、EPUB scrolled、Fade、重复阅读器侧栏等生成偏差。
+- 阶段 6.x 的最终基线为 68 Vitest、32 Rust tests、8 Playwright tests；书架入口约 68.46 kB gzip，ReaderShell 保持异步加载。
+- `page-flip@2.0.7` 当前元数据为 MIT、零运行时依赖；是否保留仍须通过阶段 9.5 的稳定性、性能、iframe/Canvas 和可访问性门槛。
