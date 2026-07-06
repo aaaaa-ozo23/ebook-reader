@@ -1592,3 +1592,12 @@
 - Rust `PdfLocator` 同步增加 `pageOffsetRatio`，保存时过滤非有限值并钳制到 `0..1`；旧 locator 仍可反序列化。
 - **验证：** desktop 74 Vitest、Rust 36 tests、desktop lint/build、format、cargo fmt check、diff check 通过。
 - **过程问题：** 首轮 Rust 编译误用不存在的 `database_path()` helper，导致 2 个 E0425；改为仓库现有 `init_app_database()` 后重跑 36 tests 全部通过。
+
+### 9.3 UI 概念审批
+
+- **状态：** complete
+- **分支：** `codex/stage9-ui-concepts`
+- 将桌面书架、桌面阅读器、EPUB 图片查看器和 375px 移动状态板四张源图归档到 `docs/design/v0.2/`。
+- 新增设计规格，固定可见文案、颜色/排版/token、容器模型、图标、组件状态、动效和 1280/900/640/375 响应式规则。
+- 记录审批口径：保留视觉方向，以路线图校正 MOBI、Auto/Scrolled/Fade、Letter spacing、重复阅读器 rail、错误背景和设备系统 chrome。
+- 使用 `view_image` 检查四张归档源图，确认文件完整且校正表覆盖可见生成偏差；本阶段未修改产品 UI。
