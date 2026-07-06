@@ -381,7 +381,7 @@
 | 9.1 阅读体验契约 | complete | core 5 tests、core build、desktop lint/build、format 与 diff check 通过 |
 | 9.2 设置持久化 | complete | browser fallback 74 Vitest、Rust 36 tests、desktop lint/build、format 与 diff check 通过；无 migration |
 | 9.3 UI 概念审批 | complete | 四组源图与设计规格已归档；用户批准“视觉方向并按契约校正” |
-| 9.4 设计 token 与基础组件 | pending | — |
+| 9.4 设计 token 与基础组件 | complete | 78 Vitest、10 Playwright、lint/build/format 通过；Browser 1280×800/375×760 无溢出或 console issue |
 | 9.5 翻页控制器原型 | pending | — |
 | 9.6 ReaderShell 模块拆分 | pending | — |
 | 9.7 阶段 9 验收 | pending | — |

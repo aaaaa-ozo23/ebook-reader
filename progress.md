@@ -1601,3 +1601,16 @@
 - 新增设计规格，固定可见文案、颜色/排版/token、容器模型、图标、组件状态、动效和 1280/900/640/375 响应式规则。
 - 记录审批口径：保留视觉方向，以路线图校正 MOBI、Auto/Scrolled/Fade、Letter spacing、重复阅读器 rail、错误背景和设备系统 chrome。
 - 使用 `view_image` 检查四张归档源图，确认文件完整且校正表覆盖可见生成偏差；本阶段未修改产品 UI。
+
+### 9.4 设计 token 与基础组件
+
+- **状态：** complete
+- **分支：** `codex/stage9-design-tokens`
+- 新增 chrome/正文分离的颜色、字体、间距、圆角、阴影、层级、focus 和 motion CSS token；reduced motion 将共享时长降为 `0.01ms`。
+- 新增 Button、IconButton、SegmentedControl、Toolbar、Modal/移动 Sheet、SliderField；语义、键盘、Escape、焦点陷阱和焦点恢复均有测试。
+- 用共享 Button/SegmentedControl 渐进迁移书架 Grid/List 和 Import book，保留原 class、文案和 aria-pressed 行为。
+- 新增开发专用 `?fixture=design-system` 状态矩阵，覆盖 primary/secondary/ghost/danger、disabled、四主题、分段控件、slider、modal/sheet 和 reduced motion。
+- **自动化：** 78 Vitest、10 Playwright、desktop lint/build、format、diff check 通过；fixture axe 无 serious/critical。
+- **Browser QA：** 1280×800 与 375×760 渲染正常；移动按钮均为 44px，scrollWidth=clientWidth，sheet 底边贴合 viewport，Close 获得焦点，console 无 warning/error；现有空书架 List 切换保持正确。
+- **过程问题：** 首次只读检查命令的 PowerShell 引号未闭合，未产生变更，改用单引号模式后成功。首轮 slider 测试依赖 jsdom 不触发的 range 键盘 change；改用 Testing Library `fireEvent.change` 后 78 tests 全部通过。
+- **包体观测：** 生产书架入口 69.49 kB gzip、ReaderShell 29.85 kB gzip；9.6 继续优化入口并保持 ReaderShell 异步边界。

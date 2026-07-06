@@ -1,0 +1,103 @@
+.design-system-fixture {
+  min-height: 100vh;
+  background: var(--ds-color-paper);
+  color: var(--ds-color-ink);
+  font-family: var(--ds-font-ui);
+  padding: 32px;
+}
+
+.design-system-fixture__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 auto 24px;
+  max-width: 1100px;
+}
+
+.design-system-fixture__header p,
+.design-system-fixture__header h1 {
+  margin: 0;
+}
+
+.design-system-fixture__header p {
+  color: var(--ds-color-muted);
+}
+
+.design-system-fixture__grid {
+  display: grid;
+  max-width: 1100px;
+  margin: 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.design-system-fixture__section {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-overlay);
+  background: var(--ds-color-surface);
+  padding: 20px;
+}
+
+.design-system-fixture__section h2,
+.design-system-fixture__section p {
+  margin: 0;
+}
+
+.design-system-fixture__themes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.design-system-fixture__theme {
+  display: grid;
+  min-height: 82px;
+  place-items: center;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-control);
+  font-weight: 700;
+}
+
+.design-system-fixture__theme--light {
+  background: #ffffff;
+  color: #25211d;
+}
+
+.design-system-fixture__theme--sepia {
+  background: #f7f1e3;
+  color: #25211d;
+}
+
+.design-system-fixture__theme--green {
+  background: #e8f0df;
+  color: #24332b;
+}
+
+.design-system-fixture__theme--dark {
+  background: #1f2729;
+  color: #f4efe5;
+}
+
+.design-system-fixture__modal-content {
+  display: grid;
+  gap: 16px;
+}
+
+@media (max-width: 760px) {
+  .design-system-fixture {
+    padding: 20px 16px;
+  }
+
+  .design-system-fixture__header,
+  .design-system-fixture__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .design-system-fixture__themes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
