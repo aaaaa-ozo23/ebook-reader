@@ -50,10 +50,12 @@ test("renders the v0.2 design-system fixture across states and reduced motion", 
     page.getByRole("heading", { name: "Ebook Reader controls" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Disabled" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Slide" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  const prototypeTransition = page.getByRole("group", {
+    name: "Prototype transition",
+  });
+  await expect(
+    prototypeTransition.getByRole("button", { name: "Slide" }),
+  ).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Open settings" }).click();
   const dialog = page.getByRole("dialog", { name: "Reading settings" });
@@ -91,4 +93,43 @@ test("renders the v0.2 design-system fixture across states and reduced motion", 
 
   expect(mobileLayout.scrollWidth).toBeLessThanOrEqual(mobileLayout.clientWidth);
   expect(mobileLayout.buttonHeights.every((height) => height >= 44)).toBe(true);
+});
+
+test("keeps 30 rapid transition inputs deterministic without long tasks", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 640, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?fixture=design-system");
+    await page.evaluate(() => {
+      const durations: number[] = [];
+      const observer = new PerformanceObserver((entries) => {
+        for (const entry of entries.getEntries()) {
+          durations.push(entry.duration);
+        }
+      });
+      observer.observe({ entryTypes: ["longtask"] });
+      Object.assign(window, { __stage9LongTaskDurations: durations });
+    });
+    const next = page.getByTestId("transition-next");
+    await expect(next).toBeVisible();
+    await next.evaluate((button) => {
+      for (let index = 0; index < 30; index += 1) {
+        (button as HTMLButtonElement).click();
+      }
+    });
+
+    await expect(page.getByTestId("transition-state")).toContainText(
+      "idle · Committed: 2",
+    );
+    const longTasks = await page.evaluate(
+      () =>
+        (window as typeof window & { __stage9LongTaskDurations?: number[] })
+          .__stage9LongTaskDurations ?? [],
+    );
+    expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
+  }
 });

@@ -382,7 +382,7 @@
 | 9.2 设置持久化 | complete | browser fallback 74 Vitest、Rust 36 tests、desktop lint/build、format 与 diff check 通过；无 migration |
 | 9.3 UI 概念审批 | complete | 四组源图与设计规格已归档；用户批准“视觉方向并按契约校正” |
 | 9.4 设计 token 与基础组件 | complete | 78 Vitest、10 Playwright、lint/build/format 通过；Browser 1280×800/375×760 无溢出或 console issue |
-| 9.5 翻页控制器原型 | pending | — |
+| 9.5 翻页控制器原型 | complete | 85 Vitest、12 Playwright、Browser slide/page-curl；30 输入单槽与 >50ms long-task gate 通过；page-flip no-go |
 | 9.6 ReaderShell 模块拆分 | pending | — |
 | 9.7 阶段 9 验收 | pending | — |
 

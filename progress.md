@@ -1614,3 +1614,15 @@
 - **Browser QA：** 1280×800 与 375×760 渲染正常；移动按钮均为 44px，scrollWidth=clientWidth，sheet 底边贴合 viewport，Close 获得焦点，console 无 warning/error；现有空书架 List 切换保持正确。
 - **过程问题：** 首次只读检查命令的 PowerShell 引号未闭合，未产生变更，改用单引号模式后成功。首轮 slider 测试依赖 jsdom 不触发的 range 键盘 change；改用 Testing Library `fireEvent.change` 后 78 tests 全部通过。
 - **包体观测：** 生产书架入口 69.49 kB gzip、ReaderShell 29.85 kB gzip；9.6 继续优化入口并保持 ReaderShell 异步边界。
+
+### 9.5 翻页控制器原型
+
+- **状态：** complete
+- **分支：** `codex/stage9-page-transition-spike`
+- 新增 `idle/running` 事务控制器、单槽待处理方向、捕获/动画失败安全降级、真实导航失败不提交和每次成功导航单次 commit。
+- 新增隔离快照展示层；slide 为 220ms，page-curl 为 500ms CSS 3D/WAAPI，层为 `aria-hidden`/`pointer-events:none` 且完成后移除，不移动实时 DOM。
+- 在开发 fixture 增加可交互翻页原型；Browser 验证 slide 从 Chapter 1 到 2、page-curl 到 3，每次仅增加一次 commit，动画完成后活动层为 0。
+- 仓库外解包并审计 `page-flip@2.0.7`；MIT/零依赖通过，但实时 DOM 隔离和确定性事务 gate 不通过，最终不加入 package/lockfile，决策记录于 `docs/design/v0.2/page-transition-spike.md`。
+- **验证：** 85 Vitest、12 Playwright、desktop lint/build、format 通过；1280×800 和 640×640 各 30 次同步 Next 最终为 2 commits，未记录可归因的 `>50ms` long task。
+- **过程问题：** 首轮 lint 发现 render 初始化控制器时闭包可能读取 ref；改为 effect 创建并由事件读取 ref。首轮类型检查修正 mock 返回值；首轮 E2E 在 fixture 动态加载完成前直接查询按钮导致 0 commits，增加按钮可见 gate 后通过。
+- **回归观测：** 首次全量 Vitest 的既有 Focus 快捷键用例出现一次 rAF 焦点时序波动；该用例定向重跑通过，随后全量 85 tests 重跑通过，未修改生产快捷键行为。

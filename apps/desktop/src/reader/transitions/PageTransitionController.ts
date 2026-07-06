@@ -1,0 +1,99 @@
+import type { PageTransitionMode } from "@reader/core";
+
+export type PageDirection = "next" | "previous";
+export type PageTransitionControllerState = "idle" | "running";
+
+export interface PageTransitionFrames<TSnapshot> {
+  current: TSnapshot;
+  direction: PageDirection;
+  target: TSnapshot;
+}
+
+interface PageTransitionControllerOptions<TSnapshot> {
+  animate: (
+    frames: PageTransitionFrames<TSnapshot>,
+    mode: Exclude<PageTransitionMode, "none">,
+  ) => Promise<void>;
+  captureCurrent: () => Promise<TSnapshot | null> | TSnapshot | null;
+  captureTarget: () => Promise<TSnapshot | null> | TSnapshot | null;
+  commit: (direction: PageDirection) => Promise<void> | void;
+  getMode: () => PageTransitionMode;
+  navigate: (direction: PageDirection) => Promise<void>;
+  onRecoverableError?: (error: unknown) => void;
+  prefersReducedMotion: () => boolean;
+}
+
+export class PageTransitionController<TSnapshot> {
+  private state: PageTransitionControllerState = "idle";
+  private pendingDirection: PageDirection | null = null;
+  private runningPromise: Promise<void> | null = null;
+
+  constructor(private readonly options: PageTransitionControllerOptions<TSnapshot>) {}
+
+  getState(): PageTransitionControllerState {
+    return this.state;
+  }
+
+  request(direction: PageDirection): Promise<void> {
+    if (this.state === "running" && this.runningPromise !== null) {
+      this.pendingDirection = direction;
+      return this.runningPromise;
+    }
+
+    this.state = "running";
+    this.runningPromise = this.drain(direction).finally(() => {
+      this.pendingDirection = null;
+      this.runningPromise = null;
+      this.state = "idle";
+    });
+    return this.runningPromise;
+  }
+
+  private async drain(initialDirection: PageDirection): Promise<void> {
+    let direction: PageDirection | null = initialDirection;
+
+    while (direction !== null) {
+      this.pendingDirection = null;
+      await this.runTransaction(direction);
+      direction = this.pendingDirection;
+    }
+  }
+
+  private async runTransaction(direction: PageDirection): Promise<void> {
+    const mode = this.options.getMode();
+    const canAnimate = mode !== "none" && !this.options.prefersReducedMotion();
+    const current = canAnimate
+      ? await this.captureSafely(this.options.captureCurrent)
+      : null;
+
+    await this.options.navigate(direction);
+
+    if (canAnimate && current !== null) {
+      const target = await this.captureSafely(this.options.captureTarget);
+
+      if (target !== null) {
+        try {
+          await this.options.animate(
+            { current, direction, target },
+            mode as Exclude<PageTransitionMode, "none">,
+          );
+        } catch (error) {
+          this.options.onRecoverableError?.(error);
+        }
+      }
+    }
+
+    await this.options.commit(direction);
+  }
+
+  private async captureSafely(
+    capture: () => Promise<TSnapshot | null> | TSnapshot | null,
+  ): Promise<TSnapshot | null> {
+    try {
+      return await capture();
+    } catch (error) {
+      this.options.onRecoverableError?.(error);
+      return null;
+    }
+  }
+}
