@@ -377,3 +377,6 @@
 - 9.1 desktop build 测得书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip；相较阶段 8 文档基线略高，阶段 9.6 必须通过模块边界和导入审计压回或解释工具链差异。
 - `reader_experience` 采用 `{ version: 1, preferences }` 包装后可在不新增 schema 的情况下演进；读取未知版本时返回默认值且不写回，避免旧客户端破坏未来数据。
 - Rust 端不能直接反序列化严格枚举来满足“非法字段逐项降级”，因此先读 `serde_json::Value`，再按格式/字段归一；Tauri 命令仍返回强类型偏好。
+- 概念复查确认桌面书架的开放 workspace、紧凑 rail、纸色背景和 teal/amber 状态可直接形成 token；桌面阅读器图的重复书架 rail、Auto/Scrolled/Fade 和 Letter spacing 必须由校正表覆盖。
+- 图片查看器的单容器工具栏、舞台和缩放轨道可作为后续模态规格，但背景误用了书架；实现时必须覆盖 EPUB 阅读器并恢复触发点焦点。
+- 移动概念证明 375px 下抽屉和底部设置面板的信息密度可行；系统状态栏、设备底栏、Fade 和图标化 view 选项均不属于应用实现。
