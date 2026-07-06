@@ -382,3 +382,5 @@
 - 移动概念证明 375px 下抽屉和底部设置面板的信息密度可行；系统状态栏、设备底栏、Fade 和图标化 view 选项均不属于应用实现。
 - 设计 fixture 在 Browser 1280×800 下保持两列开放布局，375×760 下所有采样按钮为 44px、document scrollWidth 等于 clientWidth；设置 sheet 底边精确贴合 760px viewport，焦点落在 Close。
 - 将 fixture 通过 `import.meta.env.DEV && ?fixture=design-system` 动态加载可避免生产运行路径执行状态矩阵；书架入口仍只静态加载实际使用的 Button/SegmentedControl。
+- `page-flip@2.0.7` 的 ESM 为 43.8 kB、MIT、无运行时依赖，但 portrait 模式明确克隆 HTML，Canvas 路径只接受 image URL，且翻页完成依赖 imperative 事件而非 Promise/取消协议；未通过实时 iframe/标注 DOM 隔离和确定性事务 gate。
+- 自研控制器把捕获/展示失败视为可恢复，把真实导航失败视为不可提交；同步 30 次输入只执行首个和最终方向，避免无限队列并保持每次真实导航一次 commit。
