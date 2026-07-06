@@ -3,12 +3,15 @@ import {
   type AnnotationKind,
   type Bookmark,
   type Book,
+  defaultReaderExperiencePreferences,
   defaultReaderTheme,
   type EpubLocator,
   type Locator,
   type PdfLocator,
   type ReaderProgress,
+  normalizeReaderExperiencePreferences,
   defaultReaderLayoutPreferences,
+  type ReaderExperiencePreferences,
   type ReaderLayoutPreferences,
   type ReaderTheme,
   type TxtDocument,
@@ -23,6 +26,7 @@ const FALLBACK_ANNOTATIONS_KEY = "reader:fallback:annotations";
 const FALLBACK_BOOKMARKS_KEY = "reader:fallback:bookmarks";
 const FALLBACK_READER_THEME_KEY = "reader:fallback:readerTheme";
 const FALLBACK_READER_LAYOUT_KEY = "reader:fallback:readerLayout";
+const FALLBACK_READER_EXPERIENCE_KEY = "reader:fallback:readerExperience";
 const FALLBACK_READER_CACHE_KEY = "reader:fallback:readerCache";
 const FALLBACK_READING_PROGRESS_KEY = "reader:fallback:readingProgress";
 
@@ -130,6 +134,36 @@ export async function saveReaderLayoutPreferences(
   return invokeCommand<ReaderLayoutPreferences>("save_reader_layout_preferences", {
     preferences,
   });
+}
+
+export async function getReaderExperiencePreferences(): Promise<ReaderExperiencePreferences> {
+  if (!hasTauriRuntime()) {
+    return getFallbackReaderExperiencePreferences();
+  }
+
+  return invokeCommand<ReaderExperiencePreferences>(
+    "get_reader_experience_preferences",
+  );
+}
+
+export async function saveReaderExperiencePreferences(
+  preferences: ReaderExperiencePreferences,
+): Promise<ReaderExperiencePreferences> {
+  if (!hasTauriRuntime()) {
+    const normalized = normalizeReaderExperiencePreferences(preferences);
+    window.localStorage.setItem(
+      FALLBACK_READER_EXPERIENCE_KEY,
+      JSON.stringify({ version: 1, preferences: normalized }),
+    );
+    return normalized;
+  }
+
+  return invokeCommand<ReaderExperiencePreferences>(
+    "save_reader_experience_preferences",
+    {
+      preferences,
+    },
+  );
 }
 
 export async function getReaderCache(
@@ -413,6 +447,33 @@ function getFallbackReaderLayoutPreferences(): ReaderLayoutPreferences {
     });
   } catch {
     return defaultReaderLayoutPreferences;
+  }
+}
+
+function getFallbackReaderExperiencePreferences(): ReaderExperiencePreferences {
+  if (typeof window === "undefined") {
+    return normalizeReaderExperiencePreferences(defaultReaderExperiencePreferences);
+  }
+
+  const rawPreferences = window.localStorage.getItem(FALLBACK_READER_EXPERIENCE_KEY);
+
+  if (rawPreferences === null) {
+    return normalizeReaderExperiencePreferences(defaultReaderExperiencePreferences);
+  }
+
+  try {
+    const stored = JSON.parse(rawPreferences) as {
+      version?: unknown;
+      preferences?: unknown;
+    };
+
+    if (stored.version !== 1) {
+      return normalizeReaderExperiencePreferences(defaultReaderExperiencePreferences);
+    }
+
+    return normalizeReaderExperiencePreferences(stored.preferences);
+  } catch {
+    return normalizeReaderExperiencePreferences(defaultReaderExperiencePreferences);
   }
 }
 

@@ -1581,3 +1581,14 @@
 - 新增 core Vitest 配置入口和 5 tests；core test/build、desktop lint/build、format、diff check 通过。
 - **过程问题：** 首次 `apply_patch` 因 PDF adapter import 上下文与预期不一致而未应用；读取文件头后拆分补丁成功。首次 format check 发现 4 个新改文件未格式化；定向运行 Prettier 后通过。
 - **包体观测：** 本轮 desktop build 为书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip，作为 9.6 的实测比较点。
+
+### 9.2 设置持久化
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-experience-settings`
+- 新增 `get_reader_experience_preferences` / `save_reader_experience_preferences` Tauri 命令，以及同构 browser localStorage fallback。
+- 使用现有 `app_settings` 的 `reader_experience` 键保存 `{ version: 1, preferences }`，未新增 migration、表或列。
+- 缺失/非法字段逐项回退，未知字段忽略；未知版本和损坏 JSON 返回默认值，读取时不覆盖原始存储。
+- Rust `PdfLocator` 同步增加 `pageOffsetRatio`，保存时过滤非有限值并钳制到 `0..1`；旧 locator 仍可反序列化。
+- **验证：** desktop 74 Vitest、Rust 36 tests、desktop lint/build、format、cargo fmt check、diff check 通过。
+- **过程问题：** 首轮 Rust 编译误用不存在的 `database_path()` helper，导致 2 个 E0425；改为仓库现有 `init_app_database()` 后重跑 36 tests 全部通过。
