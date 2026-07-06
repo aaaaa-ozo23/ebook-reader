@@ -24,6 +24,7 @@ const COVER_DIR_NAME: &str = "covers";
 const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
 const MAX_READER_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const READER_LAYOUT_SETTING_KEY: &str = "reader_layout";
+const READER_EXPERIENCE_SETTING_KEY: &str = "reader_experience";
 const READER_THEME_SETTING_KEY: &str = "reader_theme";
 
 struct Migration {
@@ -240,6 +241,69 @@ pub struct ReaderLayoutPreferences {
     pub sidebar_width: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PageTransitionMode {
+    None,
+    Slide,
+    PageCurl,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum EpubViewMode {
+    Paginated,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TxtViewMode {
+    Scroll,
+    Paginated,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PdfViewMode {
+    Single,
+    Double,
+    Continuous,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EpubExperiencePreferences {
+    pub view_mode: EpubViewMode,
+    pub transition: PageTransitionMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TxtExperiencePreferences {
+    pub view_mode: TxtViewMode,
+    pub transition: PageTransitionMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfExperiencePreferences {
+    pub view_mode: PdfViewMode,
+    pub transition: PageTransitionMode,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReaderExperiencePreferences {
+    pub epub: EpubExperiencePreferences,
+    pub txt: TxtExperiencePreferences,
+    pub pdf: PdfExperiencePreferences,
+}
+
+#[derive(Serialize)]
+struct ReaderExperienceSetting<'a> {
+    version: u8,
+    preferences: &'a ReaderExperiencePreferences,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TxtLocator {
@@ -280,6 +344,8 @@ pub struct PdfRect {
 #[serde(rename_all = "camelCase")]
 pub struct PdfLocator {
     pub page: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_offset_ratio: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zoom_mode: Option<PdfZoomMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -483,6 +549,21 @@ pub fn save_reader_layout_preferences(
 ) -> anyhow::Result<ReaderLayoutPreferences> {
     let database_path = init_app_database(app)?;
     save_reader_layout_preferences_at(&database_path, &preferences)
+}
+
+pub fn get_reader_experience_preferences(
+    app: &AppHandle,
+) -> anyhow::Result<ReaderExperiencePreferences> {
+    let database_path = init_app_database(app)?;
+    get_reader_experience_preferences_at(&database_path)
+}
+
+pub fn save_reader_experience_preferences(
+    app: &AppHandle,
+    preferences: ReaderExperiencePreferences,
+) -> anyhow::Result<ReaderExperiencePreferences> {
+    let database_path = init_app_database(app)?;
+    save_reader_experience_preferences_at(&database_path, &preferences)
 }
 
 pub fn get_reader_cache(
@@ -912,6 +993,54 @@ pub fn save_reader_layout_preferences_at(
          VALUES (?1, ?2, ?3)
          ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
         params![READER_LAYOUT_SETTING_KEY, value_json, now],
+    )?;
+
+    Ok(preferences)
+}
+
+pub fn get_reader_experience_preferences_at(
+    database_path: &Path,
+) -> anyhow::Result<ReaderExperiencePreferences> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let value_json = conn
+        .query_row(
+            "SELECT value_json FROM app_settings WHERE key = ?1",
+            params![READER_EXPERIENCE_SETTING_KEY],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+
+    let Some(value_json) = value_json else {
+        return Ok(default_reader_experience_preferences());
+    };
+
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&value_json) else {
+        return Ok(default_reader_experience_preferences());
+    };
+
+    Ok(normalize_reader_experience_setting(&value))
+}
+
+pub fn save_reader_experience_preferences_at(
+    database_path: &Path,
+    preferences: &ReaderExperiencePreferences,
+) -> anyhow::Result<ReaderExperiencePreferences> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let preferences = preferences.clone();
+    let value_json = serde_json::to_string(&ReaderExperienceSetting {
+        version: 1,
+        preferences: &preferences,
+    })
+    .context("failed to serialize reader experience preferences")?;
+    let now = current_timestamp(&conn)?;
+
+    conn.execute(
+        "INSERT INTO app_settings (key, value_json, updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
+        params![READER_EXPERIENCE_SETTING_KEY, value_json, now],
     )?;
 
     Ok(preferences)
@@ -1570,6 +1699,83 @@ fn default_reader_layout_preferences() -> ReaderLayoutPreferences {
     ReaderLayoutPreferences { sidebar_width: 292 }
 }
 
+fn default_reader_experience_preferences() -> ReaderExperiencePreferences {
+    ReaderExperiencePreferences {
+        epub: EpubExperiencePreferences {
+            view_mode: EpubViewMode::Paginated,
+            transition: PageTransitionMode::Slide,
+        },
+        txt: TxtExperiencePreferences {
+            view_mode: TxtViewMode::Scroll,
+            transition: PageTransitionMode::Slide,
+        },
+        pdf: PdfExperiencePreferences {
+            view_mode: PdfViewMode::Single,
+            transition: PageTransitionMode::Slide,
+        },
+    }
+}
+
+fn normalize_reader_experience_setting(value: &serde_json::Value) -> ReaderExperiencePreferences {
+    if value.get("version").and_then(serde_json::Value::as_u64) != Some(1) {
+        return default_reader_experience_preferences();
+    }
+
+    let preferences = value
+        .get("preferences")
+        .and_then(serde_json::Value::as_object);
+    let defaults = default_reader_experience_preferences();
+
+    ReaderExperiencePreferences {
+        epub: EpubExperiencePreferences {
+            view_mode: EpubViewMode::Paginated,
+            transition: read_page_transition(preferences, "epub")
+                .unwrap_or(defaults.epub.transition),
+        },
+        txt: TxtExperiencePreferences {
+            view_mode: read_format_value(preferences, "txt", "viewMode")
+                .and_then(|value| match value {
+                    "scroll" => Some(TxtViewMode::Scroll),
+                    "paginated" => Some(TxtViewMode::Paginated),
+                    _ => None,
+                })
+                .unwrap_or(defaults.txt.view_mode),
+            transition: read_page_transition(preferences, "txt").unwrap_or(defaults.txt.transition),
+        },
+        pdf: PdfExperiencePreferences {
+            view_mode: read_format_value(preferences, "pdf", "viewMode")
+                .and_then(|value| match value {
+                    "single" => Some(PdfViewMode::Single),
+                    "double" => Some(PdfViewMode::Double),
+                    "continuous" => Some(PdfViewMode::Continuous),
+                    _ => None,
+                })
+                .unwrap_or(defaults.pdf.view_mode),
+            transition: read_page_transition(preferences, "pdf").unwrap_or(defaults.pdf.transition),
+        },
+    }
+}
+
+fn read_page_transition(
+    preferences: Option<&serde_json::Map<String, serde_json::Value>>,
+    format: &str,
+) -> Option<PageTransitionMode> {
+    read_format_value(preferences, format, "transition").and_then(|value| match value {
+        "none" => Some(PageTransitionMode::None),
+        "slide" => Some(PageTransitionMode::Slide),
+        "page-curl" => Some(PageTransitionMode::PageCurl),
+        _ => None,
+    })
+}
+
+fn read_format_value<'a>(
+    preferences: Option<&'a serde_json::Map<String, serde_json::Value>>,
+    format: &str,
+    field: &str,
+) -> Option<&'a str> {
+    preferences?.get(format)?.as_object()?.get(field)?.as_str()
+}
+
 fn normalize_reader_layout_preferences(
     mut preferences: ReaderLayoutPreferences,
 ) -> ReaderLayoutPreferences {
@@ -1612,6 +1818,7 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
         (BookFormat::Epub, _) => bail!("EPUB books can only use epub locators"),
         (BookFormat::Pdf, Locator::Pdf(pdf_locator)) => {
             pdf_locator.page = pdf_locator.page.max(1);
+            pdf_locator.page_offset_ratio = normalize_progress(pdf_locator.page_offset_ratio);
             pdf_locator.scale = normalize_pdf_scale(pdf_locator.scale);
 
             if let Some(rects) = &mut pdf_locator.rects {
@@ -2029,14 +2236,17 @@ mod tests {
 
     use super::{
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
-        get_reader_cache_at, get_reader_layout_preferences_at, get_reader_theme_at,
-        get_reading_progress_at, import_book_at, init_database_at, list_annotations_at,
-        list_bookmarks_at, list_books_at, mark_book_cover_fallback_at, mark_book_opened_at,
-        open_txt_book_at, remove_book_at, save_book_cover_at, save_reader_cache_at,
+        get_reader_cache_at, get_reader_experience_preferences_at,
+        get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
+        import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
+        mark_book_cover_fallback_at, mark_book_opened_at, open_txt_book_at, remove_book_at,
+        save_book_cover_at, save_reader_cache_at, save_reader_experience_preferences_at,
         save_reader_layout_preferences_at, save_reader_theme_at, save_reading_progress_at,
         schema_version, update_annotation_at, AnnotationKind, BookCoverStatus, BookFormat,
-        EpubLocator, ImportBookStatus, Locator, PdfLocator, PdfRect, PdfZoomMode,
-        ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TxtLocator, DB_FILE_NAME,
+        EpubExperiencePreferences, EpubLocator, EpubViewMode, ImportBookStatus, Locator,
+        PageTransitionMode, PdfExperiencePreferences, PdfLocator, PdfRect, PdfViewMode,
+        PdfZoomMode, ReaderExperiencePreferences, ReaderLayoutPreferences, ReaderTheme,
+        ReaderThemeMode, TxtExperiencePreferences, TxtLocator, TxtViewMode, DB_FILE_NAME,
     };
 
     #[test]
@@ -2830,6 +3040,116 @@ mod tests {
     }
 
     #[test]
+    fn reader_experience_defaults_and_persists_in_a_v1_envelope() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+
+        let defaults = get_reader_experience_preferences_at(&database_path)
+            .expect("get default reader experience");
+        assert_eq!(defaults.epub.view_mode, EpubViewMode::Paginated);
+        assert_eq!(defaults.txt.view_mode, TxtViewMode::Scroll);
+        assert_eq!(defaults.pdf.view_mode, PdfViewMode::Single);
+        assert_eq!(defaults.epub.transition, PageTransitionMode::Slide);
+
+        let preferences = ReaderExperiencePreferences {
+            epub: EpubExperiencePreferences {
+                view_mode: EpubViewMode::Paginated,
+                transition: PageTransitionMode::PageCurl,
+            },
+            txt: TxtExperiencePreferences {
+                view_mode: TxtViewMode::Paginated,
+                transition: PageTransitionMode::None,
+            },
+            pdf: PdfExperiencePreferences {
+                view_mode: PdfViewMode::Continuous,
+                transition: PageTransitionMode::Slide,
+            },
+        };
+        let saved = save_reader_experience_preferences_at(&database_path, &preferences)
+            .expect("save reader experience");
+        let restored = get_reader_experience_preferences_at(&database_path)
+            .expect("restore reader experience");
+        let conn = Connection::open(&database_path).expect("open database");
+        let value_json: String = conn
+            .query_row(
+                "SELECT value_json FROM app_settings WHERE key = 'reader_experience'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read stored reader experience");
+        let stored: serde_json::Value =
+            serde_json::from_str(&value_json).expect("parse stored reader experience");
+
+        assert_eq!(saved, preferences);
+        assert_eq!(restored, preferences);
+        assert_eq!(stored["version"], 1);
+        assert_eq!(stored["preferences"]["epub"]["transition"], "page-curl");
+    }
+
+    #[test]
+    fn reader_experience_normalizes_invalid_fields_and_preserves_unknown_versions() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        init_database_at(&database_path).expect("initialize database");
+        let conn = Connection::open(&database_path).expect("open database");
+        let invalid_value = serde_json::json!({
+            "version": 1,
+            "preferences": {
+                "epub": { "viewMode": "scrolled", "transition": "fade" },
+                "txt": { "viewMode": "paginated", "transition": "page-curl", "future": true },
+                "pdf": { "viewMode": "spread", "transition": "none" },
+                "future": true
+            }
+        })
+        .to_string();
+        conn.execute(
+            "INSERT INTO app_settings (key, value_json, updated_at) VALUES (?1, ?2, ?3)",
+            params![
+                "reader_experience",
+                invalid_value,
+                "2026-07-06T00:00:00.000Z"
+            ],
+        )
+        .expect("insert invalid preferences");
+        drop(conn);
+
+        let normalized = get_reader_experience_preferences_at(&database_path)
+            .expect("normalize reader experience");
+        assert_eq!(normalized.epub.transition, PageTransitionMode::Slide);
+        assert_eq!(normalized.txt.view_mode, TxtViewMode::Paginated);
+        assert_eq!(normalized.txt.transition, PageTransitionMode::PageCurl);
+        assert_eq!(normalized.pdf.view_mode, PdfViewMode::Single);
+        assert_eq!(normalized.pdf.transition, PageTransitionMode::None);
+
+        let future_value = serde_json::json!({
+            "version": 2,
+            "preferences": { "txt": { "viewMode": "paginated" } }
+        })
+        .to_string();
+        let conn = Connection::open(&database_path).expect("reopen database");
+        conn.execute(
+            "UPDATE app_settings SET value_json = ?1 WHERE key = ?2",
+            params![future_value, "reader_experience"],
+        )
+        .expect("store future preferences");
+        drop(conn);
+
+        let future_defaults =
+            get_reader_experience_preferences_at(&database_path).expect("read future preferences");
+        let conn = Connection::open(&database_path).expect("verify future storage");
+        let preserved: String = conn
+            .query_row(
+                "SELECT value_json FROM app_settings WHERE key = 'reader_experience'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read future storage");
+
+        assert_eq!(future_defaults.txt.view_mode, TxtViewMode::Scroll);
+        assert_eq!(preserved, future_value);
+    }
+
+    #[test]
     fn reading_progress_persists_for_txt_books() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
@@ -2911,6 +3231,7 @@ mod tests {
         let imported = import_book_at(&database_path, &library_dir, &pdf_path).expect("import pdf");
         let locator = Locator::Pdf(PdfLocator {
             page: 0,
+            page_offset_ratio: Some(1.4),
             zoom_mode: Some(PdfZoomMode::FitWidth),
             rects: Some(vec![
                 PdfRect {
@@ -2943,6 +3264,7 @@ mod tests {
 
         let expected_locator = Locator::Pdf(PdfLocator {
             page: 1,
+            page_offset_ratio: Some(1.0),
             zoom_mode: Some(PdfZoomMode::FitWidth),
             rects: Some(vec![PdfRect {
                 x: 10.0,
