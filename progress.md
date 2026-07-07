@@ -1682,3 +1682,12 @@
 - `EpubPosition` / `EpubProgressPreview` 已使用 `location/totalLocations`，位置输入和 aria-label 改为 Location；状态/tooltip 优先使用出版物标签，缺失时回退 Location。
 - generated EPUB fixture 新增 page-list：href-only `i` 和 fragment `10`；Playwright 验证 `Page i`、Location 数字跳转、进度拖动、末位置和 single/double 原路径。
 - **验证：** 90 Vitest、desktop lint/build、root format passed；generated EPUB Chromium smoke 1/1 passed。书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip。
+
+### 10.3 图片资源桥接
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-image-bridge`
+- 新增 `EpubImageBridge`，对 rendition iframe 的 HTML `img` / SVG `image` 注册单次事件代理，提供鼠标、Enter、Space 激活、可访问名称、自然尺寸和触发元素。
+- adapter 将桥接 cleanup 合并进既有 content document 清理队列；主题规则新增 zoom-in 光标和 amber 3px focus-visible，不增加全局 listener 或新资源 URL。
+- 单测覆盖 HTML/SVG、装饰性/空/损坏图片、修饰键点击、原属性恢复、listener 清理以及禁止 fetch/createObjectURL。
+- **验证：** 96 Vitest、desktop lint/build、root format passed。书架入口 66.85 kB gzip，ReaderShell 32.56 kB gzip，仍为异步 reader chunk。

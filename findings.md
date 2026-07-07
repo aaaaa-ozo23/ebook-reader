@@ -406,3 +406,10 @@
 - 数字输入固定为 `Location`；page-list 标签可能是罗马数字或其他字符串，不提供误导性的数字 Page 跳转。
 - 状态和滑杆 tooltip 优先显示 `Page <publicationPageLabel>`；当前 CFI 尚未越过首个 page-list 边界、无 page-list 或边界损坏时显示 `Location x / y`。
 - href-only page-list 边界代表 section 起点，适合封面/章节第一页；fragment/CFI 边界只有在当前 CFI 到达后才生效。generated EPUB smoke 已验证这一差异。
+
+### 10.3 图片资源桥接
+
+- 图片桥接以 rendition `rendered` 后的 Document 为生命周期单位，用一次 click/keydown 事件代理覆盖 HTML `img` 与 SVG `image`；同一文档复用既有 WeakSet，章节/书籍销毁时统一移除 listener。
+- 可查看图片只在运行时增加 `role=button`、`tabindex=0`、`aria-haspopup=dialog` 和 focus class；cleanup 精确恢复 EPUB 原属性，不修改源文件。
+- 激活资源只读取 HTML `currentSrc`/`src` 或 SVG `href`，不调用 `fetch`、`URL.createObjectURL`、导出或远程解析；损坏图片在激活时用 `complete && naturalWidth <= 0` 安全忽略。
+- 可访问名称按图片 aria-label/alt/title/figcaption、SVG aria-label/title 回退，最终兜底为 `EPUB image`；触发元素随资源一起传给 10.4 用于关闭后焦点恢复。
