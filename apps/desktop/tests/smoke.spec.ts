@@ -16,22 +16,21 @@ function collectConsoleIssues(page: Page): string[] {
   return issues;
 }
 
-async function readEpubPageState(
+async function readEpubLocationState(
   page: Page,
-): Promise<{ currentPage: number; totalPages: number }> {
-  const pageText = await page
-    .getByText(/Page \d+ \/ \d+/)
-    .first()
-    .textContent();
-  const match = pageText?.match(/Page\s+(\d+)\s+\/\s+(\d+)/);
+): Promise<{ currentLocation: number; totalLocations: number }> {
+  const input = page.getByRole("spinbutton", { name: "EPUB location number" });
+  const currentLocation = Number(await input.inputValue());
+  const fieldText = await input.locator("xpath=..").textContent();
+  const match = fieldText?.match(/\/\s+(\d+)/);
 
-  if (match === undefined || match === null) {
-    throw new Error(`Unable to read EPUB page state from: ${pageText ?? ""}`);
+  if (!Number.isFinite(currentLocation) || match === undefined || match === null) {
+    throw new Error(`Unable to read EPUB location state from: ${fieldText ?? ""}`);
   }
 
   return {
-    currentPage: Number(match[1]),
-    totalPages: Number(match[2]),
+    currentLocation,
+    totalLocations: Number(match[1]),
   };
 }
 
@@ -423,6 +422,12 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
         <li><a href="chapter-two.xhtml">Chapter Two</a></li>
       </ol>
     </nav>
+    <nav epub:type="page-list" id="pages">
+      <ol>
+        <li><a href="chapter-one.xhtml">i</a></li>
+        <li><a href="chapter-two.xhtml#page-10">10</a></li>
+      </ol>
+    </nav>
   </body>
 </html>`,
       },
@@ -432,7 +437,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter One</title></head>
   <body>
-    <h1>Chapter One</h1>
+    <h1 id="page-i">Chapter One</h1>
     ${chapterOneParagraphs}
   </body>
 </html>`,
@@ -443,7 +448,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter Two</title></head>
   <body>
-    <h1>Chapter Two</h1>
+    <h1 id="page-10">Chapter Two</h1>
     ${chapterTwoParagraphs}
   </body>
 </html>`,
@@ -553,21 +558,23 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
   const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
-  const epubPageInput = page.getByRole("spinbutton", { name: "EPUB page number" });
+  const epubLocationInput = page.getByRole("spinbutton", {
+    name: "EPUB location number",
+  });
   await expect(progressSlider).toBeEnabled({
     timeout: 20000,
   });
-  await expect(epubPageInput).toBeEnabled();
-  await expect(page.getByText(/Page \d+ \/ \d+/).first()).toBeVisible();
+  await expect(epubLocationInput).toBeEnabled();
+  await expect(page.getByText("Page i").first()).toBeVisible();
 
-  const initialEpubPageState = await readEpubPageState(page);
-  const targetEpubPage = Math.min(
-    initialEpubPageState.totalPages,
-    Math.max(2, Math.ceil(initialEpubPageState.totalPages / 3)),
+  const initialEpubLocationState = await readEpubLocationState(page);
+  const targetEpubLocation = Math.min(
+    initialEpubLocationState.totalLocations,
+    Math.max(2, Math.ceil(initialEpubLocationState.totalLocations / 3)),
   );
-  await epubPageInput.fill(String(targetEpubPage));
-  await epubPageInput.press("Enter");
-  await expect(epubPageInput).toHaveValue(String(targetEpubPage));
+  await epubLocationInput.fill(String(targetEpubLocation));
+  await epubLocationInput.press("Enter");
+  await expect(epubLocationInput).toHaveValue(String(targetEpubLocation));
 
   await page.getByRole("button", { name: "Chapter Two" }).click();
   await expect(page.getByRole("button", { name: "Chapter Two" })).toHaveAttribute(
@@ -590,7 +597,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       sliderBox.y + sliderBox.height / 2,
     );
     await expect(page.locator(".reader-epub-progress__tooltip")).toContainText(
-      /Page \d+/,
+      /Page (?:i|10)/,
     );
     await page.mouse.up();
   }
@@ -599,11 +606,11 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     .poll(async () => Number(await progressSlider.inputValue()))
     .toBeGreaterThan(beforeSliderValue);
 
-  const { totalPages } = await readEpubPageState(page);
-  expect(totalPages).toBeGreaterThan(2);
+  const { totalLocations } = await readEpubLocationState(page);
+  expect(totalLocations).toBeGreaterThan(2);
 
   const penultimateSliderValue = Math.round(
-    ((totalPages - 2.5) / (totalPages - 1)) * 1000,
+    ((totalLocations - 2.5) / (totalLocations - 1)) * 1000,
   );
   await progressSlider.evaluate((element, value) => {
     const input = element as HTMLInputElement;
@@ -617,14 +624,10 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
   }, penultimateSliderValue);
-  await expect(
-    page.getByText(new RegExp(`Page ${totalPages - 1} / ${totalPages}`)).first(),
-  ).toBeVisible();
+  await expect(epubLocationInput).toHaveValue(String(totalLocations - 1));
 
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(
-    page.getByText(new RegExp(`Page ${totalPages} / ${totalPages}`)).first(),
-  ).toBeVisible();
+  await expect(epubLocationInput).toHaveValue(String(totalLocations));
   await expect(page.getByText("100%").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Double" }).click();

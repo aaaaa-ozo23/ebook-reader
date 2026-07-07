@@ -577,7 +577,7 @@ export function EpubReaderContent({
   const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
-  const [pageInput, setPageInput] = useState("1");
+  const [locationInput, setLocationInput] = useState("1");
   const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] = useState(false);
   const [position, setPosition] = useState<EpubPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
@@ -655,8 +655,8 @@ export function EpubReaderContent({
       updateActiveTocForHref(nextPosition.locator.href);
       onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
-      if (nextPosition.page !== null) {
-        setPageInput(String(nextPosition.page));
+      if (nextPosition.location !== null) {
+        setLocationInput(String(nextPosition.location));
       }
 
       if (!isDraggingProgressRef.current) {
@@ -690,7 +690,7 @@ export function EpubReaderContent({
       setIsAdapterReadyForHighlights(false);
       setPosition(null);
       setPreviewPosition(null);
-      setPageInput("1");
+      setLocationInput("1");
       setRequestedSpreadMode("single");
       setSpreadState({
         requested: "single",
@@ -994,59 +994,67 @@ export function EpubReaderContent({
     });
   }, []);
 
-  const commitPageInput = useCallback(() => {
+  const commitLocationInput = useCallback(() => {
     const adapter = adapterRef.current;
     const currentPosition = positionRef.current;
-    const totalPages = currentPosition?.totalPages;
-    const currentPage = currentPosition?.page ?? 1;
-    const page = Number.parseInt(pageInput, 10);
+    const totalLocations = currentPosition?.totalLocations;
+    const currentLocation = currentPosition?.location ?? 1;
+    const location = Number.parseInt(locationInput, 10);
 
     if (
       adapter === null ||
       currentPosition?.locationsReady !== true ||
-      totalPages === null ||
-      totalPages === undefined ||
-      !Number.isFinite(page)
+      totalLocations === null ||
+      totalLocations === undefined ||
+      !Number.isFinite(location)
     ) {
-      setPageInput(String(currentPage));
+      setLocationInput(String(currentLocation));
       return;
     }
 
-    const nextPage = normalizeReaderPage(page, totalPages);
-    const nextProgression = pageToProgression(nextPage, totalPages);
-    setPageInput(String(nextPage));
+    const nextLocation = normalizeReaderPage(location, totalLocations);
+    const nextProgression = pageToProgression(nextLocation, totalLocations);
+    setLocationInput(String(nextLocation));
     setPreviewPosition(null);
     isDraggingProgressRef.current = false;
     setIsDraggingProgress(false);
 
-    void adapter.goToProgress(nextProgression).catch((pageError: unknown) => {
-      setPageInput(String(positionRef.current?.page ?? currentPage));
-      setError(getErrorMessage(pageError));
+    void adapter.goToProgress(nextProgression).catch((locationError: unknown) => {
+      setLocationInput(String(positionRef.current?.location ?? currentLocation));
+      setError(getErrorMessage(locationError));
     });
-  }, [pageInput]);
+  }, [locationInput]);
 
-  const handlePageInputKeyDown = useCallback(
+  const handleLocationInputKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
-        commitPageInput();
+        commitLocationInput();
       }
     },
-    [commitPageInput],
+    [commitLocationInput],
   );
 
   const activeProgress = previewPosition ?? position;
   const locationsReady =
-    position?.locationsReady === true && position.totalPages !== null;
+    position?.locationsReady === true && position.totalLocations !== null;
   const activeProgression = locationsReady ? (activeProgress?.progression ?? 0) : 0;
   const sliderValue = Math.round(activeProgression * 1000);
   const progressPercent = Math.round(activeProgression * 100);
-  const progressPage = activeProgress?.page ?? null;
-  const totalPages = activeProgress?.totalPages ?? position?.totalPages ?? null;
-  const pageLabel =
-    progressPage !== null && totalPages !== null
-      ? `Page ${progressPage} / ${totalPages}`
-      : "Pages calculating";
-  const progressLabel = locationsReady ? `${progressPercent}%` : "Calculating pages";
+  const activeLocation = activeProgress?.location ?? null;
+  const totalLocations =
+    activeProgress?.totalLocations ?? position?.totalLocations ?? null;
+  const locationLabel =
+    activeLocation !== null && totalLocations !== null
+      ? `Location ${activeLocation} / ${totalLocations}`
+      : "Locations calculating";
+  const positionLabel =
+    activeProgress?.publicationPageLabel === null ||
+    activeProgress?.publicationPageLabel === undefined
+      ? locationLabel
+      : `Page ${activeProgress.publicationPageLabel}`;
+  const progressLabel = locationsReady
+    ? `${progressPercent}%`
+    : "Calculating locations";
   const activeChapterTitle =
     activeProgress !== null
       ? (findTocItemByHref(tocItems, activeProgress.locator.href)?.title ?? book.title)
@@ -1119,7 +1127,7 @@ export function EpubReaderContent({
             </button>
             <div className="reader-epub-status" aria-live="polite">
               <span>{activeChapterTitle}</span>
-              <strong>{pageLabel}</strong>
+              <strong>{positionLabel}</strong>
               <span>{progressLabel}</span>
             </div>
             <button type="button" className="reader-tool-button" onClick={handleNext}>
@@ -1151,19 +1159,19 @@ export function EpubReaderContent({
             <div className="reader-epub-progress__meta">
               <span>{activeChapterTitle}</span>
               <label className="reader-page-field reader-epub-page-field">
-                <span>Page</span>
+                <span>Location</span>
                 <input
-                  aria-label="EPUB page number"
+                  aria-label="EPUB location number"
                   disabled={!locationsReady}
                   min={1}
-                  max={totalPages ?? 1}
+                  max={totalLocations ?? 1}
                   type="number"
-                  value={pageInput}
-                  onBlur={commitPageInput}
-                  onChange={(event) => setPageInput(event.currentTarget.value)}
-                  onKeyDown={handlePageInputKeyDown}
+                  value={locationInput}
+                  onBlur={commitLocationInput}
+                  onChange={(event) => setLocationInput(event.currentTarget.value)}
+                  onKeyDown={handleLocationInputKeyDown}
                 />
-                <span>/ {totalPages ?? "-"}</span>
+                <span>/ {totalLocations ?? "-"}</span>
               </label>
             </div>
             <div className="reader-epub-progress__track">
@@ -1174,7 +1182,12 @@ export function EpubReaderContent({
                   }`}
                   aria-hidden="true"
                 >
-                  {progressPage !== null ? `Page ${progressPage}` : pageLabel}
+                  {activeProgress?.publicationPageLabel === null ||
+                  activeProgress?.publicationPageLabel === undefined
+                    ? activeLocation === null
+                      ? locationLabel
+                      : `Location ${activeLocation}`
+                    : `Page ${activeProgress.publicationPageLabel}`}
                 </span>
               ) : null}
               <input

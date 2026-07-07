@@ -21,8 +21,8 @@ export type EpubSpreadMode = "single" | "double";
 export interface EpubPosition {
   locator: EpubLocator;
   progression: number | null;
-  page: number | null;
-  totalPages: number | null;
+  location: number | null;
+  totalLocations: number | null;
   publicationPageLabel: string | null;
   displayedPage: number | null;
   displayedTotal: number | null;
@@ -32,8 +32,8 @@ export interface EpubPosition {
 export interface EpubProgressPreview {
   locator: EpubLocator;
   progression: number;
-  page: number;
-  totalPages: number;
+  location: number;
+  totalLocations: number;
   publicationPageLabel: string | null;
   locationsReady: true;
 }
@@ -252,12 +252,15 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   async next(): Promise<void> {
     if (this.locationsReady) {
       const currentPosition = this.lastPosition ?? (await this.getCurrentPosition());
-      const isFinalPageBoundary =
-        currentPosition.page !== null &&
-        currentPosition.totalPages !== null &&
-        currentPosition.page >= currentPosition.totalPages - 1;
-      const nextLocationIndex = isFinalPageBoundary
-        ? nextEpubLocationIndex(currentPosition.page, currentPosition.totalPages)
+      const isFinalLocationBoundary =
+        currentPosition.location !== null &&
+        currentPosition.totalLocations !== null &&
+        currentPosition.location >= currentPosition.totalLocations - 1;
+      const nextLocationIndex = isFinalLocationBoundary
+        ? nextEpubLocationIndex(
+            currentPosition.location,
+            currentPosition.totalLocations,
+          )
         : null;
 
       if (nextLocationIndex !== null) {
@@ -288,15 +291,15 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
   previewProgress(progression: number): EpubProgressPreview {
     const book = this.requireBook();
-    const totalPages = this.getTotalPages();
+    const totalLocations = this.getTotalLocations();
 
-    if (!this.locationsReady || totalPages === null) {
+    if (!this.locationsReady || totalLocations === null) {
       throw new Error("EPUB locations are not ready.");
     }
 
     const nextProgression = clampProgressValue(progression);
     const cfi = book.locations.cfiFromPercentage(nextProgression);
-    const page = progressionToEpubPage(nextProgression, totalPages);
+    const location = progressionToEpubLocation(nextProgression, totalLocations);
     const href =
       getSectionHrefForCfi(book, cfi) ?? this.lastPosition?.locator.href ?? "";
     const publicationPageLabel = this.getPublicationPageLabel(href, cfi);
@@ -309,8 +312,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
         progression: nextProgression,
       },
       progression: nextProgression,
-      page,
-      totalPages,
+      location,
+      totalLocations,
       publicationPageLabel,
       locationsReady: true,
     };
@@ -320,7 +323,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     const book = this.requireBook();
     const rendition = this.requireRendition();
 
-    if (!this.locationsReady || this.getTotalPages() === null) {
+    if (!this.locationsReady || this.getTotalLocations() === null) {
       throw new Error("EPUB locations are not ready.");
     }
 
@@ -332,14 +335,14 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private async goToLocationIndex(locationIndex: number): Promise<void> {
     const book = this.requireBook();
     const rendition = this.requireRendition();
-    const totalPages = this.getTotalPages();
+    const totalLocations = this.getTotalLocations();
 
-    if (totalPages === null) {
+    if (totalLocations === null) {
       return;
     }
 
     const clampedIndex = Math.min(
-      totalPages - 1,
+      totalLocations - 1,
       Math.max(0, Math.floor(locationIndex)),
     );
     const cfi = book.locations.cfiFromLocation(clampedIndex) as unknown;
@@ -649,18 +652,20 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onRelocated?.(position);
   }
 
-  private locationToPosition(location: Location | EpubLocationLike): EpubPosition {
+  private locationToPosition(
+    renditionLocation: Location | EpubLocationLike,
+  ): EpubPosition {
     const book = this.requireBook();
-    const start = getLocationStart(location);
-    const totalPages = this.getTotalPages();
-    const locationsReady = this.locationsReady && totalPages !== null;
-    const pageIndex = locationsReady ? getLocationIndex(book, start) : null;
-    const page =
-      locationsReady && totalPages !== null && pageIndex !== null
-        ? Math.min(totalPages, Math.max(1, pageIndex + 1))
+    const start = getLocationStart(renditionLocation);
+    const totalLocations = this.getTotalLocations();
+    const locationsReady = this.locationsReady && totalLocations !== null;
+    const locationIndex = locationsReady ? getLocationIndex(book, start) : null;
+    const location =
+      locationsReady && totalLocations !== null && locationIndex !== null
+        ? Math.min(totalLocations, Math.max(1, locationIndex + 1))
         : null;
     const progression = locationsReady
-      ? resolveProgression(book, start, pageIndex, totalPages)
+      ? resolveProgression(book, start, locationIndex, totalLocations)
       : null;
     const href = start.href ?? getSectionHrefForCfi(book, start.cfi) ?? "";
     const publicationPageLabel = this.getPublicationPageLabel(href, start.cfi);
@@ -674,8 +679,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return {
       locator,
       progression,
-      page,
-      totalPages: locationsReady ? totalPages : null,
+      location,
+      totalLocations: locationsReady ? totalLocations : null,
       publicationPageLabel,
       displayedPage: normalizePositiveInteger(start.displayed?.page),
       displayedTotal: normalizePositiveInteger(start.displayed?.total),
@@ -706,14 +711,14 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
         );
   }
 
-  private getTotalPages(): number | null {
+  private getTotalLocations(): number | null {
     if (this.book === null || !this.locationsReady) {
       return null;
     }
 
-    const totalPages = this.book.locations.length();
+    const totalLocations = this.book.locations.length();
 
-    return totalPages > 0 ? totalPages : null;
+    return totalLocations > 0 ? totalLocations : null;
   }
 
   private getRenderedSpreadOption(): "none" | "auto" {
@@ -889,8 +894,8 @@ function getSpineSectionForTarget(
 function resolveProgression(
   book: EpubBook,
   start: EpubLocationLike,
-  pageIndex: number | null,
-  totalPages: number | null,
+  locationIndex: number | null,
+  totalLocations: number | null,
 ): number | null {
   const percentage = clampProgress(start.percentage);
 
@@ -906,40 +911,43 @@ function resolveProgression(
     }
   }
 
-  if (pageIndex !== null && totalPages !== null && totalPages > 1) {
-    return clampProgressValue(pageIndex / (totalPages - 1));
+  if (locationIndex !== null && totalLocations !== null && totalLocations > 1) {
+    return clampProgressValue(locationIndex / (totalLocations - 1));
   }
 
   return null;
 }
 
-export function progressionToEpubPage(progression: number, totalPages: number): number {
-  const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
-  const pageIndex = Math.ceil(
-    (normalizedTotalPages - 1) * clampProgressValue(progression),
+export function progressionToEpubLocation(
+  progression: number,
+  totalLocations: number,
+): number {
+  const normalizedTotalLocations = Math.max(1, Math.floor(totalLocations));
+  const locationIndex = Math.ceil(
+    (normalizedTotalLocations - 1) * clampProgressValue(progression),
   );
 
-  return Math.min(normalizedTotalPages, Math.max(1, pageIndex + 1));
+  return Math.min(normalizedTotalLocations, Math.max(1, locationIndex + 1));
 }
 
 export function nextEpubLocationIndex(
-  page: number | null,
-  totalPages: number | null,
+  location: number | null,
+  totalLocations: number | null,
 ): number | null {
   if (
-    page === null ||
-    totalPages === null ||
-    !Number.isFinite(page) ||
-    !Number.isFinite(totalPages)
+    location === null ||
+    totalLocations === null ||
+    !Number.isFinite(location) ||
+    !Number.isFinite(totalLocations)
   ) {
     return null;
   }
 
-  if (page < 1 || totalPages < 2 || page >= totalPages) {
+  if (location < 1 || totalLocations < 2 || location >= totalLocations) {
     return null;
   }
 
-  return Math.min(totalPages - 1, Math.max(0, Math.floor(page)));
+  return Math.min(totalLocations - 1, Math.max(0, Math.floor(location)));
 }
 
 function normalizePositiveInteger(value: number | undefined): number | null {

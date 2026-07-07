@@ -399,3 +399,10 @@
 - href-only 边界表示 section 起点；fragment 边界通过 `section.load()` + `cfiFromElement()` 转成可比较 CFI；package CFI 直接由 spine 解析。解析阶段共享同一 section load Promise，结束统一 unload。
 - 新缓存键固定为 `epub_page_list_v1`，内容为 `{ version: 1, boundaries }`；继续使用 `reader_cache` 的 source hash 自动失效，无 schema migration。
 - 当前 CFI 早于首个有效边界、缓存损坏、目标外部/为空或 fragment 无法解析时，不伪造出版物页码，交给 10.2 显示 Location 回退。
+
+### 10.2 页码与 Location UI
+
+- EPUB generated locations 是每 1500 字符生成的布局无关进度索引，内部和 UI 均改用 `location/totalLocations`，避免测试和后续动画再次把它误称为出版物页码。
+- 数字输入固定为 `Location`；page-list 标签可能是罗马数字或其他字符串，不提供误导性的数字 Page 跳转。
+- 状态和滑杆 tooltip 优先显示 `Page <publicationPageLabel>`；当前 CFI 尚未越过首个 page-list 边界、无 page-list 或边界损坏时显示 `Location x / y`。
+- href-only page-list 边界代表 section 起点，适合封面/章节第一页；fragment/CFI 边界只有在当前 CFI 到达后才生效。generated EPUB smoke 已验证这一差异。

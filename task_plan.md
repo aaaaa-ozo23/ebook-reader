@@ -407,7 +407,7 @@
 | 小阶段 | 状态 | 验证摘要 |
 |--------|------|----------|
 | 10.1 page-list 模型 | complete | EPUB3/EPUB2 原始标签、href/fragment/CFI 边界、`epub_page_list_v1` 缓存；90 Vitest、lint/build/format 通过 |
-| 10.2 页码与 Location UI | pending | 等待 10.1 合回集成分支 |
+| 10.2 页码与 Location UI | complete | 出版物 `Page <label>` 与生成 `Location x / y` 分离；90 Vitest、lint/build/format、generated EPUB Playwright 通过 |
 | 10.3 图片资源桥接 | pending | 等待 10.2 合回集成分支 |
 | 10.4 图片查看器 | pending | 等待 10.3 合回集成分支 |
 | 10.5–10.7 | deferred | 本轮在 10.4 后停止 |
