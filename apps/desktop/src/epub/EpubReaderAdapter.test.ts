@@ -48,6 +48,9 @@ describe("buildEpubThemeRules", () => {
     expect(rules["a, a:visited"]).toMatchObject({
       color: "#f3bc55",
     });
+    expect(rules[".reader-epub-viewable-image:focus-visible"]).toMatchObject({
+      outline: "3px solid #f3bc55 !important",
+    });
   });
 
   it("maps generated locations progress to EPUB locations", () => {
@@ -146,5 +149,39 @@ describe("EPUB selection annotations", () => {
         "stroke-width": "0",
       }),
     );
+  });
+});
+
+describe("EPUB rendition image lifecycle", () => {
+  it("registers image activation with the content document and cleans it up", () => {
+    const onImageActivate = vi.fn();
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-images",
+      container: document.createElement("div"),
+      onImageActivate,
+      sourceUrl: "blob:epub-images",
+      theme: defaultReaderTheme,
+    });
+    const frameDocument = document.implementation.createHTMLDocument("EPUB frame");
+    frameDocument.body.innerHTML = `<img src="blob:plate" alt="Plate" />`;
+    const image = frameDocument.querySelector("img") as HTMLImageElement;
+    Object.defineProperties(image, {
+      complete: { configurable: true, value: true },
+      currentSrc: { configurable: true, value: "blob:plate" },
+      naturalHeight: { configurable: true, value: 600 },
+      naturalWidth: { configurable: true, value: 800 },
+    });
+    const internals = adapter as unknown as {
+      observeSelectionDocument: (document: Document) => void;
+      stopSelectionObservers: () => void;
+    };
+
+    internals.observeSelectionDocument(frameDocument);
+    image.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+    expect(onImageActivate).toHaveBeenCalledTimes(1);
+
+    internals.stopSelectionObservers();
+    image.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+    expect(onImageActivate).toHaveBeenCalledTimes(1);
   });
 });
