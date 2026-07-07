@@ -56,6 +56,7 @@ import {
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
 
 const EPUB_LOCATIONS_CACHE_KEY = "epub_locations_v1";
+const EPUB_PAGE_LIST_CACHE_KEY = "epub_page_list_v1";
 const EPUB_TOC_CACHE_KEY = "epub_toc_v1";
 const PDF_TOC_CACHE_KEY = "pdf_toc_v1";
 let pendingFocusTimerId: number | null = null;
@@ -703,13 +704,19 @@ export function EpubReaderContent({
           throw new Error("EPUB reader viewport is unavailable.");
         }
 
-        const [sourceUrl, savedProgress, cachedLocations, cachedToc] =
-          await Promise.all([
-            getEpubBookSource(book),
-            getReadingProgress<EpubLocator>(book.id),
-            getReaderCache(book, EPUB_LOCATIONS_CACHE_KEY).catch(() => null),
-            getReaderCache(book, EPUB_TOC_CACHE_KEY).catch(() => null),
-          ]);
+        const [
+          sourceUrl,
+          savedProgress,
+          cachedLocations,
+          cachedPublicationPageList,
+          cachedToc,
+        ] = await Promise.all([
+          getEpubBookSource(book),
+          getReadingProgress<EpubLocator>(book.id),
+          getReaderCache(book, EPUB_LOCATIONS_CACHE_KEY).catch(() => null),
+          getReaderCache(book, EPUB_PAGE_LIST_CACHE_KEY).catch(() => null),
+          getReaderCache(book, EPUB_TOC_CACHE_KEY).catch(() => null),
+        ]);
 
         if (!isCurrent || hostRef.current === null) {
           return;
@@ -718,6 +725,7 @@ export function EpubReaderContent({
         const adapter = new EpubReaderAdapter({
           bookId: book.id,
           cachedLocations: cachedLocations ?? undefined,
+          cachedPublicationPageList: cachedPublicationPageList ?? undefined,
           sourceUrl,
           container: hostRef.current,
           initialLocator: savedProgress?.locator,
@@ -729,6 +737,13 @@ export function EpubReaderContent({
               book,
               EPUB_LOCATIONS_CACHE_KEY,
               serializedLocations,
+            ).catch(() => undefined);
+          },
+          onPublicationPageListGenerated: (serializedPageList) => {
+            void saveReaderCache(
+              book,
+              EPUB_PAGE_LIST_CACHE_KEY,
+              serializedPageList,
             ).catch(() => undefined);
           },
           onSelectionCleared,

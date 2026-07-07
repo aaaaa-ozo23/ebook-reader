@@ -7,6 +7,15 @@ import type {
 } from "@reader/core";
 import type { Book as EpubBook, Location, NavItem, Rendition } from "epubjs";
 
+import {
+  findPublicationPageLabel,
+  loadPublicationPageList,
+  parseCachedPublicationPageList,
+  serializePublicationPageList,
+  type EpubCfiComparator,
+  type PublicationPageBoundary,
+} from "./EpubPageList";
+
 export type EpubSpreadMode = "single" | "double";
 
 export interface EpubPosition {
@@ -14,6 +23,7 @@ export interface EpubPosition {
   progression: number | null;
   page: number | null;
   totalPages: number | null;
+  publicationPageLabel: string | null;
   displayedPage: number | null;
   displayedTotal: number | null;
   locationsReady: boolean;
@@ -24,6 +34,7 @@ export interface EpubProgressPreview {
   progression: number;
   page: number;
   totalPages: number;
+  publicationPageLabel: string | null;
   locationsReady: true;
 }
 
@@ -36,6 +47,7 @@ export interface EpubSpreadState {
 interface EpubReaderAdapterOptions {
   bookId: string;
   cachedLocations?: string;
+  cachedPublicationPageList?: string;
   sourceUrl: string;
   container: HTMLElement;
   initialLocator?: EpubLocator;
@@ -43,6 +55,7 @@ interface EpubReaderAdapterOptions {
   onRelocated?: (position: EpubPosition) => void;
   onKeyDown?: (event: globalThis.KeyboardEvent) => void;
   onLocationsGenerated?: (serializedLocations: string) => void;
+  onPublicationPageListGenerated?: (serializedPageList: string) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
   onSelectionCleared?: () => void;
   onSpreadChange?: (state: EpubSpreadState) => void;
@@ -111,18 +124,25 @@ interface EpubRenderedView {
 export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly bookId: string;
   private readonly cachedLocations?: string;
+  private readonly cachedPublicationPageList?: string;
   private readonly sourceUrl: string;
   private readonly container: HTMLElement;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
   private readonly onLocationsGenerated?: (serializedLocations: string) => void;
+  private readonly onPublicationPageListGenerated?: (
+    serializedPageList: string,
+  ) => void;
   private readonly onSelected?: (selection: EpubSelectionSnapshot) => void;
   private readonly onSelectionCleared?: () => void;
   private readonly onSpreadChange?: (state: EpubSpreadState) => void;
   private book: EpubBook | null = null;
+  private cfiComparator: EpubCfiComparator | null = null;
   private locationsPromise: Promise<void> | null = null;
   private locationsReady = false;
+  private publicationPageList: PublicationPageBoundary[] = [];
+  private publicationPageListPromise: Promise<void> | null = null;
   private lastPosition: EpubPosition | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private rendition: Rendition | null = null;
@@ -140,6 +160,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   constructor(options: EpubReaderAdapterOptions) {
     this.bookId = options.bookId;
     this.cachedLocations = options.cachedLocations;
+    this.cachedPublicationPageList = options.cachedPublicationPageList;
     this.sourceUrl = options.sourceUrl;
     this.container = options.container;
     this.initialLocator = options.initialLocator;
@@ -147,6 +168,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onRelocated = options.onRelocated;
     this.onKeyDown = options.onKeyDown;
     this.onLocationsGenerated = options.onLocationsGenerated;
+    this.onPublicationPageListGenerated = options.onPublicationPageListGenerated;
     this.onSelected = options.onSelected;
     this.onSelectionCleared = options.onSelectionCleared;
     this.onSpreadChange = options.onSpreadChange;
@@ -163,7 +185,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.locationsReady = false;
     this.lastPosition = null;
 
-    const { default: createEpub } = await import("epubjs");
+    const { default: createEpub, EpubCFI } = await import("epubjs");
+    const cfiComparator = new EpubCFI();
     const book = createEpub(this.sourceUrl, {
       openAs: "epub",
       replacements: "blobUrl",
@@ -179,6 +202,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     });
 
     this.book = book;
+    this.cfiComparator = cfiComparator;
     this.rendition = rendition;
     this.registerRenditionEvents(rendition);
     this.startResizeObserver();
@@ -186,6 +210,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await rendition.display(this.initialLocator?.cfi ?? this.initialLocator?.href);
     await this.reportCurrentPosition();
     void this.generateLocations(book);
+    void this.generatePublicationPageList(book, cfiComparator);
   }
 
   async close(): Promise<void> {
@@ -193,6 +218,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.stopSelectionObservers();
     this.locationsPromise = null;
     this.locationsReady = false;
+    this.publicationPageList = [];
+    this.publicationPageListPromise = null;
+    this.cfiComparator = null;
     this.lastPosition = null;
 
     if (this.rendition !== null) {
@@ -271,6 +299,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     const page = progressionToEpubPage(nextProgression, totalPages);
     const href =
       getSectionHrefForCfi(book, cfi) ?? this.lastPosition?.locator.href ?? "";
+    const publicationPageLabel = this.getPublicationPageLabel(href, cfi);
 
     return {
       locator: {
@@ -282,6 +311,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       progression: nextProgression,
       page,
       totalPages,
+      publicationPageLabel,
       locationsReady: true,
     };
   }
@@ -573,6 +603,41 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return this.locationsPromise;
   }
 
+  private async generatePublicationPageList(
+    book: EpubBook,
+    comparator: EpubCfiComparator,
+  ): Promise<void> {
+    if (this.publicationPageListPromise !== null) {
+      return this.publicationPageListPromise;
+    }
+
+    this.publicationPageListPromise = (async () => {
+      const cached = parseCachedPublicationPageList(
+        this.cachedPublicationPageList,
+        comparator,
+      );
+      const boundaries = cached ?? (await loadPublicationPageList(book, comparator));
+
+      if (this.book !== book) {
+        return;
+      }
+
+      this.publicationPageList = boundaries;
+
+      if (cached === null) {
+        this.onPublicationPageListGenerated?.(serializePublicationPageList(boundaries));
+      }
+
+      await this.reportCurrentPosition();
+    })().catch(() => {
+      if (this.book === book) {
+        this.publicationPageList = [];
+      }
+    });
+
+    return this.publicationPageListPromise;
+  }
+
   private async reportCurrentPosition(): Promise<void> {
     if (this.rendition === null) {
       return;
@@ -598,6 +663,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       ? resolveProgression(book, start, pageIndex, totalPages)
       : null;
     const href = start.href ?? getSectionHrefForCfi(book, start.cfi) ?? "";
+    const publicationPageLabel = this.getPublicationPageLabel(href, start.cfi);
     const locator: EpubLocator = {
       kind: "epub",
       href,
@@ -610,10 +676,34 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       progression,
       page,
       totalPages: locationsReady ? totalPages : null,
+      publicationPageLabel,
       displayedPage: normalizePositiveInteger(start.displayed?.page),
       displayedTotal: normalizePositiveInteger(start.displayed?.total),
       locationsReady,
     };
+  }
+
+  private getPublicationPageLabel(
+    href: string,
+    cfi: string | undefined,
+  ): string | null {
+    if (
+      this.book === null ||
+      this.cfiComparator === null ||
+      this.publicationPageList.length === 0
+    ) {
+      return null;
+    }
+
+    const section = getSpineSectionForTarget(this.book, cfi ?? href);
+
+    return section === null
+      ? null
+      : findPublicationPageLabel(
+          this.publicationPageList,
+          { cfi, spineIndex: section.index },
+          this.cfiComparator,
+        );
   }
 
   private getTotalPages(): number | null {
@@ -779,6 +869,18 @@ function getSectionHrefForCfi(book: EpubBook, cfi: string | undefined): string |
 
   try {
     return book.spine.get(cfi)?.href ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getSpineSectionForTarget(
+  book: EpubBook,
+  target: string,
+): { href: string; index: number } | null {
+  try {
+    const section = book.spine.get(target);
+    return section === undefined ? null : { href: section.href, index: section.index };
   } catch {
     return null;
   }

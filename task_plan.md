@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 9：complete；9.1–9.7 已按固定分支顺序实现、验收并合入 `main`，`codex/v0.2.0-integration` 已同步到同一提交并推送。
+大阶段 10：in_progress；正式首轮按固定顺序实施 10.1–10.4，并在 10.4 中期门禁通过后停止，不创建 10.5、不合入 `main`。
 
 ## 分支策略
 
@@ -401,6 +401,16 @@
 | 10.5 EPUB 平滑切换 | `codex/stage10-epub-slide-transition` | 将统一 transition controller 接入 EPUB single/double，处理 resize、主题、目录跳转和浮层互斥 | slide/none、快速输入、首末页、双页 spread 和进度单次提交测试通过 |
 | 10.6 EPUB 真实翻页 | `codex/stage10-epub-page-curl` | 按阶段 9 决策实现隔离展示层 page-curl，不接管实时 iframe/选择/标注 DOM | 选择、高亮、批注、键盘和图片查看器无回归；不可捕获资源自动无动画降级 |
 | 10.7 阶段 10 验收 | `codex/stage10-epub-acceptance` | 汇总 EPUB fixtures、性能、视觉、a11y、文档和完整回归 | core/lint/Vitest/Rust/Playwright/Browser/axe/Tauri build 通过；合入 main 并同步集成分支 |
+
+### 阶段 10 实施状态
+
+| 小阶段 | 状态 | 验证摘要 |
+|--------|------|----------|
+| 10.1 page-list 模型 | complete | EPUB3/EPUB2 原始标签、href/fragment/CFI 边界、`epub_page_list_v1` 缓存；90 Vitest、lint/build/format 通过 |
+| 10.2 页码与 Location UI | pending | 等待 10.1 合回集成分支 |
+| 10.3 图片资源桥接 | pending | 等待 10.2 合回集成分支 |
+| 10.4 图片查看器 | pending | 等待 10.3 合回集成分支 |
+| 10.5–10.7 | deferred | 本轮在 10.4 后停止 |
 
 ## 大阶段 11：TXT 分页
 

@@ -1651,3 +1651,23 @@
 - **包体：** 书架入口 66.85 kB gzip；ReaderShell JS 29.79 kB、ReaderShell CSS 5.48 kB，继续异步；bookCovers 1.25 kB gzip 独立 chunk。
 - **Browser 限制：** IAB 受控页面不暴露 localStorage，无法直接注入三格式 fixture；Browser 完成视觉/交互检查，真实三格式状态由仓库 Playwright fixture 验证并留下 12/12 结果。
 - **合并与推送：** acceptance 以 `--no-ff` 合入 `codex/v0.2.0-integration`，集成分支再以 `--no-ff` 合入 `main`；随后集成分支快进到 `main` 合并提交。`main` 和 `codex/v0.2.0-integration` 均已推送到 origin；未执行 v0.2 发布或商店操作。
+# 2026-07-07 大阶段 10：EPUB 增强
+
+## 启动
+
+- **状态：** in_progress
+- **集成分支：** `codex/v0.2.0-integration`
+- **本轮边界：** 顺序完成 10.1–10.4；通过中期完整门禁后停止，不创建 10.5、不合入 `main`、不改版本、不发布。
+- 已确认 `main`、`codex/v0.2.0-integration` 与对应 origin 均位于 `1113bc6`；工作区仅有用户未跟踪的 `AGENTS.md`，执行期间保留且不提交。
+- 已恢复 `task_plan.md`、`findings.md`、`progress.md`、阶段 9 设计规格与 page-curl 决策；图片查看器以已批准概念为视觉方向，以路线图校正规则为最高优先级。
+
+### 10.1 page-list 模型
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-page-list`
+- 目标：保留 EPUB3 navigation / EPUB2 NCX 原始 page-list 标签，解析 href/fragment/CFI 边界并复用 `reader_cache`。
+- **过程问题：** 首轮定向 Vitest 90 tests 中 1 个新断言失败；测试要求 href-only 边界含显式 `cfi: undefined`，而实际模型有意省略可选字段。已改为断言字段不存在。当前终端 Node 24.14.0 / pnpm 11.7.0 与仓库声明的 Node 26.1.0 / pnpm 11.1.2 不一致，后续验证改用可定位的项目要求运行时。
+- 第二轮 90 Vitest 与 lint 通过；build 暴露测试 helper 未补必填 `publicationPageLabel`，以及项目当前 ES target 不支持 `Array.prototype.toSorted`。已补默认值并改为复制数组后 `sort`，保持输入不可变。
+- 新增 `EpubPageList` 模块，覆盖 EPUB3 navigation、EPUB2 NCX、相对 href、fragment、package CFI、spine/CFI 排序、当前位置标签查找和版本化缓存校验。
+- `EpubReaderAdapter` 异步生成或恢复 page-list，并在位置/拖动预览结果中返回 `publicationPageLabel`；`ReaderFormatContents` 并行读取 locations、page-list 和 TOC 缓存。
+- **验证：** 90 Vitest passed；desktop lint、build、root format passed。生产书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip，仍保持异步边界。

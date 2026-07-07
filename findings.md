@@ -390,3 +390,12 @@
 - Focus 快捷键回归测试暴露 `focusButtonRef` 实际挂在 Contents 按钮的旧缺陷；把 ref 移到 Focus 按钮并使用短延迟重试后，焦点恢复测试稳定通过。
 - Browser/IAB 的受控 `evaluate` 上下文不暴露 localStorage，不能在 Browser 标签页注入三格式书籍；因此 Browser 用于三档视口、四主题、焦点、面板、console 和 `view_image` 视觉检查，三格式真实 reader 数据态由项目 Playwright 生成 TXT/EPUB/PDF fixture 并执行 axe，12/12 通过。
 - 阶段 9 最终生产构建把书架入口压到 66.85 kB gzip；ReaderShell JS 29.79 kB、CSS 5.48 kB 均保持异步，封面生成器单独为 1.25 kB gzip chunk。
+## 2026-07-07 大阶段 10：EPUB 增强
+
+### 10.1 page-list 模型
+
+- epub.js 0.3.93 的 `book.load(navPath, "xml")` 可以读取原始 EPUB3 navigation XHTML 或 EPUB2 NCX；这条路径保留 `i`、`xiv` 等标签，不使用 `book.pageList.pages` 的整数化结果。
+- page-list href 需要同时尝试 navigation 相对路径、去前导斜杠路径和原 href，最终以 `book.spine.get(...)` 返回的 section href/index 为标准。
+- href-only 边界表示 section 起点；fragment 边界通过 `section.load()` + `cfiFromElement()` 转成可比较 CFI；package CFI 直接由 spine 解析。解析阶段共享同一 section load Promise，结束统一 unload。
+- 新缓存键固定为 `epub_page_list_v1`，内容为 `{ version: 1, boundaries }`；继续使用 `reader_cache` 的 source hash 自动失效，无 schema migration。
+- 当前 CFI 早于首个有效边界、缓存损坏、目标外部/为空或 fragment 无法解析时，不伪造出版物页码，交给 10.2 显示 Location 回退。
