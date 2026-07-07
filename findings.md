@@ -384,3 +384,7 @@
 - 将 fixture 通过 `import.meta.env.DEV && ?fixture=design-system` 动态加载可避免生产运行路径执行状态矩阵；书架入口仍只静态加载实际使用的 Button/SegmentedControl。
 - `page-flip@2.0.7` 的 ESM 为 43.8 kB、MIT、无运行时依赖，但 portrait 模式明确克隆 HTML，Canvas 路径只接受 image URL，且翻页完成依赖 imperative 事件而非 Promise/取消协议；未通过实时 iframe/标注 DOM 隔离和确定性事务 gate。
 - 自研控制器把捕获/展示失败视为可恢复，把真实导航失败视为不可提交；同步 30 次输入只执行首个和最终方向，避免无限队列并保持每次真实导航一次 commit。
+- ReaderShell 入口可以保留 `components/ReaderShell.tsx` 公开 facade，同时把实现放入 `reader/`；Vite 仍把 ReaderShell CSS、EPUB adapter 和 PDF adapter 保留在异步 reader chunk，不会提前进入书架入口。
+- 阶段 8 提交在当前 Node 26.1.0 / pnpm 11.1.2 / Vite 7.3.5 工具链隔离重建为 69.08 kB gzip，与文档旧观测 68.45–68.46 kB 有工具链差异；把仅在封面队列启动后需要的 `bookCovers` 改为动态导入后，当前书架入口降至 66.85 kB gzip，按绝对门槛也达标。
+- 侧栏、选择/批注浮层、主题面板、导航注册器和三格式内容层可通过直接导入拆开而不增加 barrel；稳定回调和现有 memo 边界保留，ReaderShell 主实现由约 5500 行降为约 1300 行。
+- Focus 快捷键回归测试暴露 `focusButtonRef` 实际挂在 Contents 按钮的旧缺陷；把 ref 移到 Focus 按钮并使用短延迟重试后，焦点恢复测试稳定通过。

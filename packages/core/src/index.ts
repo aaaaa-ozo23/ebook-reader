@@ -278,8 +278,9 @@ export function normalizePdfLocator(locator: PdfLocator): PdfLocator {
   const ratio = locator.pageOffsetRatio;
 
   if (ratio === undefined || !Number.isFinite(ratio)) {
-    const { pageOffsetRatio: _pageOffsetRatio, ...rest } = locator;
-    return rest;
+    const normalized = { ...locator };
+    delete normalized.pageOffsetRatio;
+    return normalized;
   }
 
   return {

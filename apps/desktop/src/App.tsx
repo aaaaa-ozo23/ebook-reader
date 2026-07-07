@@ -14,9 +14,6 @@ import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/co
 
 import "./App.css";
 import defaultBookCover from "./assets/default-book-cover.jpg";
-import { Button } from "./components/ui/Button";
-import { SegmentedControl } from "./components/ui/SegmentedControl";
-import { prepareBookCover } from "./covers/bookCovers";
 import { listenForOpenBookFiles, takePendingOpenFiles } from "./tauri/fileOpen";
 import {
   getBookCoverSource,
@@ -35,11 +32,6 @@ const LazyReaderShell = lazy(() =>
 
 type FeedbackKind = "success" | "info" | "error";
 type ViewMode = "grid" | "list";
-
-const VIEW_MODE_OPTIONS = [
-  { label: "Grid", value: "grid" },
-  { label: "List", value: "list" },
-] as const;
 
 interface Feedback {
   actionLabel?: string;
@@ -97,6 +89,8 @@ function App() {
     isCoverWorkerActiveRef.current = true;
 
     try {
+      const { prepareBookCover } = await import("./covers/bookCovers");
+
       while (coverQueueRef.current.length > 0) {
         const queuedBook = coverQueueRef.current.shift();
 
@@ -535,29 +529,33 @@ function LibraryHeader({
         </p>
       </div>
       <div className="library-actions">
-        <SegmentedControl
-          className="view-toggle"
-          optionClassName="view-toggle__button"
-          label="View mode"
-          options={VIEW_MODE_OPTIONS}
-          value={viewMode}
-          onChange={(nextViewMode) => {
-            if (nextViewMode === "grid") {
-              onShowGridView();
-            } else {
-              onShowListView();
-            }
-          }}
-        />
-        <Button
+        <div className="view-toggle" role="group" aria-label="View mode">
+          <button
+            type="button"
+            className="view-toggle__button"
+            aria-pressed={viewMode === "grid"}
+            onClick={onShowGridView}
+          >
+            Grid
+          </button>
+          <button
+            type="button"
+            className="view-toggle__button"
+            aria-pressed={viewMode === "list"}
+            onClick={onShowListView}
+          >
+            List
+          </button>
+        </div>
+        <button
+          type="button"
           className="import-button"
           disabled={isImporting}
           onClick={onImportBook}
-          variant="danger"
         >
           <span className="import-button__icon" aria-hidden="true" />
           {isImporting ? "Importing..." : "Import book"}
-        </Button>
+        </button>
       </div>
     </header>
   );
