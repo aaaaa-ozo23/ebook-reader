@@ -2955,6 +2955,7 @@ function createEpubPosition(overrides: Partial<EpubPosition> = {}): EpubPosition
     progression: locator.progression ?? null,
     page: 10,
     totalPages: 100,
+    publicationPageLabel: null,
     displayedPage: 1,
     displayedTotal: 1,
     locationsReady: true,
