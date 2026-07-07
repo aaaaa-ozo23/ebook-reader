@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 8：complete；v0.2 路线图及阶段 9–17+ 的小阶段/分支计划已完成，未进行功能实现，阶段 9 尚未开始。
+大阶段 9：complete；9.1–9.7 已按固定分支顺序实现并通过验收，等待合入 `main` 后同步集成分支。
 
 ## 分支策略
 
@@ -373,6 +373,18 @@
 | 9.5 翻页控制器原型 | `codex/stage9-page-transition-spike` | 实现一次导航事务、单槽待处理输入、slide；比较自研 CSS 3D 与 page-flip，按既定门槛决定 page-curl 方案 | 30 次连续导航无丢页/重复提交；性能、iframe/Canvas、a11y、reduced-motion 门槛有记录和自动化覆盖 |
 | 9.6 ReaderShell 模块拆分 | `codex/stage9-reader-shell-modules` | 按壳层、侧栏、浮层、格式阅读器、设置、导航控制器拆分，保持公开行为和懒加载边界 | 现有 68 个 Vitest 和 8 个 Playwright 基线不回归；入口包体不超过阶段 8 基线 |
 | 9.7 阶段 9 验收 | `codex/stage9-acceptance` | 补齐跨模块测试、文档和集成分支验收，记录最终 page-curl 依赖决策 | 全局门禁、Browser 桌面/窄屏、axe 和 Tauri build 通过；合入 `main` 后将集成分支快进到最新 `main` |
+
+### 阶段 9 实施状态
+
+| 小阶段 | 状态 | 验证摘要 |
+|--------|------|----------|
+| 9.1 阅读体验契约 | complete | core 5 tests、core build、desktop lint/build、format 与 diff check 通过 |
+| 9.2 设置持久化 | complete | browser fallback 74 Vitest、Rust 36 tests、desktop lint/build、format 与 diff check 通过；无 migration |
+| 9.3 UI 概念审批 | complete | 四组源图与设计规格已归档；用户批准“视觉方向并按契约校正” |
+| 9.4 设计 token 与基础组件 | complete | 78 Vitest、10 Playwright、lint/build/format 通过；Browser 1280×800/375×760 无溢出或 console issue |
+| 9.5 翻页控制器原型 | complete | 85 Vitest、12 Playwright、Browser slide/page-curl；30 输入单槽与 >50ms long-task gate 通过；page-flip no-go |
+| 9.6 ReaderShell 模块拆分 | complete | 85 Vitest、core 5 tests、lint/build/format 通过；书架入口 66.85 kB gzip，ReaderShell/CSS 保持异步 chunk |
+| 9.7 阶段 9 验收 | complete | 5 core + 85 desktop + 36 Rust + 12 Playwright；Browser 三档、axe、Tauri NSIS/MSI build、包体和 fidelity ledger 通过 |
 
 ## 大阶段 10：EPUB 增强
 

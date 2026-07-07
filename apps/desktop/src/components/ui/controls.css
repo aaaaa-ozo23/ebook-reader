@@ -1,0 +1,204 @@
+.ui-button,
+.ui-icon-button,
+.ui-segmented-control__option {
+  min-height: 40px;
+  border: 1px solid transparent;
+  border-radius: var(--ds-radius-control);
+  font-family: var(--ds-font-ui);
+  font-size: var(--ds-font-size-control);
+  font-weight: var(--ds-font-weight-control);
+  line-height: 1.2;
+  transition:
+    background var(--ds-motion-fast) var(--ds-ease-standard),
+    border-color var(--ds-motion-fast) var(--ds-ease-standard),
+    color var(--ds-motion-fast) var(--ds-ease-standard),
+    transform var(--ds-motion-fast) var(--ds-ease-standard);
+}
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--ds-space-2);
+  padding: 0 var(--ds-space-4);
+}
+
+.ui-button--primary {
+  background: var(--ds-color-action);
+  color: #ffffff;
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: var(--ds-color-action-hover);
+}
+
+.ui-button--secondary {
+  border-color: var(--ds-color-border-strong);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-ink);
+}
+
+.ui-button--ghost {
+  background: transparent;
+  color: var(--ds-color-action);
+}
+
+.ui-button--danger {
+  background: var(--ds-color-danger);
+  color: #ffffff;
+}
+
+.ui-button--danger:hover:not(:disabled) {
+  background: var(--ds-color-danger-hover);
+}
+
+.ui-button:active:not(:disabled),
+.ui-icon-button:active:not(:disabled),
+.ui-segmented-control__option:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.ui-button:disabled,
+.ui-icon-button:disabled,
+.ui-segmented-control__option:disabled {
+  background: var(--ds-color-disabled);
+  color: #ffffff;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.ui-icon-button {
+  display: inline-grid;
+  min-width: 40px;
+  place-items: center;
+  background: transparent;
+  color: currentColor;
+  padding: var(--ds-space-2);
+}
+
+.ui-icon-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.ui-segmented-control {
+  display: inline-flex;
+  min-height: 42px;
+  overflow: hidden;
+  border: 1px solid var(--ds-color-border-strong);
+  border-radius: var(--ds-radius-control);
+  background: var(--ds-color-surface);
+}
+
+.ui-segmented-control__option {
+  min-width: 64px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ds-color-muted);
+  padding: 0 var(--ds-space-3);
+}
+
+.ui-segmented-control__option[aria-pressed="true"] {
+  background: var(--ds-color-action);
+  color: #ffffff;
+}
+
+.ui-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+}
+
+.ui-slider-field {
+  display: grid;
+  gap: var(--ds-space-2);
+  font-family: var(--ds-font-ui);
+  font-size: var(--ds-font-size-control);
+}
+
+.ui-slider-field__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-3);
+  font-weight: var(--ds-font-weight-control);
+}
+
+.ui-slider-field input {
+  width: 100%;
+  accent-color: var(--ds-color-action);
+}
+
+.ui-modal-backdrop {
+  position: fixed;
+  z-index: var(--ds-z-modal);
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(18, 28, 31, 0.56);
+  padding: var(--ds-space-5);
+}
+
+.ui-modal {
+  display: grid;
+  width: min(680px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: auto;
+  border: 1px solid var(--ds-color-border);
+  border-radius: var(--ds-radius-overlay);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-ink);
+  box-shadow: var(--ds-shadow-modal);
+}
+
+.ui-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-4);
+  border-bottom: 1px solid var(--ds-color-border);
+  padding: var(--ds-space-4);
+}
+
+.ui-modal__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.ui-modal__body {
+  padding: var(--ds-space-4);
+}
+
+@media (max-width: 760px) {
+  .ui-button,
+  .ui-icon-button,
+  .ui-segmented-control__option {
+    min-height: 44px;
+  }
+
+  .ui-modal-backdrop--sheet {
+    align-items: end;
+    padding: 0;
+  }
+
+  .ui-modal-backdrop--sheet .ui-modal {
+    width: 100%;
+    max-height: min(78dvh, 640px);
+    border-radius: var(--ds-radius-overlay) var(--ds-radius-overlay) 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-button,
+  .ui-icon-button,
+  .ui-segmented-control__option {
+    transition: none;
+  }
+}

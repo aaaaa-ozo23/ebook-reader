@@ -78,6 +78,21 @@ fn save_reader_layout_preferences(
 }
 
 #[tauri::command]
+fn get_reader_experience_preferences(
+    app: tauri::AppHandle,
+) -> Result<db::ReaderExperiencePreferences, String> {
+    db::get_reader_experience_preferences(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_reader_experience_preferences(
+    app: tauri::AppHandle,
+    preferences: db::ReaderExperiencePreferences,
+) -> Result<db::ReaderExperiencePreferences, String> {
+    db::save_reader_experience_preferences(&app, preferences).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_reader_cache(
     app: tauri::AppHandle,
     book_id: String,
@@ -229,6 +244,8 @@ pub fn run() {
             save_reader_theme,
             get_reader_layout_preferences,
             save_reader_layout_preferences,
+            get_reader_experience_preferences,
+            save_reader_experience_preferences,
             get_reader_cache,
             save_reader_cache,
             get_reading_progress,

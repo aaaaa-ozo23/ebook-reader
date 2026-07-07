@@ -1,5 +1,6 @@
 import type {
   PdfLocator,
+  PdfViewMode,
   ReaderAdapter,
   ReaderTheme,
   SearchHit,
@@ -9,7 +10,7 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs
 
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-export type PdfViewMode = "single" | "double" | "continuous";
+export type { PdfViewMode } from "@reader/core";
 
 export interface PdfPosition {
   locator: PdfLocator;

@@ -14,7 +14,6 @@ import { defaultReaderTheme, type Book, type ImportBookResult } from "@reader/co
 
 import "./App.css";
 import defaultBookCover from "./assets/default-book-cover.jpg";
-import { prepareBookCover } from "./covers/bookCovers";
 import { listenForOpenBookFiles, takePendingOpenFiles } from "./tauri/fileOpen";
 import {
   getBookCoverSource,
@@ -90,6 +89,8 @@ function App() {
     isCoverWorkerActiveRef.current = true;
 
     try {
+      const { prepareBookCover } = await import("./covers/bookCovers");
+
       while (coverQueueRef.current.length > 0) {
         const queuedBook = coverQueueRef.current.shift();
 

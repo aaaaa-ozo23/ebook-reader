@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 const acceptanceViewports = [
@@ -36,5 +37,99 @@ test("keeps the bookshelf usable at every stage 6 acceptance viewport", async ({
     expect(layout.bodyScrollWidth).toBeLessThanOrEqual(layout.viewportWidth);
     expect(layout.bodyClientWidth).toBeLessThanOrEqual(layout.viewportWidth);
     expect(consoleIssues).toEqual([]);
+  }
+});
+
+test("renders the v0.2 design-system fixture across states and reduced motion", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/?fixture=design-system");
+
+  await expect(
+    page.getByRole("heading", { name: "Ebook Reader controls" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Disabled" })).toBeDisabled();
+  const prototypeTransition = page.getByRole("group", {
+    name: "Prototype transition",
+  });
+  await expect(
+    prototypeTransition.getByRole("button", { name: "Slide" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  const dialog = page.getByRole("dialog", { name: "Reading settings" });
+  await expect(dialog).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Close Reading settings" }),
+  ).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Open settings" })).toBeFocused();
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reducedMotionDuration = await page.evaluate(() =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--ds-motion-ui")
+      .trim(),
+  );
+  expect(reducedMotionDuration).toBe("0.01ms");
+
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(
+    accessibility.violations.filter(
+      (violation) => violation.impact === "serious" || violation.impact === "critical",
+    ),
+  ).toEqual([]);
+
+  await page.setViewportSize({ width: 375, height: 760 });
+  const mobileLayout = await page.evaluate(() => ({
+    buttonHeights: Array.from(document.querySelectorAll("button")).map((button) =>
+      Math.round(button.getBoundingClientRect().height),
+    ),
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+
+  expect(mobileLayout.scrollWidth).toBeLessThanOrEqual(mobileLayout.clientWidth);
+  expect(mobileLayout.buttonHeights.every((height) => height >= 44)).toBe(true);
+});
+
+test("keeps 30 rapid transition inputs deterministic without long tasks", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 640, height: 640 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?fixture=design-system");
+    await page.evaluate(() => {
+      const durations: number[] = [];
+      const observer = new PerformanceObserver((entries) => {
+        for (const entry of entries.getEntries()) {
+          durations.push(entry.duration);
+        }
+      });
+      observer.observe({ entryTypes: ["longtask"] });
+      Object.assign(window, { __stage9LongTaskDurations: durations });
+    });
+    const next = page.getByTestId("transition-next");
+    await expect(next).toBeVisible();
+    await next.evaluate((button) => {
+      for (let index = 0; index < 30; index += 1) {
+        (button as HTMLButtonElement).click();
+      }
+    });
+
+    await expect(page.getByTestId("transition-state")).toContainText(
+      "idle · Committed: 2",
+    );
+    const longTasks = await page.evaluate(
+      () =>
+        (window as typeof window & { __stage9LongTaskDurations?: number[] })
+          .__stage9LongTaskDurations ?? [],
+    );
+    expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
   }
 });

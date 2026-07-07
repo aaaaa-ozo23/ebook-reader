@@ -366,3 +366,27 @@
 | 发布动作继续需要明确授权 | 规划可以创建 release candidate，但公开 Release、商店提交或证书购买属于外部状态变更 | 13.9 只在用户明确授权后执行最终发布 |
 
 详细拆分数量：阶段 9/10/11/12 各 7 个小阶段，阶段 13 为 9 个，阶段 14 为 7 个，阶段 15/16/17+ 各 6 个；共 62 个固定分支。阶段 9/10/11/12/14/16/17 设置显式 acceptance 分支，阶段 13 由 release-candidate、阶段 15 由 cross-platform-ci 完成收口。
+
+## 2026-07-06 大阶段 9 实施基线
+
+- `main` 与 `origin/main` 同步于 `64dc750`，工作区干净；`codex/v0.2.0-integration` 从该提交创建。
+- 用户批准 UI 概念的视觉方向，同时明确以路线图契约校正 MOBI、EPUB scrolled、Fade、重复阅读器侧栏等生成偏差。
+- 阶段 6.x 的最终基线为 68 Vitest、32 Rust tests、8 Playwright tests；书架入口约 68.46 kB gzip，ReaderShell 保持异步加载。
+- `page-flip@2.0.7` 当前元数据为 MIT、零运行时依赖；是否保留仍须通过阶段 9.5 的稳定性、性能、iframe/Canvas 和可访问性门槛。
+- 9.1 将 PDF view mode 的唯一公共类型源移到 `@reader/core`，adapter 仅重导出该类型；`ReaderAdapter` 本身未增加动画或布局职责。
+- 9.1 desktop build 测得书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip；相较阶段 8 文档基线略高，阶段 9.6 必须通过模块边界和导入审计压回或解释工具链差异。
+- `reader_experience` 采用 `{ version: 1, preferences }` 包装后可在不新增 schema 的情况下演进；读取未知版本时返回默认值且不写回，避免旧客户端破坏未来数据。
+- Rust 端不能直接反序列化严格枚举来满足“非法字段逐项降级”，因此先读 `serde_json::Value`，再按格式/字段归一；Tauri 命令仍返回强类型偏好。
+- 概念复查确认桌面书架的开放 workspace、紧凑 rail、纸色背景和 teal/amber 状态可直接形成 token；桌面阅读器图的重复书架 rail、Auto/Scrolled/Fade 和 Letter spacing 必须由校正表覆盖。
+- 图片查看器的单容器工具栏、舞台和缩放轨道可作为后续模态规格，但背景误用了书架；实现时必须覆盖 EPUB 阅读器并恢复触发点焦点。
+- 移动概念证明 375px 下抽屉和底部设置面板的信息密度可行；系统状态栏、设备底栏、Fade 和图标化 view 选项均不属于应用实现。
+- 设计 fixture 在 Browser 1280×800 下保持两列开放布局，375×760 下所有采样按钮为 44px、document scrollWidth 等于 clientWidth；设置 sheet 底边精确贴合 760px viewport，焦点落在 Close。
+- 将 fixture 通过 `import.meta.env.DEV && ?fixture=design-system` 动态加载可避免生产运行路径执行状态矩阵；书架入口仍只静态加载实际使用的 Button/SegmentedControl。
+- `page-flip@2.0.7` 的 ESM 为 43.8 kB、MIT、无运行时依赖，但 portrait 模式明确克隆 HTML，Canvas 路径只接受 image URL，且翻页完成依赖 imperative 事件而非 Promise/取消协议；未通过实时 iframe/标注 DOM 隔离和确定性事务 gate。
+- 自研控制器把捕获/展示失败视为可恢复，把真实导航失败视为不可提交；同步 30 次输入只执行首个和最终方向，避免无限队列并保持每次真实导航一次 commit。
+- ReaderShell 入口可以保留 `components/ReaderShell.tsx` 公开 facade，同时把实现放入 `reader/`；Vite 仍把 ReaderShell CSS、EPUB adapter 和 PDF adapter 保留在异步 reader chunk，不会提前进入书架入口。
+- 阶段 8 提交在当前 Node 26.1.0 / pnpm 11.1.2 / Vite 7.3.5 工具链隔离重建为 69.08 kB gzip，与文档旧观测 68.45–68.46 kB 有工具链差异；把仅在封面队列启动后需要的 `bookCovers` 改为动态导入后，当前书架入口降至 66.85 kB gzip，按绝对门槛也达标。
+- 侧栏、选择/批注浮层、主题面板、导航注册器和三格式内容层可通过直接导入拆开而不增加 barrel；稳定回调和现有 memo 边界保留，ReaderShell 主实现由约 5500 行降为约 1300 行。
+- Focus 快捷键回归测试暴露 `focusButtonRef` 实际挂在 Contents 按钮的旧缺陷；把 ref 移到 Focus 按钮并使用短延迟重试后，焦点恢复测试稳定通过。
+- Browser/IAB 的受控 `evaluate` 上下文不暴露 localStorage，不能在 Browser 标签页注入三格式书籍；因此 Browser 用于三档视口、四主题、焦点、面板、console 和 `view_image` 视觉检查，三格式真实 reader 数据态由项目 Playwright 生成 TXT/EPUB/PDF fixture 并执行 axe，12/12 通过。
+- 阶段 9 最终生产构建把书架入口压到 66.85 kB gzip；ReaderShell JS 29.79 kB、CSS 5.48 kB 均保持异步，封面生成器单独为 1.25 kB gzip chunk。

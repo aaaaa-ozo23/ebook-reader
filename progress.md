@@ -1560,3 +1560,93 @@
 - `git diff --check`：passed。
 - 变更范围：仅 `task_plan.md`、`docs/v0.2-roadmap.md`、`findings.md`、`progress.md`；无代码、依赖、schema、版本、README 或 CHANGELOG 变更。
 - 未创建 `codex/v0.2.0-integration` 或任何阶段 9–17 功能分支；阶段 9 仍为未开始。
+
+## 2026-07-06 大阶段 9：阅读体验基础与设计系统
+
+### 启动
+
+- **状态：** in_progress
+- **集成分支：** `codex/v0.2.0-integration`
+- 从最新 `main` / `origin/main` 的 `64dc750` 创建 v0.2 集成分支，确认工作区干净且分支祖先正确。
+- 恢复 `task_plan.md`、`findings.md`、`progress.md` 和阶段 8 路线图上下文；按 9.1–9.7 固定分支顺序执行。
+- UI 概念采用“视觉批准并校正”：保留炭黑、琥珀、青绿、纸张色和布局方向，功能与文案以 `docs/v0.2-roadmap.md` 为准。
+
+### 9.1 阅读体验契约
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-experience-contracts`
+- 在 `@reader/core` 新增三格式 view mode、`PageTransitionMode`、`ReaderCapabilities`、`ReaderExperiencePreferences`、默认偏好、能力矩阵、偏好/PDF locator 归一和有效动效解析。
+- `PdfLocator` 新增可选 `pageOffsetRatio`；旧 locator 保持有效。TXT scroll、PDF continuous 和 reduced motion 的运行时有效动效为 `none`，保存偏好不被覆盖。
+- PDF adapter 改为复用 core 的 `PdfViewMode`，未修改 `ReaderAdapter` 协议。
+- 新增 core Vitest 配置入口和 5 tests；core test/build、desktop lint/build、format、diff check 通过。
+- **过程问题：** 首次 `apply_patch` 因 PDF adapter import 上下文与预期不一致而未应用；读取文件头后拆分补丁成功。首次 format check 发现 4 个新改文件未格式化；定向运行 Prettier 后通过。
+- **包体观测：** 本轮 desktop build 为书架入口 69.08 kB gzip、ReaderShell 29.85 kB gzip，作为 9.6 的实测比较点。
+
+### 9.2 设置持久化
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-experience-settings`
+- 新增 `get_reader_experience_preferences` / `save_reader_experience_preferences` Tauri 命令，以及同构 browser localStorage fallback。
+- 使用现有 `app_settings` 的 `reader_experience` 键保存 `{ version: 1, preferences }`，未新增 migration、表或列。
+- 缺失/非法字段逐项回退，未知字段忽略；未知版本和损坏 JSON 返回默认值，读取时不覆盖原始存储。
+- Rust `PdfLocator` 同步增加 `pageOffsetRatio`，保存时过滤非有限值并钳制到 `0..1`；旧 locator 仍可反序列化。
+- **验证：** desktop 74 Vitest、Rust 36 tests、desktop lint/build、format、cargo fmt check、diff check 通过。
+- **过程问题：** 首轮 Rust 编译误用不存在的 `database_path()` helper，导致 2 个 E0425；改为仓库现有 `init_app_database()` 后重跑 36 tests 全部通过。
+
+### 9.3 UI 概念审批
+
+- **状态：** complete
+- **分支：** `codex/stage9-ui-concepts`
+- 将桌面书架、桌面阅读器、EPUB 图片查看器和 375px 移动状态板四张源图归档到 `docs/design/v0.2/`。
+- 新增设计规格，固定可见文案、颜色/排版/token、容器模型、图标、组件状态、动效和 1280/900/640/375 响应式规则。
+- 记录审批口径：保留视觉方向，以路线图校正 MOBI、Auto/Scrolled/Fade、Letter spacing、重复阅读器 rail、错误背景和设备系统 chrome。
+- 使用 `view_image` 检查四张归档源图，确认文件完整且校正表覆盖可见生成偏差；本阶段未修改产品 UI。
+
+### 9.4 设计 token 与基础组件
+
+- **状态：** complete
+- **分支：** `codex/stage9-design-tokens`
+- 新增 chrome/正文分离的颜色、字体、间距、圆角、阴影、层级、focus 和 motion CSS token；reduced motion 将共享时长降为 `0.01ms`。
+- 新增 Button、IconButton、SegmentedControl、Toolbar、Modal/移动 Sheet、SliderField；语义、键盘、Escape、焦点陷阱和焦点恢复均有测试。
+- 用共享 Button/SegmentedControl 渐进迁移书架 Grid/List 和 Import book，保留原 class、文案和 aria-pressed 行为。
+- 新增开发专用 `?fixture=design-system` 状态矩阵，覆盖 primary/secondary/ghost/danger、disabled、四主题、分段控件、slider、modal/sheet 和 reduced motion。
+- **自动化：** 78 Vitest、10 Playwright、desktop lint/build、format、diff check 通过；fixture axe 无 serious/critical。
+- **Browser QA：** 1280×800 与 375×760 渲染正常；移动按钮均为 44px，scrollWidth=clientWidth，sheet 底边贴合 viewport，Close 获得焦点，console 无 warning/error；现有空书架 List 切换保持正确。
+- **过程问题：** 首次只读检查命令的 PowerShell 引号未闭合，未产生变更，改用单引号模式后成功。首轮 slider 测试依赖 jsdom 不触发的 range 键盘 change；改用 Testing Library `fireEvent.change` 后 78 tests 全部通过。
+- **包体观测：** 生产书架入口 69.49 kB gzip、ReaderShell 29.85 kB gzip；9.6 继续优化入口并保持 ReaderShell 异步边界。
+
+### 9.5 翻页控制器原型
+
+- **状态：** complete
+- **分支：** `codex/stage9-page-transition-spike`
+- 新增 `idle/running` 事务控制器、单槽待处理方向、捕获/动画失败安全降级、真实导航失败不提交和每次成功导航单次 commit。
+- 新增隔离快照展示层；slide 为 220ms，page-curl 为 500ms CSS 3D/WAAPI，层为 `aria-hidden`/`pointer-events:none` 且完成后移除，不移动实时 DOM。
+- 在开发 fixture 增加可交互翻页原型；Browser 验证 slide 从 Chapter 1 到 2、page-curl 到 3，每次仅增加一次 commit，动画完成后活动层为 0。
+- 仓库外解包并审计 `page-flip@2.0.7`；MIT/零依赖通过，但实时 DOM 隔离和确定性事务 gate 不通过，最终不加入 package/lockfile，决策记录于 `docs/design/v0.2/page-transition-spike.md`。
+- **验证：** 85 Vitest、12 Playwright、desktop lint/build、format 通过；1280×800 和 640×640 各 30 次同步 Next 最终为 2 commits，未记录可归因的 `>50ms` long task。
+- **过程问题：** 首轮 lint 发现 render 初始化控制器时闭包可能读取 ref；改为 effect 创建并由事件读取 ref。首轮类型检查修正 mock 返回值；首轮 E2E 在 fixture 动态加载完成前直接查询按钮导致 0 commits，增加按钮可见 gate 后通过。
+- **回归观测：** 首次全量 Vitest 的既有 Focus 快捷键用例出现一次 rAF 焦点时序波动；该用例定向重跑通过，随后全量 85 tests 重跑通过，未修改生产快捷键行为。
+
+### 9.6 ReaderShell 模块拆分
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-shell-modules`
+- 保留 `components/ReaderShell.tsx` 懒加载 facade 与公开 `ReaderShellProps`，实现迁至 `reader/ReaderShell.tsx`；ReaderShell CSS 只由异步实现导入。
+- 提取 `ReaderSidebar`、选择/批注浮层、主题面板、UI 状态类型、标注展示规则和稳定导航注册 hook；TXT/EPUB/PDF 内容层及其 adapter/helper 迁入独立 `ReaderFormatContents` 模块，继续使用直接导入和原 memo 边界。
+- 修正既有 Focus 焦点恢复 ref 错挂在 Contents 按钮的问题；关联快捷键测试定向通过，全量 desktop 85 tests 通过。
+- 将封面生成器改为队列首次运行时动态导入，避免 EPUB/PDF 封面运行时进入初始书架 chunk；当前生产书架入口为 66.85 kB gzip，低于 68.45 kB 绝对门槛，ReaderShell 为 29.79 kB gzip 并保持独立异步 chunk。
+- **验证：** format、lint、core 5 tests、desktop 85 tests、desktop build、`git diff --check` 通过。
+- **过程问题：** 首轮关联测试暴露 Focus ref 旧缺陷并已修复。隔离重建阶段 8 时，临时 worktree 的 Windows junction 清理误删主 worktree `packages/core`；影响限定于已跟踪目录，立即从当前 HEAD 恢复并重应用单行 lint 修正，随后 core 5 tests 与全量门禁通过。该临时 worktree 已删除，后续不再使用 junction 复用依赖。
+- **工具链观测：** 同一当前工具链重建阶段 8 得到 69.08 kB gzip，说明旧文档 68.45–68.46 kB 受构建版本影响；最终实现仍以 66.85 kB 满足更严格的绝对值。
+
+### 9.7 阶段 9 验收
+
+- **状态：** complete
+- **分支：** `codex/stage9-acceptance`
+- 新增 `docs/design/v0.2/fidelity-ledger.md`，记录布局、色彩、排版、控件、动效/响应式五点对照、概念校正、page-curl 最终决策和包体数据。
+- **Browser/IAB：** 1280×800、640×640、375×760 通过；四主题存在，375px 采样按钮均为 44px，document 无横向溢出，mobile sheet 底边贴合 760px，Escape 后焦点恢复到 Open settings，console 无 warning/error。
+- **视觉对照：** 使用 `view_image` 对照四张批准概念与最终书架/设计系统截图；保留 charcoal/teal/amber/paper、开放 workspace、紧凑控件和移动 sheet，按校正表排除 MOBI/Auto/Scrolled/Fade/Letter spacing/设备 chrome。
+- **自动化：** frozen install、format、lint、core 5 tests/build、desktop 85 tests/build、Rust 36 tests、Cargo fmt check、12 Playwright 和 `git diff --check` 全部通过；Playwright 覆盖 TXT/EPUB/PDF、DPR 2、reduced motion、30 次快速输入和 axe serious/critical=0。
+- **打包：** `tauri build` 首次通过，生成 NSIS `Ebook Reader_0.1.0_x64-setup.exe` 和 MSI `Ebook Reader_0.1.0_x64_en-US.msi`；本阶段不发布。
+- **包体：** 书架入口 66.85 kB gzip；ReaderShell JS 29.79 kB、ReaderShell CSS 5.48 kB，继续异步；bookCovers 1.25 kB gzip 独立 chunk。
+- **Browser 限制：** IAB 受控页面不暴露 localStorage，无法直接注入三格式 fixture；Browser 完成视觉/交互检查，真实三格式状态由仓库 Playwright fixture 验证并留下 12/12 结果。
