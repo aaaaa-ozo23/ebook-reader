@@ -1650,3 +1650,4 @@
 - **打包：** `tauri build` 首次通过，生成 NSIS `Ebook Reader_0.1.0_x64-setup.exe` 和 MSI `Ebook Reader_0.1.0_x64_en-US.msi`；本阶段不发布。
 - **包体：** 书架入口 66.85 kB gzip；ReaderShell JS 29.79 kB、ReaderShell CSS 5.48 kB，继续异步；bookCovers 1.25 kB gzip 独立 chunk。
 - **Browser 限制：** IAB 受控页面不暴露 localStorage，无法直接注入三格式 fixture；Browser 完成视觉/交互检查，真实三格式状态由仓库 Playwright fixture 验证并留下 12/12 结果。
+- **合并与推送：** acceptance 以 `--no-ff` 合入 `codex/v0.2.0-integration`，集成分支再以 `--no-ff` 合入 `main`；随后集成分支快进到 `main` 合并提交。`main` 和 `codex/v0.2.0-integration` 均已推送到 origin；未执行 v0.2 发布或商店操作。
