@@ -8,6 +8,10 @@ import type {
 import type { Book as EpubBook, Location, NavItem, Rendition } from "epubjs";
 
 import {
+  registerEpubImageBridge,
+  type EpubImageActivateHandler,
+} from "./EpubImageBridge";
+import {
   findPublicationPageLabel,
   loadPublicationPageList,
   parseCachedPublicationPageList,
@@ -54,6 +58,7 @@ interface EpubReaderAdapterOptions {
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
   onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  onImageActivate?: EpubImageActivateHandler;
   onLocationsGenerated?: (serializedLocations: string) => void;
   onPublicationPageListGenerated?: (serializedPageList: string) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
@@ -130,6 +135,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  private readonly onImageActivate?: EpubImageActivateHandler;
   private readonly onLocationsGenerated?: (serializedLocations: string) => void;
   private readonly onPublicationPageListGenerated?: (
     serializedPageList: string,
@@ -167,6 +173,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
     this.onKeyDown = options.onKeyDown;
+    this.onImageActivate = options.onImageActivate;
     this.onLocationsGenerated = options.onLocationsGenerated;
     this.onPublicationPageListGenerated = options.onPublicationPageListGenerated;
     this.onSelected = options.onSelected;
@@ -543,11 +550,16 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     document.addEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
     document.addEventListener("keyup", handleKeyUp);
     document.addEventListener("keydown", handleKeyDown);
+    const cleanupImageBridge =
+      this.onImageActivate === undefined
+        ? null
+        : registerEpubImageBridge(document, this.onImageActivate);
     this.selectionCleanupCallbacks.push(() => {
       document.removeEventListener("selectionchange", notifyIfSelectionEmpty);
       document.removeEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
       document.removeEventListener("keyup", handleKeyUp);
       document.removeEventListener("keydown", handleKeyDown);
+      cleanupImageBridge?.();
     });
   }
 
@@ -1008,6 +1020,13 @@ export function buildEpubThemeRules(
     },
     "a, a:visited": {
       color: theme.mode === "dark" ? "#f3bc55" : "#2f5d62",
+    },
+    ".reader-epub-viewable-image": {
+      cursor: "zoom-in !important",
+    },
+    ".reader-epub-viewable-image:focus-visible": {
+      outline: "3px solid #f3bc55 !important",
+      "outline-offset": "3px !important",
     },
     "::selection": {
       background: "rgba(243, 188, 85, 0.32)",
