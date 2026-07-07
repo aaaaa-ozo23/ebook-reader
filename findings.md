@@ -388,3 +388,5 @@
 - 阶段 8 提交在当前 Node 26.1.0 / pnpm 11.1.2 / Vite 7.3.5 工具链隔离重建为 69.08 kB gzip，与文档旧观测 68.45–68.46 kB 有工具链差异；把仅在封面队列启动后需要的 `bookCovers` 改为动态导入后，当前书架入口降至 66.85 kB gzip，按绝对门槛也达标。
 - 侧栏、选择/批注浮层、主题面板、导航注册器和三格式内容层可通过直接导入拆开而不增加 barrel；稳定回调和现有 memo 边界保留，ReaderShell 主实现由约 5500 行降为约 1300 行。
 - Focus 快捷键回归测试暴露 `focusButtonRef` 实际挂在 Contents 按钮的旧缺陷；把 ref 移到 Focus 按钮并使用短延迟重试后，焦点恢复测试稳定通过。
+- Browser/IAB 的受控 `evaluate` 上下文不暴露 localStorage，不能在 Browser 标签页注入三格式书籍；因此 Browser 用于三档视口、四主题、焦点、面板、console 和 `view_image` 视觉检查，三格式真实 reader 数据态由项目 Playwright 生成 TXT/EPUB/PDF fixture 并执行 axe，12/12 通过。
+- 阶段 9 最终生产构建把书架入口压到 66.85 kB gzip；ReaderShell JS 29.79 kB、CSS 5.48 kB 均保持异步，封面生成器单独为 1.25 kB gzip chunk。
