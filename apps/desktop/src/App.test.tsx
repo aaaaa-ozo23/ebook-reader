@@ -90,18 +90,19 @@ const epubAdapterSearchMock = vi.hoisted(() =>
 );
 const epubAdapterPreviewProgressMock = vi.hoisted(() =>
   vi.fn((progression: number) => {
-    const page = Math.max(1, Math.round(progression * 100));
+    const location = Math.max(1, Math.round(progression * 100));
 
     return {
       locator: {
         kind: "epub" as const,
         href: progression >= 0.5 ? "OPS/chapter-two.xhtml" : "OPS/chapter-one.xhtml",
-        cfi: `epubcfi(/6/${page})`,
+        cfi: `epubcfi(/6/${location})`,
         progression,
       },
       progression,
-      page,
-      totalPages: 100,
+      location,
+      totalLocations: 100,
+      publicationPageLabel: progression >= 0.5 ? "xiv" : null,
       locationsReady: true as const,
     };
   }),
@@ -2224,12 +2225,12 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     const reader = await screen.findByRole("main", { name: "EPUB reader" });
     const slider = await screen.findByRole("slider", { name: "EPUB reading progress" });
-    const pageInput = await screen.findByRole("spinbutton", {
-      name: "EPUB page number",
+    const locationInput = await screen.findByRole("spinbutton", {
+      name: "EPUB location number",
     });
     expect(slider).toBeDisabled();
-    expect(pageInput).toBeDisabled();
-    expect(screen.getAllByText("Calculating pages").length).toBeGreaterThan(0);
+    expect(locationInput).toBeDisabled();
+    expect(screen.getAllByText("Calculating locations").length).toBeGreaterThan(0);
 
     const frame = reader.querySelector(".reader-epub-frame");
     const controls = reader.querySelector(".reader-epub-controls");
@@ -2252,23 +2253,23 @@ describe("App", () => {
           cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
           progression: 0.36,
         },
-        page: 36,
+        location: 36,
         progression: 0.36,
       }),
     );
 
     await waitFor(() => expect(slider).toBeEnabled());
-    await waitFor(() => expect(pageInput).toBeEnabled());
-    expect(screen.getAllByText("Page 36 / 100").length).toBeGreaterThan(0);
+    await waitFor(() => expect(locationInput).toBeEnabled());
+    expect(screen.getAllByText("Location 36 / 100").length).toBeGreaterThan(0);
     expect(screen.getByText("36%")).toBeVisible();
-    expect(pageInput).toHaveValue(36);
+    expect(locationInput).toHaveValue(36);
 
-    fireEvent.change(pageInput, {
+    fireEvent.change(locationInput, {
       target: {
         value: "42",
       },
     });
-    fireEvent.keyDown(pageInput, {
+    fireEvent.keyDown(locationInput, {
       key: "Enter",
     });
 
@@ -2311,7 +2312,7 @@ describe("App", () => {
           cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
           progression: 0.12,
         },
-        page: 12,
+        location: 12,
         progression: 0.12,
       }),
     );
@@ -2330,7 +2331,7 @@ describe("App", () => {
       "aria-current",
       "location",
     );
-    expect(screen.getAllByText("Page 62 / 100").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Page xiv").length).toBeGreaterThan(0);
     expect(screen.getByText("62%")).toBeVisible();
 
     fireEvent.pointerUp(slider);
@@ -2747,13 +2748,13 @@ describe("App", () => {
     adapterOptions?.onRelocated?.(
       createEpubPosition({
         locator: relocatedLocator,
-        page: 75,
-        totalPages: 100,
+        location: 75,
+        totalLocations: 100,
         progression: 0.75,
       }),
     );
     await waitFor(() =>
-      expect(screen.getAllByText("Page 75 / 100").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("Location 75 / 100").length).toBeGreaterThan(0),
     );
     expect(screen.getByText("75%")).toBeVisible();
 
@@ -2953,8 +2954,8 @@ function createEpubPosition(overrides: Partial<EpubPosition> = {}): EpubPosition
   return {
     locator,
     progression: locator.progression ?? null,
-    page: 10,
-    totalPages: 100,
+    location: 10,
+    totalLocations: 100,
     publicationPageLabel: null,
     displayedPage: 1,
     displayedTotal: 1,

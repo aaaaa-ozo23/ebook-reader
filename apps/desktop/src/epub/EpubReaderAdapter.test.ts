@@ -5,7 +5,7 @@ import {
   buildEpubThemeRules,
   EpubReaderAdapter,
   nextEpubLocationIndex,
-  progressionToEpubPage,
+  progressionToEpubLocation,
 } from "./EpubReaderAdapter";
 
 describe("buildEpubThemeRules", () => {
@@ -50,11 +50,11 @@ describe("buildEpubThemeRules", () => {
     });
   });
 
-  it("maps generated locations progress to synthetic EPUB pages", () => {
-    expect(progressionToEpubPage(0, 10)).toBe(1);
-    expect(progressionToEpubPage(0.5, 10)).toBe(6);
-    expect(progressionToEpubPage(1, 10)).toBe(10);
-    expect(progressionToEpubPage(2, 10)).toBe(10);
+  it("maps generated locations progress to EPUB locations", () => {
+    expect(progressionToEpubLocation(0, 10)).toBe(1);
+    expect(progressionToEpubLocation(0.5, 10)).toBe(6);
+    expect(progressionToEpubLocation(1, 10)).toBe(10);
+    expect(progressionToEpubLocation(2, 10)).toBe(10);
   });
 
   it("maps page navigation to generated location indexes", () => {
