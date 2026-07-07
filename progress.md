@@ -1671,3 +1671,14 @@
 - 新增 `EpubPageList` 模块，覆盖 EPUB3 navigation、EPUB2 NCX、相对 href、fragment、package CFI、spine/CFI 排序、当前位置标签查找和版本化缓存校验。
 - `EpubReaderAdapter` 异步生成或恢复 page-list，并在位置/拖动预览结果中返回 `publicationPageLabel`；`ReaderFormatContents` 并行读取 locations、page-list 和 TOC 缓存。
 - **验证：** 90 Vitest passed；desktop lint、build、root format passed。生产书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip，仍保持异步边界。
+
+### 10.2 页码与 Location UI
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-page-labels`
+- 将 EPUB 合成 `page/totalPages` 改名为 `location/totalLocations`，数字跳转统一为 Location；出版物 page-list 只负责 `Page <label>` 展示。
+- **过程问题：** 首轮定向验证在 adapter 的 `locationToPosition(location)` 中把新数值变量也命名为 `location`，导致 esbuild/TypeScript 重复标识符；已将参数改为 `renditionLocation`，保持模型命名清晰。
+- 首轮 generated EPUB Playwright 未找到 `Page i`：fixture 把首个 page-list 边界放在章节 `<h1>` fragment，而 epub.js 初始 CFI 位于该元素之前，按契约正确回退 Location。已将第一页改为 href-only section 起点，并保留第二页 fragment 覆盖。
+- `EpubPosition` / `EpubProgressPreview` 已使用 `location/totalLocations`，位置输入和 aria-label 改为 Location；状态/tooltip 优先使用出版物标签，缺失时回退 Location。
+- generated EPUB fixture 新增 page-list：href-only `i` 和 fragment `10`；Playwright 验证 `Page i`、Location 数字跳转、进度拖动、末位置和 single/double 原路径。
+- **验证：** 90 Vitest、desktop lint/build、root format passed；generated EPUB Chromium smoke 1/1 passed。书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip。
