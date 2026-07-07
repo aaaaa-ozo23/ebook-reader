@@ -1638,3 +1638,15 @@
 - **验证：** format、lint、core 5 tests、desktop 85 tests、desktop build、`git diff --check` 通过。
 - **过程问题：** 首轮关联测试暴露 Focus ref 旧缺陷并已修复。隔离重建阶段 8 时，临时 worktree 的 Windows junction 清理误删主 worktree `packages/core`；影响限定于已跟踪目录，立即从当前 HEAD 恢复并重应用单行 lint 修正，随后 core 5 tests 与全量门禁通过。该临时 worktree 已删除，后续不再使用 junction 复用依赖。
 - **工具链观测：** 同一当前工具链重建阶段 8 得到 69.08 kB gzip，说明旧文档 68.45–68.46 kB 受构建版本影响；最终实现仍以 66.85 kB 满足更严格的绝对值。
+
+### 9.7 阶段 9 验收
+
+- **状态：** complete
+- **分支：** `codex/stage9-acceptance`
+- 新增 `docs/design/v0.2/fidelity-ledger.md`，记录布局、色彩、排版、控件、动效/响应式五点对照、概念校正、page-curl 最终决策和包体数据。
+- **Browser/IAB：** 1280×800、640×640、375×760 通过；四主题存在，375px 采样按钮均为 44px，document 无横向溢出，mobile sheet 底边贴合 760px，Escape 后焦点恢复到 Open settings，console 无 warning/error。
+- **视觉对照：** 使用 `view_image` 对照四张批准概念与最终书架/设计系统截图；保留 charcoal/teal/amber/paper、开放 workspace、紧凑控件和移动 sheet，按校正表排除 MOBI/Auto/Scrolled/Fade/Letter spacing/设备 chrome。
+- **自动化：** frozen install、format、lint、core 5 tests/build、desktop 85 tests/build、Rust 36 tests、Cargo fmt check、12 Playwright 和 `git diff --check` 全部通过；Playwright 覆盖 TXT/EPUB/PDF、DPR 2、reduced motion、30 次快速输入和 axe serious/critical=0。
+- **打包：** `tauri build` 首次通过，生成 NSIS `Ebook Reader_0.1.0_x64-setup.exe` 和 MSI `Ebook Reader_0.1.0_x64_en-US.msi`；本阶段不发布。
+- **包体：** 书架入口 66.85 kB gzip；ReaderShell JS 29.79 kB、ReaderShell CSS 5.48 kB，继续异步；bookCovers 1.25 kB gzip 独立 chunk。
+- **Browser 限制：** IAB 受控页面不暴露 localStorage，无法直接注入三格式 fixture；Browser 完成视觉/交互检查，真实三格式状态由仓库 Playwright fixture 验证并留下 12/12 结果。

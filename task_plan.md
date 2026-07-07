@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 9：in_progress；已从最新 `main` 创建 `codex/v0.2.0-integration`，当前按 9.1–9.7 顺序实施。
+大阶段 9：complete；9.1–9.7 已按固定分支顺序实现并通过验收，等待合入 `main` 后同步集成分支。
 
 ## 分支策略
 
@@ -384,7 +384,7 @@
 | 9.4 设计 token 与基础组件 | complete | 78 Vitest、10 Playwright、lint/build/format 通过；Browser 1280×800/375×760 无溢出或 console issue |
 | 9.5 翻页控制器原型 | complete | 85 Vitest、12 Playwright、Browser slide/page-curl；30 输入单槽与 >50ms long-task gate 通过；page-flip no-go |
 | 9.6 ReaderShell 模块拆分 | complete | 85 Vitest、core 5 tests、lint/build/format 通过；书架入口 66.85 kB gzip，ReaderShell/CSS 保持异步 chunk |
-| 9.7 阶段 9 验收 | pending | — |
+| 9.7 阶段 9 验收 | complete | 5 core + 85 desktop + 36 Rust + 12 Playwright；Browser 三档、axe、Tauri NSIS/MSI build、包体和 fidelity ledger 通过 |
 
 ## 大阶段 10：EPUB 增强
 

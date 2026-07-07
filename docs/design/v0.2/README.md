@@ -121,3 +121,5 @@
 - 书架入口继续懒加载 ReaderShell；EPUB/PDF runtime 不进入首屏 chunk。
 - 每个视觉阶段同时检查 light/dark/sepia/green、focus-visible 和 reduced motion。
 - 最终使用 Browser/IAB 的 1280×800、640×640、375×760 截图与本目录概念图对照，并维护 fidelity ledger。
+
+阶段 9 最终五点对照、Browser/Playwright 证据、page-curl 决策和包体数据见 [`fidelity-ledger.md`](./fidelity-ledger.md)。
