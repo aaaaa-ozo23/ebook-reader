@@ -1626,3 +1626,15 @@
 - **验证：** 85 Vitest、12 Playwright、desktop lint/build、format 通过；1280×800 和 640×640 各 30 次同步 Next 最终为 2 commits，未记录可归因的 `>50ms` long task。
 - **过程问题：** 首轮 lint 发现 render 初始化控制器时闭包可能读取 ref；改为 effect 创建并由事件读取 ref。首轮类型检查修正 mock 返回值；首轮 E2E 在 fixture 动态加载完成前直接查询按钮导致 0 commits，增加按钮可见 gate 后通过。
 - **回归观测：** 首次全量 Vitest 的既有 Focus 快捷键用例出现一次 rAF 焦点时序波动；该用例定向重跑通过，随后全量 85 tests 重跑通过，未修改生产快捷键行为。
+
+### 9.6 ReaderShell 模块拆分
+
+- **状态：** complete
+- **分支：** `codex/stage9-reader-shell-modules`
+- 保留 `components/ReaderShell.tsx` 懒加载 facade 与公开 `ReaderShellProps`，实现迁至 `reader/ReaderShell.tsx`；ReaderShell CSS 只由异步实现导入。
+- 提取 `ReaderSidebar`、选择/批注浮层、主题面板、UI 状态类型、标注展示规则和稳定导航注册 hook；TXT/EPUB/PDF 内容层及其 adapter/helper 迁入独立 `ReaderFormatContents` 模块，继续使用直接导入和原 memo 边界。
+- 修正既有 Focus 焦点恢复 ref 错挂在 Contents 按钮的问题；关联快捷键测试定向通过，全量 desktop 85 tests 通过。
+- 将封面生成器改为队列首次运行时动态导入，避免 EPUB/PDF 封面运行时进入初始书架 chunk；当前生产书架入口为 66.85 kB gzip，低于 68.45 kB 绝对门槛，ReaderShell 为 29.79 kB gzip 并保持独立异步 chunk。
+- **验证：** format、lint、core 5 tests、desktop 85 tests、desktop build、`git diff --check` 通过。
+- **过程问题：** 首轮关联测试暴露 Focus ref 旧缺陷并已修复。隔离重建阶段 8 时，临时 worktree 的 Windows junction 清理误删主 worktree `packages/core`；影响限定于已跟踪目录，立即从当前 HEAD 恢复并重应用单行 lint 修正，随后 core 5 tests 与全量门禁通过。该临时 worktree 已删除，后续不再使用 junction 复用依赖。
+- **工具链观测：** 同一当前工具链重建阶段 8 得到 69.08 kB gzip，说明旧文档 68.45–68.46 kB 受构建版本影响；最终实现仍以 66.85 kB 满足更严格的绝对值。
