@@ -1691,3 +1691,20 @@
 - adapter 将桥接 cleanup 合并进既有 content document 清理队列；主题规则新增 zoom-in 光标和 amber 3px focus-visible，不增加全局 listener 或新资源 URL。
 - 单测覆盖 HTML/SVG、装饰性/空/损坏图片、修饰键点击、原属性恢复、listener 清理以及禁止 fetch/createObjectURL。
 - **验证：** 96 Vitest、desktop lint/build、root format passed。书架入口 66.85 kB gzip，ReaderShell 32.56 kB gzip，仍为异步 reader chunk。
+
+### 10.4 图片查看器
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-image-viewer`
+- 新增专用 `EpubImageViewer` 和缩放/平移模型，提供 Fit、100%、Zoom out/in、Reset、Close、百分比滑杆和帮助文字。
+- 查看器支持滚轮、触控板 pinch、双指缩放、指针捕获拖动、Space+拖动、键盘 `+/-/0/Escape` 和双击 Fit/100% 切换；背景阅读导航在查看器打开期间暂停。
+- `ReaderFormatContents` 接入图片激活回调并在关闭后恢复 iframe 图片焦点；触发元素失效时回退 EPUB host。
+- 共享 Modal 增加 header actions、描述、className/backdropClassName、closeLabel 和可关闭默认焦点恢复的选项；现有 Modal 语义保持不变。
+- EPUB 图片桥接补充跨 iframe realm 判断和 CSS 隐藏过滤；封面提取与 EPUB reader open 等待 `book.opened` 以规避资源替换竞态。
+- Playwright generated EPUB fixture 新增 SVG 图片，覆盖鼠标/键盘打开、缩放、拖动、Esc 焦点恢复、四主题、reduced motion 和 375×760 触控布局。
+- **定向验证：** `pnpm.cmd --filter @reader/desktop test -- EpubImageViewer.test.tsx EpubImageBridge.test.ts App.test.tsx` passed，101 tests；`pnpm.cmd --filter @reader/desktop lint` passed；`pnpm.cmd --filter @reader/desktop build` passed；`READER_VISUAL_QA=1 pnpm.cmd --filter @reader/desktop exec playwright test tests/smoke.spec.ts --project=chromium --grep "opens a generated EPUB"` passed。
+- **视觉证据：** 已用 `view_image` 检查 `D:\tl-temp\ebook-reader-stage10-image-viewer-desktop.png` 与 `D:\tl-temp\ebook-reader-stage10-image-viewer-mobile.png`；桌面工具栏、舞台、滑杆和关闭按钮完整，375×760 下 Close/Reset/500%/pan hint 均在 viewport 内。
+- **中期门禁：** `git diff --check` passed；`pnpm.cmd check` passed，包含 Prettier、lint、core build/test、desktop build/test，desktop 101 tests；`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check` passed；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` passed，36 tests；`pnpm.cmd --filter @reader/desktop test:e2e` passed，12 Playwright tests；`pnpm.cmd --filter @reader/desktop tauri:build` passed，生成 NSIS 和 MSI。
+- **Browser/IAB：** 已优先尝试 Browser/IAB，但工具端 `incrementalAriaSnapshot is not a function` 阻塞继续检查；本轮以项目 Playwright、生成截图和 `view_image` 完成三格式/三视口/视觉回归，并在最终交付中说明该工具限制。
+- **包体观测：** 书架入口保持 66.85 kB gzip；ReaderShell JS 因 EPUB page-list、图片桥接和图片查看器增至 36.44 kB gzip，继续作为异步 reader chunk，不进入书架入口。
+- **停止边界：** 10.4 完成后停止，不创建 10.5、不合并 `main`、不改版本、不发布。
