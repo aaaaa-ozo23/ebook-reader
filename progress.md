@@ -1789,3 +1789,18 @@
 - **状态：** complete
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 113）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；Browser/IAB 三视口 identity/DOM/console 通过；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
 - **包体：** 书架入口 67.10 kB gzip；ReaderShell JS 40.03 kB、CSS 7.76 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。
+
+## 2026-07-10 大阶段 10.x：翻页快照分页定位修复
+
+- **状态：** complete
+- **分支：** `codex/stage10-transition-snapshot-fix`
+- **基线：** `codex/v0.2.0-integration` 的 `3c14c9a`；保留用户未跟踪 `AGENTS.md`。
+- **问题复现：** 三种动画都重新序列化当前章节文档，但未带入 epub.js 分页容器产生的 live iframe 横向偏移，动画帧因此固定显示章节第一页。
+- **实现：** 快照记录 live iframe 相对 host 的矩形，使用固定 viewport iframe＋净化文档 `body` 布局偏移呈现真实分页；排除动画层、隐藏和舞台外 iframe。捕获遇到 epub.js 短暂 0×0 reflow 时最多等待 6 帧，超时则无动画导航。
+- **加载竞态：** snapshot `srcdoc` 增加内部就绪标记，忽略新 iframe 初始 `about:blank` 的 load，只在净化文档真正加载后设置 `body.left/top` 并标记 ready。
+- **合成修复：** 超宽负偏移、非零 iframe scroll、双 iframe transform 和过早冻结截图都可能触发 Chromium 黑面。最终 Smooth 以 current 宽度揭示＋target snapshot 内部正文位移形成接缝，Cover 以 current 匀速宽度揭示＋独立 edge 表达覆盖，Realistic 保持固定 target/current 宽度揭示；冻结后等待两帧再截图。
+- **自动化：** `PageTransitionLayer.test.ts` 11/11 passed，覆盖章节内 `-800px` / `-400px`、隐藏预加载 view 与 0×0 reflow 恢复；generated EPUB Playwright 覆盖 Smooth/Cover/Realistic 前进目标和 Realistic 后退目标，并验证实际 `body.left` 已应用。
+- **浏览器检查：** 应用内浏览器确认 `http://127.0.0.1:1420/` 标题、非空书架、无 framework overlay、console warning/error 为 0，Grid→List 交互 `aria-pressed=true`；精确 EPUB fixture 继续由仓库 Playwright 注入。
+- **视觉验收：** `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 九张均显示真实 Location 2 目标内容、无黑面；应用内浏览器页面 identity、非空、无 overlay、console clean 与 Grid→List 交互通过。
+- **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 117）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；视觉 Playwright 1/1 passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
+- **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 40.79 kB、CSS 7.79 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。

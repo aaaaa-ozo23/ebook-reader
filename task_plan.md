@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 10.x：complete；EPUB 四种翻页效果、设置面板、完整门禁与打包验收均完成；未改版本、未发布。
+大阶段 10.x 快照定位修复：complete；三种动画均展示真实上/下一分页，完整门禁与打包通过；未改版本、未发布。
 
 ## 分支策略
 
@@ -402,6 +402,7 @@
 | 10.6 EPUB 真实翻页 | `codex/stage10-epub-page-curl` | 按阶段 9 决策实现隔离展示层 page-curl，不接管实时 iframe/选择/标注 DOM | 选择、高亮、批注、键盘和图片查看器无回归；不可捕获资源自动无动画降级 |
 | 10.7 阶段 10 验收 | `codex/stage10-epub-acceptance` | 汇总 EPUB fixtures、性能、视觉、a11y、文档和完整回归 | core/lint/Vitest/Rust/Playwright/Browser/axe/Tauri build 通过；合入 main 并同步集成分支 |
 | 10.x 翻页动画视觉升级 | `codex/stage10-transition-polish` | 保留旧偏好值并提供 None/Realistic/Cover/Smooth；重做设置卡与 EPUB 隔离快照动画 | 四值归一、single/double、快速输入、reduced-motion、三视口/四主题、完整门禁通过 |
+| 10.x 快照分页定位修复 | `codex/stage10-transition-snapshot-fix` | 捕获 rendition iframe 的真实分页矩形与滚动位置，让 Smooth/Cover/Realistic 使用实际 current/target 页 | 前进目标偏移小于当前、后退目标偏移大于当前；定向 Vitest、generated EPUB Playwright 与完整门禁通过 |
 
 ### 阶段 10 实施状态
 
@@ -415,6 +416,7 @@
 | 10.6 EPUB 真实翻页 | complete | 500ms CSS 3D/WAAPI fold、背面/阴影/目标页揭示、浮层互斥和捕获/资源/WAAPI 失败无动画降级通过 |
 | 10.7 阶段 10 验收 | complete | fixtures、性能、视觉、a11y、包体和三格式回归通过；最终门禁通过，新增 stage 10 fidelity ledger |
 | 10.x 翻页动画视觉升级 | complete | None/Realistic/Cover/Smooth、旧偏好兼容、四卡设置、九张关键帧、core 6、desktop 113、Rust 36、Playwright 12/12 与 Tauri build 通过 |
+| 10.x 快照分页定位修复 | complete | 固定 viewport 快照＋文档布局偏移、0×0 reflow 等待与无动画降级；core 6、desktop 117、Rust 36、Playwright 12/12、九张关键帧和 Tauri build 通过 |
 
 ## 大阶段 11：TXT 分页
 

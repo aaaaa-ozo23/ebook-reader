@@ -470,3 +470,14 @@
 - 隔离动画层仍只使用净化 sandboxed current/target 快照；Realistic 最终避免第三 iframe 与 3D 合成，九个关键帧和完整 generated EPUB 流程均无黑面。
 - 设置面板四卡具备 radio/roving focus 语义、44px 触控目标、静态 reduced-motion 预览和四主题样式；375px 无横向溢出。
 - 最终包体为书架入口 67.10 kB gzip、ReaderShell 40.03 kB gzip、ReaderShell CSS 7.76 kB gzip，重动画代码继续位于异步 reader chunk。
+
+## 2026-07-10 大阶段 10.x：翻页快照分页定位修复
+
+- epub.js 的默认 paginated manager 会把整章排成横向多列，并通过外层 `.epub-container.scrollLeft` 改变 live iframe 相对阅读舞台的位置；iframe 自身宽度可以覆盖整章，而不只是一个 viewport。
+- 原实现仅将净化后的 `srcdoc` 放入新的 100% iframe。新 iframe 因失去 live iframe 的宽度和负向 `left` 偏移，会从文档第一列重新排版，所以 Smooth、Cover、Realistic 共同显示章节第一页。
+- 修复记录每个 live rendition iframe 相对 EPUB host 的 `left/top/width/height`，但 snapshot iframe 保持可视 viewport 大小；章节分页偏移改为净化文档 `body` 的只读布局偏移，避免对超宽或内部滚动 iframe 做 WAAPI 合成。
+- 关闭设置面板后 epub.js 会短暂把 live iframe 设为 0×0 再 reframe。捕获器最多等待 6 个 animation frame；仍无有效布局时返回 null，让 controller 无动画完成真实导航，绝不再用隐藏 iframe 伪造章节首列。
+- 新 snapshot iframe 的首个 `load` 可能属于初始 `about:blank`；净化文档现带内部就绪标记，只有标记后的真实 `srcdoc` load 才应用 `body` 偏移并启动动画，避免后退路径偶发清空定位。
+- 捕获时排除既有 `.reader-transition-layer` 内 iframe，也忽略隐藏/舞台外预加载 view；无布局的 jsdom 环境仍保留 grid 回退以验证净化行为。
+- generated EPUB 直接校验 snapshot `body.left` 与捕获分页偏移一致：三种模式前进时 target 位于 current 之后，Realistic 后退时 target 位于 current 之前，而不是只断言章节 DOM 存在。
+- 九张 25%/50%/75% 关键帧确认 Location 2 显示段落页、Location 1 保持标题/图片页；Smooth/Cover 使用固定 iframe、布局揭示和 snapshot 内部正文位移，Realistic 延续固定 target 与 current 宽度揭示，最终均无舞台外黑面。
