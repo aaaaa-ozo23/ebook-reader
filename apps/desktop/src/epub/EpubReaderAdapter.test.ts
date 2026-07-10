@@ -184,6 +184,37 @@ describe("EPUB rendition image lifecycle", () => {
     image.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
     expect(onImageActivate).toHaveBeenCalledTimes(1);
   });
+
+  it("gives rendered EPUB frames an accessible title", () => {
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-frame-title",
+      container: document.createElement("div"),
+      sourceUrl: "blob:epub-frame-title",
+      theme: defaultReaderTheme,
+    });
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument;
+    expect(frameDocument).not.toBeNull();
+    if (frameDocument === null) {
+      return;
+    }
+    frameDocument.title = "Chapter One";
+    const renditionHandlers = new Map<string, (...args: unknown[]) => void>();
+    const internals = adapter as unknown as {
+      registerRenditionEvents: (rendition: {
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+      }) => void;
+    };
+    internals.registerRenditionEvents({
+      on: (event, handler) => renditionHandlers.set(event, handler),
+    });
+
+    renditionHandlers.get("rendered")?.({}, { document: frameDocument, iframe: frame });
+
+    expect(frame).toHaveAttribute("title", "Chapter One content");
+    frame.remove();
+  });
 });
 
 describe("EPUB layout invalidation", () => {
