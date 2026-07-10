@@ -51,19 +51,13 @@ async function captureTransitionKeyframes(
   for (const fraction of [0.25, 0.5, 0.75]) {
     await page.evaluate(
       ({ currentTime }) => {
-        const layer = document.querySelector(".reader-transition-layer");
-        const animations = [
-          ...document.getAnimations().filter((animation) => {
-            const target = (animation.effect as KeyframeEffect | null)?.target;
-            return (
-              target instanceof Element &&
-              target.closest(".reader-transition-layer") === layer
-            );
-          }),
-          ...Array.from(
-            layer?.querySelectorAll<HTMLIFrameElement>("iframe") ?? [],
-          ).flatMap((frame) => frame.contentDocument?.getAnimations() ?? []),
-        ];
+        const animations = document.getAnimations().filter((animation) => {
+          const target = (animation.effect as KeyframeEffect | null)?.target;
+          return (
+            target instanceof Element &&
+            target.closest(".reader-transition-layer") !== null
+          );
+        });
 
         for (const animation of animations) {
           animation.pause();
@@ -84,21 +78,12 @@ async function captureTransitionKeyframes(
   }
 
   await page.evaluate(() => {
-    const layer = document.querySelector(".reader-transition-layer");
-    const animations = [
-      ...document.getAnimations().filter((animation) => {
-        const target = (animation.effect as KeyframeEffect | null)?.target;
-        return (
-          target instanceof Element &&
-          target.closest(".reader-transition-layer") === layer
-        );
-      }),
-      ...Array.from(layer?.querySelectorAll<HTMLIFrameElement>("iframe") ?? []).flatMap(
-        (frame) => frame.contentDocument?.getAnimations() ?? [],
-      ),
-    ];
-    for (const animation of animations) {
-      if (animation.playState !== "finished") {
+    for (const animation of document.getAnimations()) {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      if (
+        target instanceof Element &&
+        target.closest(".reader-transition-layer") !== null
+      ) {
         animation.play();
       }
     }

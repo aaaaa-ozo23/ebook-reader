@@ -480,4 +480,4 @@
 - 新 snapshot iframe 的首个 `load` 可能属于初始 `about:blank`；净化文档现带内部就绪标记，只有标记后的真实 `srcdoc` load 才应用 `body` 偏移并启动动画，避免后退路径偶发清空定位。
 - 捕获时排除既有 `.reader-transition-layer` 内 iframe，也忽略隐藏/舞台外预加载 view；无布局的 jsdom 环境仍保留 grid 回退以验证净化行为。
 - generated EPUB 直接校验 snapshot `body.left` 与捕获分页偏移一致：三种模式前进时 target 位于 current 之后，Realistic 后退时 target 位于 current 之前，而不是只断言章节 DOM 存在。
-- 九张 25%/50%/75% 关键帧确认 Location 2 显示段落页、Location 1 保持标题/图片页；Smooth/Cover 使用固定 iframe、布局揭示和 snapshot 内部正文位移，Realistic 延续固定 target 与 current 宽度揭示，最终均无舞台外黑面。
+- 九张 25%/50%/75% 关键帧确认 Location 2 显示段落页、Location 1 保持标题/图片页；Smooth/Cover 使用固定 iframe、布局揭示和 snapshot 内部正文位移，Realistic 延续固定 target 与 current 宽度揭示。正常播放与应用内浏览器无黑面；CDP 强制暂停后立即做 full-page capture 时，个别帧仍可能把阅读舞台外区域捕获成黑色，属于截图合成路径而非可见播放状态。
