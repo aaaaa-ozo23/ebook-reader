@@ -59,6 +59,7 @@ import {
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
 import {
   PageTransitionController,
+  resolvePageTransitionMode,
   type PageDirection,
 } from "./transitions/PageTransitionController";
 import {
@@ -542,6 +543,7 @@ export function TxtReaderContent({
 export interface EpubReaderContentProps {
   annotations: Annotation[];
   book: Book;
+  isPageCurlBlocked: boolean;
   jumpRequest: EpubJumpRequest | null;
   theme: ReaderTheme;
   transition: PageTransitionMode;
@@ -562,6 +564,7 @@ export interface EpubReaderContentProps {
 export function EpubReaderContent({
   annotations,
   book,
+  isPageCurlBlocked,
   jumpRequest,
   theme,
   transition,
@@ -590,6 +593,7 @@ export function EpubReaderContent({
   const progressIdleTimerRef = useRef<number | null>(null);
   const appliedEpubHighlightSignaturesRef = useRef<Map<string, string>>(new Map());
   const appliedEpubUnderlineSignaturesRef = useRef<Map<string, string>>(new Map());
+  const isPageCurlBlockedRef = useRef(isPageCurlBlocked);
   const themeRef = useRef(theme);
   const transitionModeRef = useRef(transition);
   const tocItemsRef = useRef(tocItems);
@@ -625,6 +629,10 @@ export function EpubReaderContent({
   useEffect(() => {
     transitionModeRef.current = transition;
   }, [transition]);
+
+  useEffect(() => {
+    isPageCurlBlockedRef.current = isPageCurlBlocked;
+  }, [isPageCurlBlocked]);
 
   useEffect(() => {
     isDraggingProgressRef.current = isDraggingProgress;
@@ -673,7 +681,10 @@ export function EpubReaderContent({
         await flushPendingProgress();
       },
       getMode: () =>
-        transitionModeRef.current === "page-curl" ? "slide" : transitionModeRef.current,
+        resolvePageTransitionMode(
+          transitionModeRef.current,
+          isPageCurlBlockedRef.current,
+        ),
       navigate: async (direction) => {
         const adapter = adapterRef.current;
 
@@ -1223,6 +1234,8 @@ export function EpubReaderContent({
   return (
     <section
       className="reader-viewport reader-viewport--epub"
+      data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
+      data-page-transition={transition}
       aria-label={`${book.title} content`}
     >
       <article className="reader-page reader-page--epub">
