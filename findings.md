@@ -439,3 +439,9 @@
 - theme、resize、spread、目录/Location/slider 跳转会取消活动视觉动画并清空 pending 方向；adapter 使用最后一个 CFI/href 重新 display，保持重排后的阅读锚点。
 - relocated 仍只更新一个 pending progress；controller commit 清除 750ms timer 并立即 flush，因而每次成功真实导航只保存一次。None/reduced-motion 直接导航，不捕获快照。
 - 保存的 `page-curl` 在本阶段只映射为运行时 Slide，偏好对象不写回；Theme 面板只显示 None/Slide。10.6 将启用真实 Page curl。
+
+### 10.6 真实翻页视觉检查
+
+- 首张 230ms 中间态截图暴露 Chromium 对 3D transformed snapshot iframe 的合成边界黑屏：阅读页本身仍显示，但 host 之外被黑色合成面覆盖。动画层已增加 strict paint containment、clip-path 与不透明阅读背景，frame 恢复 overflow hidden；需重新截图确认合成面被限制在 EPUB host。
+- 最终方案不再对 snapshot iframe 本身做 3D transform：iframe 只负责 current/target 只读内容并用 clip-path 揭示；独立的无交互 CSS sheet 承担 3D rotateY、背面和阴影。重拍确认 host 外黑屏完全消失，阅读 chrome、侧栏和进度控件保持稳定。
+- Page curl 固定 500ms；snapshot/资源准备、Web Animations 任一不可用时 controller 已完成真实导航并直接 commit，不留下动画层。图片查看器、选择菜单、note editor/popover 打开时仅 page-curl 解析为 none，Slide 语义不被改变。
