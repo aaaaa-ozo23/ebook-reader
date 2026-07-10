@@ -2,10 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   PageTransitionController,
+  resolvePageTransitionMode,
   type PageDirection,
 } from "./PageTransitionController";
 
 describe("PageTransitionController", () => {
+  it("disables only page-curl while a blocking reader surface is open", () => {
+    expect(resolvePageTransitionMode("page-curl", true)).toBe("none");
+    expect(resolvePageTransitionMode("page-curl", false)).toBe("page-curl");
+    expect(resolvePageTransitionMode("slide", true)).toBe("slide");
+    expect(resolvePageTransitionMode("none", true)).toBe("none");
+  });
   it("coalesces 30 rapid inputs into the active transaction and latest pending direction", async () => {
     const navigationGate = createDeferred<void>();
     const navigations: PageDirection[] = [];

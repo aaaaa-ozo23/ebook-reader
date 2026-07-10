@@ -67,6 +67,49 @@ describe("isolated page transition layer", () => {
     expect(host.querySelector(".reader-transition-layer")).toBeNull();
   });
 
+  it("renders a 500ms page curl with a back face, shadow, and target reveal", async () => {
+    let finishAnimation!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      finishAnimation = resolve;
+    });
+    const animate = vi.fn<typeof HTMLElement.prototype.animate>(
+      () => ({ cancel: vi.fn(), finished }) as unknown as Animation,
+    );
+    HTMLElement.prototype.animate = animate;
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    const running = animateIsolatedPageTransition(
+      host,
+      {
+        current: { node: document.createElement("article") },
+        direction: "next",
+        target: { node: document.createElement("article") },
+      },
+      "page-curl",
+    );
+
+    await vi.waitFor(() =>
+      expect(host.querySelector(".reader-transition-layer")).not.toBeNull(),
+    );
+    const layer = host.querySelector(".reader-transition-layer");
+    expect(layer).toHaveAttribute("aria-hidden", "true");
+    expect(layer).toHaveAttribute("data-mode", "page-curl");
+    expect(layer?.querySelector(".reader-transition-layer__back")).not.toBeNull();
+    expect(
+      layer?.querySelector(".reader-transition-layer__curl-shadow"),
+    ).not.toBeNull();
+    expect(animate).toHaveBeenCalledTimes(4);
+    expect(JSON.stringify(animate.mock.calls)).toContain("rotateY(-178deg)");
+    expect(animate.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ duration: 500 }),
+    );
+
+    finishAnimation();
+    await running;
+    expect(host.querySelector(".reader-transition-layer")).toBeNull();
+  });
+
   it("builds sandboxed EPUB snapshots and strips active document content", () => {
     const host = document.createElement("div");
     const liveFrame = document.createElement("iframe");

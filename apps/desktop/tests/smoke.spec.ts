@@ -648,6 +648,59 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await transitionSettings.getByRole("button", { name: "Slide" }).click();
   await page.getByRole("button", { name: "Theme" }).click();
 
+  await page.getByRole("button", { name: "Theme" }).click();
+  await transitionSettings.getByRole("button", { name: "Page curl" }).click();
+  await expect(
+    transitionSettings.getByRole("button", { name: "Page curl" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.locator(".reader-viewport--epub")).toHaveAttribute(
+    "data-page-transition",
+    "page-curl",
+  );
+  await expect(page.locator(".reader-viewport--epub")).toHaveAttribute(
+    "data-page-curl-blocked",
+    "false",
+  );
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.locator(".reader-transition-layer")).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __readerTransitionModes?: string[] })
+            .__readerTransitionModes ?? [],
+      ),
+    )
+    .toContain("page-curl");
+  if (process.env.READER_VISUAL_QA === "1") {
+    await expect(page.locator(".reader-transition-layer")).toBeVisible();
+    await page.waitForTimeout(80);
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-page-curl.png",
+    });
+  }
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+  await page.getByRole("button", { name: "Previous" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            (window as typeof window & { __readerTransitionModes?: string[] })
+              .__readerTransitionModes ?? []
+          ).filter((mode) => mode === "page-curl").length,
+      ),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+
   const imageFrame = page.frameLocator(".reader-epub-host iframe");
   const viewableImage = imageFrame.getByRole("button", {
     name: "Botanical test plate",
@@ -659,6 +712,23 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(
     page.getByRole("heading", { name: "Botanical test plate" }),
   ).toBeVisible();
+  const locationBeforeBlockedNavigation = await epubLocationInput.inputValue();
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(550);
+  await expect(epubLocationInput).toHaveValue(locationBeforeBlockedNavigation);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __readerTransitionModes?: string[] })
+          .__readerTransitionModes ?? [],
+    ),
+  ).toEqual([]);
   await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.getByText("125%")).toBeVisible();
   const imageStage = page.getByRole("region", {
