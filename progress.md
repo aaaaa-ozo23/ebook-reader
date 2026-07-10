@@ -1749,3 +1749,22 @@
 - **Browser/IAB：** 当前 Browser 运行路径恢复可用；本地 `http://127.0.0.1:1420/` title=`Ebook Reader`、首屏非空、无 framework overlay、console warn/error 为空，截图确认书架视觉正常。受控 Browser 无 seeded EPUB 数据，真实 page-curl 由仓库 Playwright fixture 验证。
 - **视觉对照：** `view_image` 对照批准阅读器概念与 `D:\tl-temp\ebook-reader-stage10-page-curl.png`；最终重拍无 host 外黑屏，保留现有 charcoal/teal/amber/paper chrome，动画仅覆盖阅读页舞台。
 - **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 39.26 kB gzip/CSS 6.88 kB gzip，继续保持异步边界；未新增依赖。
+- **合并与推送：** 实现 `cdb2126`、测试 `2f177c5`、文档 `db2ee8a` 已以 `--no-ff` 合回 `codex/v0.2.0-integration`（merge `42c4846`）并推送。
+
+### 10.7 阶段 10 验收
+
+- **状态：** in_progress
+- **分支：** `codex/stage10-epub-acceptance`
+- 从已同步的 10.6 集成基线创建；补齐无 page-list/完全损坏 page-list fixture、reduced-motion page-curl 真导航无动画路径，并让 axe 检查可访问的 EPUB iframe 内容。
+- **过程问题：** 启动检查命令把 Windows PowerShell 不支持的 `src\*.test.tsx` 路径 glob 传给 `rg`，导致组合命令 exit 1；分支创建和只读文件输出均已完成，未产生异常改动。后续只使用 `rg --files` 或目录级 glob。
+- **过程问题：** 移除 axe 的 EPUB iframe 排除后，默认 4.12 frame 聚合会调用 `browserContext.newPage` 并在 blob rendition 上等待至 30s 超时。按 axe 官方提供的受限环境 fallback 改用 `setLegacyMode()`，保留同源可访问 iframe 检查且避免创建聚合空白页；需以 targeted Playwright 复验结果为准。
+- **验收发现：** legacy axe 成功进入真实 EPUB 页面后报告 serious `frame-title`：epub.js 生成的 rendition iframe 没有 accessible name。adapter 的 `rendered` 生命周期现按章节文档 title 设置 `<iframe title="… content">`，无标题时回退 `EPUB publication content`，并补单测。
+- **过程问题：** frame-title 修复后的 targeted Playwright 在 reduced-motion 复位后的 page-curl 尚未销毁时就构造通用 iframe locator，命中实时 rendition + 两个 snapshot frame 而 strict-mode 失败。产品动画按预期仍在运行；测试在继续图片交互前显式等待 `.reader-transition-layer` 清理。
+- **axe 工具观测：** legacy mode 会向不允许脚本的 EPUB sandbox iframe 注入 axe，自身触发一条精确的 `about:srcdoc` blocked-script console error。验收 helper 仅在 axe 调用时间窗内移除这条已知工具诊断，其他 warning/error 继续作为产品失败；serious/critical 结果仍完整断言。
+- **过程问题：** 将 axe 移到交互末尾后，page-curl fixture 仍偶发无动画：None 模式 Previous 已更新 Location，但新的 rendition document 尚未进入可捕获状态。验收在启用 Page curl 前等待带 title 的实时 iframe 章节 heading 可见；产品仍按契约在快照未就绪时完成无动画真实导航。
+
+- **状态：** complete
+- 新增 `docs/design/v0.2/stage10-fidelity-ledger.md`，汇总 10.1–10.7 能力、fixture、视觉、a11y、降级、性能、包体与最终门禁。
+- **最终门禁：** `pnpm.cmd check` passed（core 5、desktop 110）；Cargo fmt check + Rust 36 tests passed；Playwright 12/12 passed；Browser/IAB 1280×800、640×640、375×760 与 console clean passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
+- **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 39.33 kB、CSS 6.88 kB，继续异步；bookCovers 1.25 kB gzip。
+- **边界：** 未新增依赖、schema、格式或版本；未执行发布。下一步仅按计划提交验收文档、合回集成分支、`--no-ff` 合入 `main` 并快进同步集成分支。

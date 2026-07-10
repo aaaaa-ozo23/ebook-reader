@@ -445,3 +445,10 @@
 - 首张 230ms 中间态截图暴露 Chromium 对 3D transformed snapshot iframe 的合成边界黑屏：阅读页本身仍显示，但 host 之外被黑色合成面覆盖。动画层已增加 strict paint containment、clip-path 与不透明阅读背景，frame 恢复 overflow hidden；需重新截图确认合成面被限制在 EPUB host。
 - 最终方案不再对 snapshot iframe 本身做 3D transform：iframe 只负责 current/target 只读内容并用 clip-path 揭示；独立的无交互 CSS sheet 承担 3D rotateY、背面和阴影。重拍确认 host 外黑屏完全消失，阅读 chrome、侧栏和进度控件保持稳定。
 - Page curl 固定 500ms；snapshot/资源准备、Web Animations 任一不可用时 controller 已完成真实导航并直接 commit，不留下动画层。图片查看器、选择菜单、note editor/popover 打开时仅 page-curl 解析为 none，Slide 语义不被改变。
+
+### 10.7 最终验收结论
+
+- 阶段 10 fixture 已覆盖 EPUB3、EPUB2 NCX、无 page-list、完全损坏 page-list/cache、href/fragment/package CFI、HTML/SVG 图片、长章节与双页；无需新增二进制 fixture 或网络资源。
+- axe 4.12 默认 frame aggregation 在 blob rendition 上不能创建聚合 page；legacy mode 可检查同源 EPUB iframe，但其脚本注入会被产品 sandbox 正确阻止并产生一条工具诊断。验收只在 axe 调用时间窗内过滤该精确诊断，其他 console 问题仍失败。
+- Browser/IAB viewport override 后必须 reload 才能得到正确截图比例；reload 后 1280/640/375 截图和 DOM 无横向溢出，console clean。seeded EPUB 仍由项目 Playwright fixture 提供，避免 Browser 本地状态注入限制。
+- 最终包体相较 10.4：书架入口只从 66.85 增至 67.09 kB gzip；所有 page-list、查看器和动画代码仍位于 39.33 kB gzip 的异步 ReaderShell chunk，未把 epub.js/PDF runtime 提前到书架。
