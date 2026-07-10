@@ -1369,7 +1369,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               : undefined
           }
           pageTransitionError={readerExperienceError}
-          pageTransitionModes={["none", "slide", "page-curl"]}
+          pageTransitionModes={["none", "page-curl", "cover", "slide"]}
           theme={theme}
           themeError={themeError}
           onPageTransitionChange={handleEpubTransitionChange}

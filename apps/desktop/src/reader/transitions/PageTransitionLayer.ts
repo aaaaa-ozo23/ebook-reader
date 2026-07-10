@@ -10,6 +10,14 @@ export interface PageSnapshot {
 
 const SNAPSHOT_LOAD_TIMEOUT_MS = 180;
 
+export const PAGE_TRANSITION_DURATIONS: Readonly<
+  Record<Exclude<PageTransitionMode, "none">, number>
+> = {
+  slide: 280,
+  cover: 320,
+  "page-curl": 650,
+};
+
 export function capturePageSnapshot(element: HTMLElement | null): PageSnapshot | null {
   if (element === null) {
     return null;
@@ -74,9 +82,17 @@ export async function animateIsolatedPageTransition(
   layer.dataset.mode = mode;
   const pageCurlDecorations =
     mode === "page-curl" ? createPageCurlDecorations(currentFrame) : null;
+  const coverEdge = mode === "cover" ? createCoverEdge() : null;
   layer.append(currentFrame, targetFrame);
+  if (coverEdge !== null) {
+    layer.append(coverEdge);
+  }
   if (pageCurlDecorations !== null) {
-    layer.append(pageCurlDecorations.sheet, pageCurlDecorations.shadow);
+    layer.append(
+      pageCurlDecorations.shade,
+      pageCurlDecorations.shadow,
+      pageCurlDecorations.sheet,
+    );
   }
   host.append(layer);
 
@@ -94,15 +110,15 @@ export async function animateIsolatedPageTransition(
       return;
     }
 
-    const animations =
-      mode === "slide"
-        ? createSlideAnimations(currentFrame, targetFrame, frames.direction)
-        : createPageCurlAnimations(
-            currentFrame,
-            targetFrame,
-            pageCurlDecorations as PageCurlDecorations,
-            frames.direction,
-          );
+    const animations = createTransitionAnimations(
+      mode,
+      currentFrame,
+      targetFrame,
+      pageCurlDecorations,
+      coverEdge,
+      frames.direction,
+      host.clientWidth,
+    );
     const handleAbort = () => {
       for (const animation of animations) {
         animation.cancel();
@@ -211,6 +227,7 @@ function createFrame(kind: "current" | "target", snapshot: HTMLElement): HTMLEle
 }
 
 interface PageCurlDecorations {
+  shade: HTMLElement;
   shadow: HTMLElement;
   sheet: HTMLElement;
 }
@@ -219,105 +236,213 @@ function createPageCurlDecorations(currentFrame: HTMLElement): PageCurlDecoratio
   const sheet = document.createElement("div");
   const front = document.createElement("div");
   const back = document.createElement("div");
+  const shade = document.createElement("div");
   const shadow = document.createElement("div");
   sheet.className = "reader-transition-layer__curl-sheet";
   front.className = "reader-transition-layer__curl-sheet-front";
   back.className = "reader-transition-layer__back";
+  shade.className = "reader-transition-layer__target-shade";
   sheet.setAttribute("aria-hidden", "true");
   front.setAttribute("aria-hidden", "true");
   back.setAttribute("aria-hidden", "true");
+  shade.setAttribute("aria-hidden", "true");
   shadow.className = "reader-transition-layer__curl-shadow";
   shadow.setAttribute("aria-hidden", "true");
   front.style.background = getComputedStyle(currentFrame).backgroundColor;
   sheet.append(front, back);
-  return { shadow, sheet };
+  return { shade, shadow, sheet };
 }
 
-function createSlideAnimations(
+function createTransitionAnimations(
+  mode: Exclude<PageTransitionMode, "none">,
+  currentFrame: HTMLElement,
+  targetFrame: HTMLElement,
+  pageCurlDecorations: PageCurlDecorations | null,
+  coverEdge: HTMLElement | null,
+  direction: PageDirection,
+  stageWidth: number,
+): Animation[] {
+  if (mode === "slide") {
+    return createSmoothAnimations(currentFrame, targetFrame, direction);
+  }
+
+  if (mode === "cover") {
+    return createCoverAnimations(
+      targetFrame,
+      coverEdge as HTMLElement,
+      direction,
+      stageWidth,
+    );
+  }
+
+  return createPageCurlAnimations(
+    currentFrame,
+    pageCurlDecorations as PageCurlDecorations,
+    direction,
+    stageWidth,
+  );
+}
+
+function createCoverEdge(): HTMLElement {
+  const edge = document.createElement("div");
+  edge.className = "reader-transition-layer__cover-edge";
+  edge.setAttribute("aria-hidden", "true");
+  return edge;
+}
+
+function createSmoothAnimations(
   currentFrame: HTMLElement,
   targetFrame: HTMLElement,
   direction: PageDirection,
 ): Animation[] {
   const sign = direction === "next" ? -1 : 1;
   const options: KeyframeAnimationOptions = {
-    duration: 220,
-    easing: "cubic-bezier(0.2, 0, 0, 1)",
+    duration: PAGE_TRANSITION_DURATIONS.slide,
+    easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
     fill: "both",
   };
 
   return [
     currentFrame.animate(
       [
-        { opacity: 1, transform: "translateX(0)" },
-        { opacity: 0.24, transform: `translateX(${sign * 9}%)` },
+        { transform: "translate3d(0, 0, 0)" },
+        { transform: `translate3d(${sign * 100}%, 0, 0)` },
       ],
       options,
     ),
     targetFrame.animate(
       [
-        { opacity: 0.24, transform: `translateX(${-sign * 9}%)` },
-        { opacity: 1, transform: "translateX(0)" },
+        {
+          boxShadow: `${sign * 18}px 0 28px rgba(18, 22, 24, 0.18)`,
+          transform: `translate3d(${-sign * 100}%, 0, 0)`,
+        },
+        {
+          boxShadow: "0 0 0 rgba(18, 22, 24, 0)",
+          transform: "translate3d(0, 0, 0)",
+        },
       ],
       options,
     ),
   ];
 }
 
+function createCoverAnimations(
+  targetFrame: HTMLElement,
+  edge: HTMLElement,
+  direction: PageDirection,
+  stageWidth: number,
+): Animation[] {
+  const width = Math.max(stageWidth, 1);
+  const edgeStart = direction === "next" ? width : 0;
+  const edgeEnd = direction === "next" ? 0 : width;
+  const options: KeyframeAnimationOptions = {
+    duration: PAGE_TRANSITION_DURATIONS.cover,
+    easing: "cubic-bezier(0.22, 0.68, 0.18, 1)",
+    fill: "both",
+  };
+  prepareAnchoredSnapshotFrame(
+    targetFrame,
+    direction === "next" ? "right" : "left",
+    width,
+  );
+
+  return [
+    targetFrame.animate(
+      [
+        { width: "0px" },
+        { offset: 0.82, width: `${width}px` },
+        { width: `${width}px` },
+      ],
+      options,
+    ),
+    edge.animate(
+      [
+        { opacity: 0, transform: `translate3d(${edgeStart}px, 0, 0)` },
+        {
+          opacity: 0.78,
+          offset: 0.08,
+          transform: `translate3d(${edgeStart}px, 0, 0)`,
+        },
+        {
+          opacity: 0.56,
+          offset: 0.82,
+          transform: `translate3d(${edgeEnd}px, 0, 0)`,
+        },
+        { opacity: 0, transform: `translate3d(${edgeEnd}px, 0, 0)` },
+      ],
+      options,
+    ),
+  ];
+}
+
+function prepareAnchoredSnapshotFrame(
+  frame: HTMLElement,
+  anchor: "left" | "right",
+  stageWidth: number,
+) {
+  const front = frame.querySelector<HTMLElement>(".reader-transition-layer__front");
+  frame.style.insetBlock = "0";
+  frame.style.width = `${stageWidth}px`;
+  frame.style.left = anchor === "left" ? "0" : "auto";
+  frame.style.right = anchor === "right" ? "0" : "auto";
+
+  if (front !== null) {
+    front.style.width = `${stageWidth}px`;
+    front.style.left = anchor === "left" ? "0" : "auto";
+    front.style.right = anchor === "right" ? "0" : "auto";
+  }
+}
+
 function createPageCurlAnimations(
   currentFrame: HTMLElement,
-  targetFrame: HTMLElement,
   decorations: PageCurlDecorations,
   direction: PageDirection,
+  stageWidth: number,
 ): Animation[] {
-  const { shadow, sheet } = decorations;
-  const rotation = direction === "next" ? -178 : 178;
+  const { shade, shadow, sheet } = decorations;
+  const width = Math.max(stageWidth, 1);
+  const currentAnchor = direction === "next" ? "left" : "right";
   const origin = direction === "next" ? "left center" : "right center";
   sheet.style.transformOrigin = origin;
   sheet.dataset.direction = direction;
+  prepareAnchoredSnapshotFrame(currentFrame, currentAnchor, width);
   const options: KeyframeAnimationOptions = {
-    duration: 500,
-    easing: "cubic-bezier(0.32, 0, 0.2, 1)",
+    duration: PAGE_TRANSITION_DURATIONS["page-curl"],
+    easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
     fill: "both",
   };
 
   return [
     currentFrame.animate(
       [
-        { clipPath: "inset(0 0 0 0)", filter: "brightness(1)" },
-        {
-          clipPath: direction === "next" ? "inset(0 28% 0 0)" : "inset(0 0 0 28%)",
-          filter: "brightness(0.88)",
-          offset: 0.34,
-        },
-        {
-          clipPath: direction === "next" ? "inset(0 76% 0 0)" : "inset(0 0 0 76%)",
-          filter: "brightness(0.68)",
-          offset: 0.72,
-        },
-        {
-          clipPath: direction === "next" ? "inset(0 100% 0 0)" : "inset(0 0 0 100%)",
-          filter: "brightness(0.92)",
-        },
+        { width: `${width}px` },
+        { offset: 0.28, width: `${Math.round(width * 0.86)}px` },
+        { offset: 0.62, width: `${Math.round(width * 0.5)}px` },
+        { offset: 0.86, width: `${Math.round(width * 0.12)}px` },
+        { width: "0px" },
       ],
       options,
     ),
-    targetFrame.animate(
-      [
-        { filter: "brightness(0.78)", opacity: 0.72, transform: "scale(0.992)" },
-        { filter: "brightness(0.92)", opacity: 0.9, offset: 0.62 },
-        { opacity: 1, transform: "scale(1)" },
-      ],
+    shade.animate(
+      [{ opacity: 0.24 }, { opacity: 0.16, offset: 0.56 }, { opacity: 0 }],
       options,
     ),
     sheet.animate(
       [
-        { transform: "translateX(0) rotateY(0deg)" },
+        { opacity: 0.18, transform: "translateX(0) scaleX(0.96) skewY(0deg)" },
         {
-          offset: 0.48,
-          transform: `translateX(${direction === "next" ? -48 : 48}%) rotateY(${rotation * 0.52}deg)`,
+          offset: 0.44,
+          opacity: 1,
+          transform: `translateX(${direction === "next" ? -38 : 38}%) scaleX(0.72) skewY(${direction === "next" ? -7 : 7}deg)`,
         },
         {
-          transform: `translateX(${direction === "next" ? -96 : 96}%) rotateY(${rotation}deg)`,
+          offset: 0.76,
+          opacity: 0.9,
+          transform: `translateX(${direction === "next" ? -78 : 78}%) scaleX(0.34) skewY(${direction === "next" ? 4 : -4}deg)`,
+        },
+        {
+          opacity: 0,
+          transform: `translateX(${direction === "next" ? -112 : 112}%) scaleX(0.08) skewY(0deg)`,
         },
       ],
       options,
@@ -326,13 +451,18 @@ function createPageCurlAnimations(
       [
         { opacity: 0, transform: "translateX(0)" },
         {
-          opacity: 0.5,
-          offset: 0.48,
-          transform: `translateX(${direction === "next" ? -7 : 7}%)`,
+          opacity: 0.26,
+          offset: 0.22,
+          transform: `translateX(${direction === "next" ? -4 : 4}%) skewX(${direction === "next" ? -6 : 6}deg)`,
+        },
+        {
+          opacity: 0.62,
+          offset: 0.56,
+          transform: `translateX(${direction === "next" ? -38 : 38}%) skewX(${direction === "next" ? -11 : 11}deg)`,
         },
         {
           opacity: 0,
-          transform: `translateX(${direction === "next" ? -18 : 18}%)`,
+          transform: `translateX(${direction === "next" ? -86 : 86}%) skewX(0deg)`,
         },
       ],
       options,

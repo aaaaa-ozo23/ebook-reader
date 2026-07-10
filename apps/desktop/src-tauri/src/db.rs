@@ -246,6 +246,7 @@ pub struct ReaderLayoutPreferences {
 pub enum PageTransitionMode {
     None,
     Slide,
+    Cover,
     PageCurl,
 }
 
@@ -1703,7 +1704,7 @@ fn default_reader_experience_preferences() -> ReaderExperiencePreferences {
     ReaderExperiencePreferences {
         epub: EpubExperiencePreferences {
             view_mode: EpubViewMode::Paginated,
-            transition: PageTransitionMode::Slide,
+            transition: PageTransitionMode::None,
         },
         txt: TxtExperiencePreferences {
             view_mode: TxtViewMode::Scroll,
@@ -1763,6 +1764,7 @@ fn read_page_transition(
     read_format_value(preferences, format, "transition").and_then(|value| match value {
         "none" => Some(PageTransitionMode::None),
         "slide" => Some(PageTransitionMode::Slide),
+        "cover" => Some(PageTransitionMode::Cover),
         "page-curl" => Some(PageTransitionMode::PageCurl),
         _ => None,
     })
@@ -3049,12 +3051,12 @@ mod tests {
         assert_eq!(defaults.epub.view_mode, EpubViewMode::Paginated);
         assert_eq!(defaults.txt.view_mode, TxtViewMode::Scroll);
         assert_eq!(defaults.pdf.view_mode, PdfViewMode::Single);
-        assert_eq!(defaults.epub.transition, PageTransitionMode::Slide);
+        assert_eq!(defaults.epub.transition, PageTransitionMode::None);
 
         let preferences = ReaderExperiencePreferences {
             epub: EpubExperiencePreferences {
                 view_mode: EpubViewMode::Paginated,
-                transition: PageTransitionMode::PageCurl,
+                transition: PageTransitionMode::Cover,
             },
             txt: TxtExperiencePreferences {
                 view_mode: TxtViewMode::Paginated,
@@ -3083,7 +3085,7 @@ mod tests {
         assert_eq!(saved, preferences);
         assert_eq!(restored, preferences);
         assert_eq!(stored["version"], 1);
-        assert_eq!(stored["preferences"]["epub"]["transition"], "page-curl");
+        assert_eq!(stored["preferences"]["epub"]["transition"], "cover");
     }
 
     #[test]
@@ -3115,7 +3117,7 @@ mod tests {
 
         let normalized = get_reader_experience_preferences_at(&database_path)
             .expect("normalize reader experience");
-        assert_eq!(normalized.epub.transition, PageTransitionMode::Slide);
+        assert_eq!(normalized.epub.transition, PageTransitionMode::None);
         assert_eq!(normalized.txt.view_mode, TxtViewMode::Paginated);
         assert_eq!(normalized.txt.transition, PageTransitionMode::PageCurl);
         assert_eq!(normalized.pdf.view_mode, PdfViewMode::Single);

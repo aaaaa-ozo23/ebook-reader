@@ -37,7 +37,9 @@
   --ds-z-modal: 40;
   --ds-motion-fast: 140ms;
   --ds-motion-ui: 220ms;
-  --ds-motion-page-curl: 500ms;
+  --ds-motion-page-smooth: 280ms;
+  --ds-motion-page-cover: 320ms;
+  --ds-motion-page-curl: 650ms;
   --ds-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ds-focus-width: 3px;
   --ds-focus-offset: 2px;
@@ -47,6 +49,8 @@
   :root {
     --ds-motion-fast: 0.01ms;
     --ds-motion-ui: 0.01ms;
+    --ds-motion-page-smooth: 0.01ms;
+    --ds-motion-page-cover: 0.01ms;
     --ds-motion-page-curl: 0.01ms;
   }
 }

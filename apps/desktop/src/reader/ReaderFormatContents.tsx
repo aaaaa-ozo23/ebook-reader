@@ -3,6 +3,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -626,11 +627,11 @@ export function EpubReaderContent({
     void adapterRef.current?.setTheme(theme);
   }, [theme]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     transitionModeRef.current = transition;
   }, [transition]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     isPageCurlBlockedRef.current = isPageCurlBlocked;
   }, [isPageCurlBlocked]);
 

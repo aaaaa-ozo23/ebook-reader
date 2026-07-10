@@ -68,24 +68,24 @@ describe("reader experience fallback", () => {
 
   it("returns defaults and persists a canonical v1 envelope", async () => {
     await expect(getReaderExperiencePreferences()).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "scroll", transition: "slide" },
       pdf: { viewMode: "single", transition: "slide" },
     });
 
     await expect(
       saveReaderExperiencePreferences({
-        epub: { viewMode: "paginated", transition: "page-curl" },
+        epub: { viewMode: "paginated", transition: "cover" },
         txt: { viewMode: "paginated", transition: "none" },
         pdf: { viewMode: "continuous", transition: "slide" },
       }),
     ).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "page-curl" },
+      epub: { viewMode: "paginated", transition: "cover" },
       txt: { viewMode: "paginated", transition: "none" },
       pdf: { viewMode: "continuous", transition: "slide" },
     });
     await expect(getReaderExperiencePreferences()).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "page-curl" },
+      epub: { viewMode: "paginated", transition: "cover" },
       txt: { viewMode: "paginated", transition: "none" },
       pdf: { viewMode: "continuous", transition: "slide" },
     });
@@ -106,7 +106,7 @@ describe("reader experience fallback", () => {
     );
 
     await expect(getReaderExperiencePreferences()).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "paginated", transition: "page-curl" },
       pdf: { viewMode: "single", transition: "none" },
     });
@@ -120,7 +120,7 @@ describe("reader experience fallback", () => {
     window.localStorage.setItem("reader:fallback:readerExperience", futureValue);
 
     await expect(getReaderExperiencePreferences()).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "scroll", transition: "slide" },
       pdf: { viewMode: "single", transition: "slide" },
     });
@@ -130,7 +130,7 @@ describe("reader experience fallback", () => {
 
     window.localStorage.setItem("reader:fallback:readerExperience", "not-json");
     await expect(getReaderExperiencePreferences()).resolves.toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "scroll", transition: "slide" },
       pdf: { viewMode: "single", transition: "slide" },
     });

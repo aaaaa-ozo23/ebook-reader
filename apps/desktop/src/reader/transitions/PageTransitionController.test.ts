@@ -10,6 +10,7 @@ describe("PageTransitionController", () => {
   it("disables only page-curl while a blocking reader surface is open", () => {
     expect(resolvePageTransitionMode("page-curl", true)).toBe("none");
     expect(resolvePageTransitionMode("page-curl", false)).toBe("page-curl");
+    expect(resolvePageTransitionMode("cover", true)).toBe("cover");
     expect(resolvePageTransitionMode("slide", true)).toBe("slide");
     expect(resolvePageTransitionMode("none", true)).toBe("none");
   });
@@ -50,7 +51,7 @@ describe("PageTransitionController", () => {
     const recoverableErrors: unknown[] = [];
     const commit = vi.fn();
     const animate = vi
-      .fn<(frames: unknown, mode: "slide" | "page-curl") => Promise<void>>()
+      .fn<(frames: unknown, mode: "slide" | "cover" | "page-curl") => Promise<void>>()
       .mockRejectedValueOnce(new Error("animation failed"));
     let captureAttempt = 0;
     const controller = new PageTransitionController<string>({
