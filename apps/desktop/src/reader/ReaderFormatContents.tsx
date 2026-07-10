@@ -65,7 +65,7 @@ import {
 } from "./transitions/PageTransitionController";
 import {
   animateIsolatedPageTransition,
-  captureEpubRenditionSnapshot,
+  captureEpubRenditionSnapshotAfterLayout,
   type PageSnapshot,
 } from "./transitions/PageTransitionLayer";
 
@@ -671,8 +671,8 @@ export function EpubReaderContent({
           ? Promise.resolve()
           : animateIsolatedPageTransition(host, frames, mode, signal);
       },
-      captureCurrent: () => captureEpubRenditionSnapshot(hostRef.current),
-      captureTarget: () => captureEpubRenditionSnapshot(hostRef.current),
+      captureCurrent: () => captureEpubRenditionSnapshotAfterLayout(hostRef.current),
+      captureTarget: () => captureEpubRenditionSnapshotAfterLayout(hostRef.current),
       commit: async () => {
         if (progressIdleTimerRef.current !== null) {
           window.clearTimeout(progressIdleTimerRef.current);

@@ -9,6 +9,7 @@ export interface PageSnapshot {
 }
 
 const SNAPSHOT_LOAD_TIMEOUT_MS = 180;
+const SNAPSHOT_LAYOUT_ATTEMPTS = 6;
 
 export const PAGE_TRANSITION_DURATIONS: Readonly<
   Record<Exclude<PageTransitionMode, "none">, number>
@@ -33,22 +34,40 @@ export function captureEpubRenditionSnapshot(
     return null;
   }
 
-  const sourceFrames = Array.from(element.querySelectorAll("iframe")).filter(
-    (frame) => frame.contentDocument?.documentElement !== undefined,
+  const candidateFrames = Array.from(element.querySelectorAll("iframe")).filter(
+    (frame) =>
+      frame.closest(".reader-transition-layer") === null &&
+      frame.contentDocument?.documentElement !== undefined,
   );
 
-  if (sourceFrames.length === 0) {
+  if (candidateFrames.length === 0) {
     return null;
   }
 
+  const hostRect = element.getBoundingClientRect();
+  const visibleFrames = candidateFrames.flatMap((frame) => {
+    const layout = captureSnapshotFrameLayout(frame, hostRect);
+    return layout !== null && intersectsSnapshotViewport(layout, hostRect)
+      ? [{ frame, layout }]
+      : [];
+  });
+  const usesPositionedLayout = visibleFrames.length > 0;
+  const hostHasLayout = hostRect.width > 0 && hostRect.height > 0;
+  if (hostHasLayout && !usesPositionedLayout) {
+    return null;
+  }
+  const sourceFrames = usesPositionedLayout
+    ? visibleFrames
+    : candidateFrames.map((frame) => ({ frame, layout: null }));
   const snapshot = document.createElement("div");
   snapshot.className = "reader-transition-snapshot";
+  snapshot.dataset.layout = usesPositionedLayout ? "positioned" : "grid";
   snapshot.style.setProperty(
     "--reader-transition-column-count",
     String(sourceFrames.length),
   );
 
-  for (const sourceFrame of sourceFrames) {
+  for (const { frame: sourceFrame, layout } of sourceFrames) {
     const sourceDocument = sourceFrame.contentDocument;
 
     if (sourceDocument === null) {
@@ -60,11 +79,138 @@ export function captureEpubRenditionSnapshot(
     snapshotFrame.setAttribute("aria-hidden", "true");
     snapshotFrame.setAttribute("sandbox", "allow-same-origin");
     snapshotFrame.setAttribute("tabindex", "-1");
+    snapshotFrame.dataset.readerSnapshotReady = "false";
+    const frameScroll = readFrameScroll(sourceFrame);
+    if (layout !== null) {
+      applySnapshotFrameLayout(snapshotFrame, layout, hostRect, frameScroll);
+    } else {
+      snapshotFrame.dataset.readerSnapshotScrollLeft = String(frameScroll.left);
+      snapshotFrame.dataset.readerSnapshotScrollTop = String(frameScroll.top);
+    }
+    const handleSnapshotLoad = () => {
+      if (!isSnapshotDocumentReady(snapshotFrame)) {
+        return;
+      }
+      restoreSnapshotFrameScroll(snapshotFrame);
+      snapshotFrame.dataset.readerSnapshotReady = "true";
+      snapshotFrame.removeEventListener("load", handleSnapshotLoad);
+    };
+    snapshotFrame.addEventListener("load", handleSnapshotLoad);
     snapshotFrame.srcdoc = serializeSanitizedDocument(sourceDocument);
     snapshot.append(snapshotFrame);
   }
 
   return snapshot.childElementCount === 0 ? null : { node: snapshot };
+}
+
+export async function captureEpubRenditionSnapshotAfterLayout(
+  element: HTMLElement | null,
+): Promise<PageSnapshot | null> {
+  if (element === null) {
+    return null;
+  }
+
+  for (let attempt = 0; attempt < SNAPSHOT_LAYOUT_ATTEMPTS; attempt += 1) {
+    const snapshot = captureEpubRenditionSnapshot(element);
+    if (snapshot !== null) {
+      return snapshot;
+    }
+
+    if (attempt < SNAPSHOT_LAYOUT_ATTEMPTS - 1) {
+      await new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => resolve());
+      });
+    }
+  }
+
+  return null;
+}
+
+interface SnapshotFrameLayout {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}
+
+function intersectsSnapshotViewport(
+  layout: SnapshotFrameLayout,
+  hostRect: DOMRect,
+): boolean {
+  return (
+    layout.left < hostRect.width &&
+    layout.left + layout.width > 0 &&
+    layout.top < hostRect.height &&
+    layout.top + layout.height > 0
+  );
+}
+
+function captureSnapshotFrameLayout(
+  frame: HTMLIFrameElement,
+  hostRect: DOMRect,
+): SnapshotFrameLayout | null {
+  const frameRect = frame.getBoundingClientRect();
+
+  if (
+    hostRect.width <= 0 ||
+    hostRect.height <= 0 ||
+    frameRect.width <= 0 ||
+    frameRect.height <= 0
+  ) {
+    return null;
+  }
+
+  return {
+    height: frameRect.height,
+    left: frameRect.left - hostRect.left,
+    top: frameRect.top - hostRect.top,
+    width: frameRect.width,
+  };
+}
+
+function applySnapshotFrameLayout(
+  frame: HTMLIFrameElement,
+  layout: SnapshotFrameLayout,
+  hostRect: DOMRect,
+  sourceScroll: { left: number; top: number },
+) {
+  const left = Math.max(0, layout.left);
+  const top = Math.max(0, layout.top);
+  const width = Math.max(
+    0,
+    Math.min(hostRect.width, layout.left + layout.width) - left,
+  );
+  const height = Math.max(
+    0,
+    Math.min(hostRect.height, layout.top + layout.height) - top,
+  );
+  frame.style.height = `${height}px`;
+  frame.style.left = `${left}px`;
+  frame.style.top = `${top}px`;
+  frame.style.width = `${width}px`;
+  frame.dataset.readerSnapshotScrollLeft = String(
+    sourceScroll.left + Math.max(0, -layout.left),
+  );
+  frame.dataset.readerSnapshotScrollTop = String(
+    sourceScroll.top + Math.max(0, -layout.top),
+  );
+}
+
+function readFrameScroll(frame: HTMLIFrameElement): { left: number; top: number } {
+  const sourceDocument = frame.contentDocument;
+  const sourceWindow = frame.contentWindow;
+  const left =
+    sourceWindow?.scrollX ??
+    sourceDocument?.documentElement.scrollLeft ??
+    sourceDocument?.body.scrollLeft ??
+    0;
+  const top =
+    sourceWindow?.scrollY ??
+    sourceDocument?.documentElement.scrollTop ??
+    sourceDocument?.body.scrollTop ??
+    0;
+
+  return { left, top };
 }
 
 export async function animateIsolatedPageTransition(
@@ -146,6 +292,7 @@ function isAbortSignalAborted(signal: AbortSignal | undefined): boolean {
 
 export function serializeSanitizedDocument(sourceDocument: Document): string {
   const documentElement = sourceDocument.documentElement.cloneNode(true) as HTMLElement;
+  documentElement.dataset.readerSnapshotDocument = "true";
   documentElement
     .querySelectorAll("script, form, iframe, frame, frameset, object, embed")
     .forEach((element) => element.remove());
@@ -188,7 +335,12 @@ async function waitForSnapshotFrames(
     frames.map(
       (frame) =>
         new Promise<boolean>((resolve) => {
-          if (frame.contentDocument?.readyState === "complete") {
+          if (
+            frame.dataset.readerSnapshotReady === "true" ||
+            isSnapshotDocumentReady(frame)
+          ) {
+            restoreSnapshotFrameScroll(frame);
+            frame.dataset.readerSnapshotReady = "true";
             resolve(true);
             return;
           }
@@ -201,10 +353,17 @@ async function waitForSnapshotFrames(
             signal?.removeEventListener("abort", handleAbort);
             resolve(isReady);
           };
-          const handleLoad = () => finish(true);
+          const handleLoad = () => {
+            if (!isSnapshotDocumentReady(frame)) {
+              return;
+            }
+            restoreSnapshotFrameScroll(frame);
+            frame.dataset.readerSnapshotReady = "true";
+            finish(true);
+          };
           const handleError = () => finish(false);
           const handleAbort = () => finish(false);
-          frame.addEventListener("load", handleLoad, { once: true });
+          frame.addEventListener("load", handleLoad);
           frame.addEventListener("error", handleError, { once: true });
           signal?.addEventListener("abort", handleAbort, { once: true });
           timeoutId = window.setTimeout(() => finish(false), SNAPSHOT_LOAD_TIMEOUT_MS);
@@ -213,6 +372,37 @@ async function waitForSnapshotFrames(
   );
 
   return frameResults.every(Boolean);
+}
+
+function isSnapshotDocumentReady(frame: HTMLIFrameElement): boolean {
+  return (
+    frame.contentDocument?.documentElement.dataset.readerSnapshotDocument === "true"
+  );
+}
+
+function restoreSnapshotFrameScroll(frame: HTMLIFrameElement) {
+  const left = Number(frame.dataset.readerSnapshotScrollLeft ?? 0);
+  const top = Number(frame.dataset.readerSnapshotScrollTop ?? 0);
+
+  if (!Number.isFinite(left) || !Number.isFinite(top)) {
+    return;
+  }
+
+  try {
+    if (frame.contentDocument !== null) {
+      const { body, documentElement } = frame.contentDocument;
+      body.style.position = "relative";
+      body.style.left = `${-left}px`;
+      body.style.top = `${-top}px`;
+      frame.contentWindow?.scrollTo(0, 0);
+      documentElement.scrollLeft = 0;
+      documentElement.scrollTop = 0;
+      body.scrollLeft = 0;
+      body.scrollTop = 0;
+    }
+  } catch {
+    // Snapshot scroll restoration is best effort; layout geometry remains primary.
+  }
 }
 
 function createFrame(kind: "current" | "target", snapshot: HTMLElement): HTMLElement {
@@ -263,12 +453,12 @@ function createTransitionAnimations(
   stageWidth: number,
 ): Animation[] {
   if (mode === "slide") {
-    return createSmoothAnimations(currentFrame, targetFrame, direction);
+    return createSmoothAnimations(currentFrame, targetFrame, direction, stageWidth);
   }
 
   if (mode === "cover") {
     return createCoverAnimations(
-      targetFrame,
+      currentFrame,
       coverEdge as HTMLElement,
       direction,
       stageWidth,
@@ -294,40 +484,71 @@ function createSmoothAnimations(
   currentFrame: HTMLElement,
   targetFrame: HTMLElement,
   direction: PageDirection,
+  stageWidth: number,
 ): Animation[] {
   const sign = direction === "next" ? -1 : 1;
+  const width = Math.max(stageWidth, 1);
   const options: KeyframeAnimationOptions = {
     duration: PAGE_TRANSITION_DURATIONS.slide,
     easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
     fill: "both",
   };
+  prepareAnchoredSnapshotFrame(
+    currentFrame,
+    direction === "next" ? "left" : "right",
+    width,
+  );
+  const targetBodyAnimations = Array.from(
+    targetFrame.querySelectorAll<HTMLIFrameElement>(
+      ".reader-transition-snapshot__frame",
+    ),
+  ).flatMap((frame) => {
+    const body = frame.contentDocument?.body;
+    if (body === undefined) {
+      return [];
+    }
+
+    const restingLeft = Number.parseFloat(body.style.left) || 0;
+    return [
+      body.animate(
+        [{ left: `${restingLeft - sign * width}px` }, { left: `${restingLeft}px` }],
+        options,
+      ),
+    ];
+  });
+  const targetAnimations =
+    targetBodyAnimations.length > 0
+      ? targetBodyAnimations
+      : [
+          targetFrame.animate(
+            [
+              { transform: `translate3d(${-sign * 100}%, 0, 0)` },
+              { transform: "translate3d(0, 0, 0)" },
+            ],
+            options,
+          ),
+        ];
 
   return [
     currentFrame.animate(
       [
-        { transform: "translate3d(0, 0, 0)" },
-        { transform: `translate3d(${sign * 100}%, 0, 0)` },
-      ],
-      options,
-    ),
-    targetFrame.animate(
-      [
         {
           boxShadow: `${sign * 18}px 0 28px rgba(18, 22, 24, 0.18)`,
-          transform: `translate3d(${-sign * 100}%, 0, 0)`,
+          width: `${width}px`,
         },
         {
           boxShadow: "0 0 0 rgba(18, 22, 24, 0)",
-          transform: "translate3d(0, 0, 0)",
+          width: "0px",
         },
       ],
       options,
     ),
+    ...targetAnimations,
   ];
 }
 
 function createCoverAnimations(
-  targetFrame: HTMLElement,
+  currentFrame: HTMLElement,
   edge: HTMLElement,
   direction: PageDirection,
   stageWidth: number,
@@ -341,20 +562,13 @@ function createCoverAnimations(
     fill: "both",
   };
   prepareAnchoredSnapshotFrame(
-    targetFrame,
-    direction === "next" ? "right" : "left",
+    currentFrame,
+    direction === "next" ? "left" : "right",
     width,
   );
 
   return [
-    targetFrame.animate(
-      [
-        { width: "0px" },
-        { offset: 0.82, width: `${width}px` },
-        { width: `${width}px` },
-      ],
-      options,
-    ),
+    currentFrame.animate([{ width: `${width}px` }, { width: "0px" }], options),
     edge.animate(
       [
         { opacity: 0, transform: `translate3d(${edgeStart}px, 0, 0)` },
@@ -365,7 +579,7 @@ function createCoverAnimations(
         },
         {
           opacity: 0.56,
-          offset: 0.82,
+          offset: 0.94,
           transform: `translate3d(${edgeEnd}px, 0, 0)`,
         },
         { opacity: 0, transform: `translate3d(${edgeEnd}px, 0, 0)` },
