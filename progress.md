@@ -1801,6 +1801,6 @@
 - **合成修复：** 超宽负偏移、非零 iframe scroll、双 iframe transform 和过早冻结截图都可能触发 Chromium 黑面。最终 Smooth 以 current 宽度揭示＋target snapshot 内部正文位移形成接缝，Cover 以 current 匀速宽度揭示＋独立 edge 表达覆盖，Realistic 保持固定 target/current 宽度揭示；冻结后等待两帧再截图。
 - **自动化：** `PageTransitionLayer.test.ts` 11/11 passed，覆盖章节内 `-800px` / `-400px`、隐藏预加载 view 与 0×0 reflow 恢复；generated EPUB Playwright 覆盖 Smooth/Cover/Realistic 前进目标和 Realistic 后退目标，并验证实际 `body.left` 已应用。
 - **浏览器检查：** 应用内浏览器确认 `http://127.0.0.1:1420/` 标题、非空书架、无 framework overlay、console warning/error 为 0，Grid→List 交互 `aria-pressed=true`；精确 EPUB fixture 继续由仓库 Playwright 注入。
-- **视觉验收：** `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 九张均显示真实 Location 2 目标内容、无黑面；应用内浏览器页面 identity、非空、无 overlay、console clean 与 Grid→List 交互通过。
+- **视觉验收：** `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 九张均显示真实 Location 2 目标内容；正常播放与应用内浏览器无黑面。CDP 强制暂停后的 full-page capture 偶发把舞台外区域记录为黑色，已等待两帧提交并记录为截图路径限制；应用内浏览器页面 identity、非空、无 overlay、console clean 与 Grid→List 交互通过。
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 117）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；视觉 Playwright 1/1 passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
 - **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 40.79 kB、CSS 7.79 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。
