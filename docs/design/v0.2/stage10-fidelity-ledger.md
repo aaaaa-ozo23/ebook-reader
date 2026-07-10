@@ -33,6 +33,7 @@
 - 图片查看器继续覆盖真实 EPUB 阅读器，不使用书架背景，不加入下载、分享、编辑、OCR 或图库。
 - Chromium 对移动、裁切或 3D 变换中的 snapshot iframe 会在部分边缘角度产生越界黑色合成面。最终 current/target iframe 只使用布局宽度或已验证的 Smooth 位移；Realistic 的纸背仅由无内容 CSS sheet 以二维压缩/斜切、线纹和阴影表达。九张 25%/50%/75% 关键帧均无黑屏。
 - `view_image` 已复核 `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 与桌面/移动 transition settings 截图；四卡保持 charcoal/teal/amber/paper 体系。
+- 快照分页定位修复保留 live rendition iframe 的舞台相对矩形，并在固定 viewport snapshot 内偏移净化文档正文：Smooth/Cover/Realistic 的内容由实际 current/target 分页决定，不再从章节首列重新排版。九张新关键帧均显示 Location 2 段落页且无黑面；只读净化和交互隔离不变。
 - Browser/IAB 在 1280×800 与 375×760 完成截图，640×640 完成 DOM/宽度/console；三档均 `scrollWidth <= clientWidth`、无 framework overlay、console warning/error 为空。640 截图的 CDP 捕获超时，由项目 Playwright 视觉证据补充。
 
 ## 无障碍与降级
