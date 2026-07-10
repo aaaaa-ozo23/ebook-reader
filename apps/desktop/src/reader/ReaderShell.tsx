@@ -131,6 +131,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
+  const [isFormatOverlayOpen, setIsFormatOverlayOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
   const [layoutPreferences, setLayoutPreferences] = useState<ReaderLayoutPreferences>(
@@ -180,6 +181,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isFormatOverlayOpen,
     noteEditor,
     notePopover,
     selectionSnapshot,
@@ -190,6 +192,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       isChromeHidden,
       isSidebarOpen,
       isThemePanelOpen,
+      isFormatOverlayOpen,
       noteEditor,
       notePopover,
       selectionSnapshot,
@@ -198,6 +201,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isFormatOverlayOpen,
     noteEditor,
     notePopover,
     selectionSnapshot,
@@ -736,6 +740,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     setNotePopover(null);
   }, []);
 
+  const handleBlockingOverlayChange = useCallback(
+    (isOpen: boolean) => {
+      setIsFormatOverlayOpen(isOpen);
+
+      if (isOpen) {
+        setIsThemePanelOpen(false);
+        handleClearSelectionUi();
+      }
+    },
+    [handleClearSelectionUi],
+  );
+
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -772,6 +788,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
       const shortcutState = shortcutStateRef.current;
       const normalizedKey = event.key.toLocaleLowerCase();
+
+      if (shortcutState.isFormatOverlayOpen) {
+        return;
+      }
 
       if ((event.ctrlKey || event.metaKey) && normalizedKey === "f") {
         event.preventDefault();
@@ -1255,6 +1275,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
+            onBlockingOverlayChange={handleBlockingOverlayChange}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onNavigationActionsChange={handleNavigationActionsChange}
