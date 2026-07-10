@@ -10,11 +10,14 @@ import {
   type Annotation,
   type Bookmark,
   defaultReaderLayoutPreferences,
+  defaultReaderExperiencePreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
   type Locator,
   type PdfLocator,
+  type PageTransitionMode,
+  type ReaderExperiencePreferences,
   type ReaderProgress,
   type ReaderLayoutPreferences,
   type ReaderTheme,
@@ -31,12 +34,14 @@ import {
   deleteAnnotation,
   deleteBookmark,
   getReaderLayoutPreferences,
+  getReaderExperiencePreferences,
   getReaderTheme,
   getReadingProgress,
   listAnnotations,
   listBookmarks,
   openTxtBook,
   saveReaderTheme,
+  saveReaderExperiencePreferences,
   saveReadingProgress,
   saveReaderLayoutPreferences,
   updateAnnotation,
@@ -131,8 +136,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
+  const [isFormatOverlayOpen, setIsFormatOverlayOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
+  const [readerExperiencePreferences, setReaderExperiencePreferences] =
+    useState<ReaderExperiencePreferences>(defaultReaderExperiencePreferences);
+  const [readerExperienceError, setReaderExperienceError] = useState<string | null>(
+    null,
+  );
   const [layoutPreferences, setLayoutPreferences] = useState<ReaderLayoutPreferences>(
     defaultReaderLayoutPreferences,
   );
@@ -180,6 +191,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isFormatOverlayOpen,
     noteEditor,
     notePopover,
     selectionSnapshot,
@@ -190,6 +202,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       isChromeHidden,
       isSidebarOpen,
       isThemePanelOpen,
+      isFormatOverlayOpen,
       noteEditor,
       notePopover,
       selectionSnapshot,
@@ -198,6 +211,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isFormatOverlayOpen,
     noteEditor,
     notePopover,
     selectionSnapshot,
@@ -221,6 +235,27 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     }
 
     void loadTheme();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [book.id]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    void getReaderExperiencePreferences()
+      .then((savedPreferences) => {
+        if (isCurrent) {
+          setReaderExperiencePreferences(savedPreferences);
+          setReaderExperienceError(null);
+        }
+      })
+      .catch((experienceLoadError: unknown) => {
+        if (isCurrent) {
+          setReaderExperienceError(getErrorMessage(experienceLoadError));
+        }
+      });
 
     return () => {
       isCurrent = false;
@@ -438,6 +473,26 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       setThemeError(getErrorMessage(saveError));
     });
   }, []);
+
+  const handleEpubTransitionChange = useCallback(
+    (transition: PageTransitionMode) => {
+      const nextPreferences: ReaderExperiencePreferences = {
+        ...readerExperiencePreferences,
+        epub: {
+          ...readerExperiencePreferences.epub,
+          transition,
+        },
+      };
+      setReaderExperiencePreferences(nextPreferences);
+      setReaderExperienceError(null);
+      void saveReaderExperiencePreferences(nextPreferences).catch(
+        (experienceSaveError: unknown) => {
+          setReaderExperienceError(getErrorMessage(experienceSaveError));
+        },
+      );
+    },
+    [readerExperiencePreferences],
+  );
 
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {
     const nextPreferences = {
@@ -736,6 +791,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     setNotePopover(null);
   }, []);
 
+  const handleBlockingOverlayChange = useCallback(
+    (isOpen: boolean) => {
+      setIsFormatOverlayOpen(isOpen);
+
+      if (isOpen) {
+        setIsThemePanelOpen(false);
+        handleClearSelectionUi();
+      }
+    },
+    [handleClearSelectionUi],
+  );
+
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -772,6 +839,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
       const shortcutState = shortcutStateRef.current;
       const normalizedKey = event.key.toLocaleLowerCase();
+
+      if (shortcutState.isFormatOverlayOpen) {
+        return;
+      }
 
       if ((event.ctrlKey || event.metaKey) && normalizedKey === "f") {
         event.preventDefault();
@@ -1250,11 +1321,19 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
+            isPageCurlBlocked={
+              isFormatOverlayOpen ||
+              selectionSnapshot !== null ||
+              noteEditor !== null ||
+              notePopover !== null
+            }
             jumpRequest={epubJumpRequest}
             theme={theme}
+            transition={readerExperiencePreferences.epub.transition}
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
+            onBlockingOverlayChange={handleBlockingOverlayChange}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onNavigationActionsChange={handleNavigationActionsChange}
@@ -1284,8 +1363,16 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         ) : null}
         <ReaderThemePanel
           isOpen={isThemePanelOpen}
+          pageTransition={
+            book.format === "epub"
+              ? readerExperiencePreferences.epub.transition
+              : undefined
+          }
+          pageTransitionError={readerExperienceError}
+          pageTransitionModes={["none", "slide", "page-curl"]}
           theme={theme}
           themeError={themeError}
+          onPageTransitionChange={handleEpubTransitionChange}
           onThemeChange={handleThemeChange}
         />
         <SelectionMenu

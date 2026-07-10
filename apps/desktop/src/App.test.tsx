@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import {
   type Annotation,
+  defaultReaderExperiencePreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
@@ -36,6 +37,7 @@ import {
   getEpubBookSource,
   getPdfBookSource,
   getReaderCache,
+  getReaderExperiencePreferences,
   getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
@@ -43,6 +45,7 @@ import {
   listBookmarks,
   openTxtBook,
   saveReaderTheme,
+  saveReaderExperiencePreferences,
   saveReaderCache,
   saveReadingProgress,
   saveReaderLayoutPreferences,
@@ -90,18 +93,19 @@ const epubAdapterSearchMock = vi.hoisted(() =>
 );
 const epubAdapterPreviewProgressMock = vi.hoisted(() =>
   vi.fn((progression: number) => {
-    const page = Math.max(1, Math.round(progression * 100));
+    const location = Math.max(1, Math.round(progression * 100));
 
     return {
       locator: {
         kind: "epub" as const,
         href: progression >= 0.5 ? "OPS/chapter-two.xhtml" : "OPS/chapter-one.xhtml",
-        cfi: `epubcfi(/6/${page})`,
+        cfi: `epubcfi(/6/${location})`,
         progression,
       },
       progression,
-      page,
-      totalPages: 100,
+      location,
+      totalLocations: 100,
+      publicationPageLabel: progression >= 0.5 ? "xiv" : null,
       locationsReady: true as const,
     };
   }),
@@ -263,6 +267,7 @@ vi.mock("./tauri/reader", () => ({
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
   getReaderCache: vi.fn(),
+  getReaderExperiencePreferences: vi.fn(),
   getReaderLayoutPreferences: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
@@ -270,6 +275,7 @@ vi.mock("./tauri/reader", () => ({
   listBookmarks: listBookmarksMock,
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
+  saveReaderExperiencePreferences: vi.fn(),
   saveReaderCache: vi.fn(),
   saveReadingProgress: vi.fn(),
   saveReaderLayoutPreferences: vi.fn(),
@@ -420,6 +426,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
 const getReaderCacheMock = vi.mocked(getReaderCache);
+const getReaderExperiencePreferencesMock = vi.mocked(getReaderExperiencePreferences);
 const getReaderLayoutPreferencesMock = vi.mocked(getReaderLayoutPreferences);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
@@ -438,6 +445,7 @@ const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
+const saveReaderExperiencePreferencesMock = vi.mocked(saveReaderExperiencePreferences);
 const saveReaderCacheMock = vi.mocked(saveReaderCache);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 const saveReaderLayoutPreferencesMock = vi.mocked(saveReaderLayoutPreferences);
@@ -507,6 +515,9 @@ describe("App", () => {
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
     getReaderCacheMock.mockResolvedValue(null);
+    getReaderExperiencePreferencesMock.mockResolvedValue(
+      defaultReaderExperiencePreferences,
+    );
     getReaderLayoutPreferencesMock.mockResolvedValue({ sidebarWidth: 292 });
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
@@ -552,6 +563,9 @@ describe("App", () => {
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
+    saveReaderExperiencePreferencesMock.mockImplementation(
+      async (preferences) => preferences,
+    );
     saveReaderCacheMock.mockResolvedValue(undefined);
     saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
       bookId,
@@ -1134,7 +1148,46 @@ describe("App", () => {
     adapterOptions.onKeyDown?.(nextEvent);
 
     expect(nextEvent.defaultPrevented).toBe(true);
-    expect(epubAdapterNextMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(epubAdapterNextMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("loads and saves EPUB page transition preferences", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "transition-settings-epub",
+      title: "Transition Settings EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+
+    const transitionGroup = screen.getByRole("group", {
+      name: "EPUB page transition",
+    });
+    expect(
+      within(transitionGroup).getByRole("button", { name: "Slide" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(transitionGroup).getByRole("button", { name: "None" }));
+
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        epub: expect.objectContaining({ transition: "none" }),
+      }),
+    );
+
+    await user.click(
+      within(transitionGroup).getByRole("button", { name: "Page curl" }),
+    );
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        epub: expect.objectContaining({ transition: "page-curl" }),
+      }),
+    );
   });
 
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
@@ -2224,12 +2277,12 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     const reader = await screen.findByRole("main", { name: "EPUB reader" });
     const slider = await screen.findByRole("slider", { name: "EPUB reading progress" });
-    const pageInput = await screen.findByRole("spinbutton", {
-      name: "EPUB page number",
+    const locationInput = await screen.findByRole("spinbutton", {
+      name: "EPUB location number",
     });
     expect(slider).toBeDisabled();
-    expect(pageInput).toBeDisabled();
-    expect(screen.getAllByText("Calculating pages").length).toBeGreaterThan(0);
+    expect(locationInput).toBeDisabled();
+    expect(screen.getAllByText("Calculating locations").length).toBeGreaterThan(0);
 
     const frame = reader.querySelector(".reader-epub-frame");
     const controls = reader.querySelector(".reader-epub-controls");
@@ -2252,23 +2305,23 @@ describe("App", () => {
           cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
           progression: 0.36,
         },
-        page: 36,
+        location: 36,
         progression: 0.36,
       }),
     );
 
     await waitFor(() => expect(slider).toBeEnabled());
-    await waitFor(() => expect(pageInput).toBeEnabled());
-    expect(screen.getAllByText("Page 36 / 100").length).toBeGreaterThan(0);
+    await waitFor(() => expect(locationInput).toBeEnabled());
+    expect(screen.getAllByText("Location 36 / 100").length).toBeGreaterThan(0);
     expect(screen.getByText("36%")).toBeVisible();
-    expect(pageInput).toHaveValue(36);
+    expect(locationInput).toHaveValue(36);
 
-    fireEvent.change(pageInput, {
+    fireEvent.change(locationInput, {
       target: {
         value: "42",
       },
     });
-    fireEvent.keyDown(pageInput, {
+    fireEvent.keyDown(locationInput, {
       key: "Enter",
     });
 
@@ -2311,7 +2364,7 @@ describe("App", () => {
           cfi: "epubcfi(/6/2[chapter-one]!/4/1:12)",
           progression: 0.12,
         },
-        page: 12,
+        location: 12,
         progression: 0.12,
       }),
     );
@@ -2330,7 +2383,7 @@ describe("App", () => {
       "aria-current",
       "location",
     );
-    expect(screen.getAllByText("Page 62 / 100").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Page xiv").length).toBeGreaterThan(0);
     expect(screen.getByText("62%")).toBeVisible();
 
     fireEvent.pointerUp(slider);
@@ -2368,6 +2421,60 @@ describe("App", () => {
       "aria-pressed",
       "true",
     );
+  });
+
+  it("opens EPUB images in a modal viewer and restores iframe focus", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-image-viewer",
+      title: "Illustrated EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { name: "Illustrated EPUB" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onImageActivate?: (resource: {
+            sourceUrl: string;
+            accessibleName: string;
+            description?: string;
+            naturalWidth?: number;
+            naturalHeight?: number;
+            trigger: Element;
+          }) => void;
+        }
+      | undefined;
+    const trigger = document.createElement("img");
+    trigger.tabIndex = 0;
+    reader.querySelector(".reader-epub-host")?.append(trigger);
+    trigger.focus();
+
+    adapterOptions?.onImageActivate?.({
+      sourceUrl: "blob:botanical-plate",
+      accessibleName: "Dog rose plate",
+      description: "Botanical illustration",
+      naturalWidth: 1200,
+      naturalHeight: 800,
+      trigger,
+    });
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Dog rose plate" })).toBeVisible();
+    await user.keyboard("{ArrowRight}");
+    expect(epubAdapterNextMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.getByText("125%")).toBeVisible();
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("opens a PDF book in the reader shell", async () => {
@@ -2747,13 +2854,13 @@ describe("App", () => {
     adapterOptions?.onRelocated?.(
       createEpubPosition({
         locator: relocatedLocator,
-        page: 75,
-        totalPages: 100,
+        location: 75,
+        totalLocations: 100,
         progression: 0.75,
       }),
     );
     await waitFor(() =>
-      expect(screen.getAllByText("Page 75 / 100").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("Location 75 / 100").length).toBeGreaterThan(0),
     );
     expect(screen.getByText("75%")).toBeVisible();
 
@@ -2953,8 +3060,9 @@ function createEpubPosition(overrides: Partial<EpubPosition> = {}): EpubPosition
   return {
     locator,
     progression: locator.progression ?? null,
-    page: 10,
-    totalPages: 100,
+    location: 10,
+    totalLocations: 100,
+    publicationPageLabel: null,
     displayedPage: 1,
     displayedTotal: 1,
     locationsReady: true,

@@ -16,34 +16,49 @@ function collectConsoleIssues(page: Page): string[] {
   return issues;
 }
 
-async function readEpubPageState(
+async function readEpubLocationState(
   page: Page,
-): Promise<{ currentPage: number; totalPages: number }> {
-  const pageText = await page
-    .getByText(/Page \d+ \/ \d+/)
-    .first()
-    .textContent();
-  const match = pageText?.match(/Page\s+(\d+)\s+\/\s+(\d+)/);
+): Promise<{ currentLocation: number; totalLocations: number }> {
+  const input = page.getByRole("spinbutton", { name: "EPUB location number" });
+  const currentLocation = Number(await input.inputValue());
+  const fieldText = await input.locator("xpath=..").textContent();
+  const match = fieldText?.match(/\/\s+(\d+)/);
 
-  if (match === undefined || match === null) {
-    throw new Error(`Unable to read EPUB page state from: ${pageText ?? ""}`);
+  if (!Number.isFinite(currentLocation) || match === undefined || match === null) {
+    throw new Error(`Unable to read EPUB location state from: ${fieldText ?? ""}`);
   }
 
   return {
-    currentPage: Number(match[1]),
-    totalPages: Number(match[2]),
+    currentLocation,
+    totalLocations: Number(match[1]),
   };
 }
 
-async function expectNoSeriousAccessibilityViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page })
-    .exclude(".reader-epub-host iframe")
-    .analyze();
+async function expectNoSeriousAccessibilityViolations(
+  page: Page,
+  consoleIssues?: string[],
+): Promise<void> {
+  const issueCountBeforeAxe = consoleIssues?.length ?? 0;
+  const results = await new AxeBuilder({ page }).setLegacyMode().analyze();
   const violations = results.violations.filter(
     (violation) => violation.impact === "serious" || violation.impact === "critical",
   );
 
   expect(violations).toEqual([]);
+
+  if (consoleIssues !== undefined) {
+    const axeDiagnostics = consoleIssues
+      .slice(issueCountBeforeAxe)
+      .filter((issue) =>
+        issue.includes(
+          "Blocked script execution in 'about:srcdoc' because the document's frame is sandboxed",
+        ),
+      );
+
+    for (const diagnostic of axeDiagnostics) {
+      consoleIssues.splice(consoleIssues.indexOf(diagnostic), 1);
+    }
+  }
 }
 
 test("renders the bookshelf-first desktop UI", async ({ page }) => {
@@ -404,6 +419,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="chapter-one" href="chapter-one.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter-two" href="chapter-two.xhtml" media-type="application/xhtml+xml"/>
+    <item id="plate" href="plate.svg" media-type="image/svg+xml"/>
   </manifest>
   <spine>
     <itemref idref="chapter-one"/>
@@ -423,6 +439,12 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
         <li><a href="chapter-two.xhtml">Chapter Two</a></li>
       </ol>
     </nav>
+    <nav epub:type="page-list" id="pages">
+      <ol>
+        <li><a href="chapter-one.xhtml">i</a></li>
+        <li><a href="chapter-two.xhtml#page-10">10</a></li>
+      </ol>
+    </nav>
   </body>
 </html>`,
       },
@@ -432,10 +454,35 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter One</title></head>
   <body>
-    <h1>Chapter One</h1>
+    <h1 id="page-i">Chapter One</h1>
+    <figure>
+      <img src="plate.svg" alt="Botanical test plate" title="Generated illustration" style="display:block;width:360px;max-width:90%;margin:1rem auto" />
+      <figcaption>Botanical illustration fixture</figcaption>
+    </figure>
     ${chapterOneParagraphs}
   </body>
 </html>`,
+      },
+      {
+        name: "OPS/plate.svg",
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#f7f1e3"/>
+  <path d="M410 520C390 400 420 260 510 90" fill="none" stroke="#405a38" stroke-width="18"/>
+  <g fill="#d98f9a" stroke="#8d5962" stroke-width="5">
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(-18 510 150)"/>
+    <ellipse cx="515" cy="150" rx="95" ry="52" transform="rotate(54 515 150)"/>
+    <ellipse cx="515" cy="150" rx="95" ry="52" transform="rotate(126 515 150)"/>
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(198 510 150)"/>
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(270 510 150)"/>
+  </g>
+  <circle cx="510" cy="150" r="38" fill="#d8b256"/>
+  <g fill="#66805b" stroke="#405a38" stroke-width="4">
+    <ellipse cx="365" cy="350" rx="105" ry="42" transform="rotate(24 365 350)"/>
+    <ellipse cx="510" cy="305" rx="110" ry="44" transform="rotate(-28 510 305)"/>
+  </g>
+  <text x="36" y="554" font-family="Georgia, serif" font-size="30" fill="#463e32">Plate IV — Rosa canina</text>
+</svg>`,
       },
       {
         name: "OPS/chapter-two.xhtml",
@@ -443,7 +490,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head><title>Chapter Two</title></head>
   <body>
-    <h1>Chapter Two</h1>
+    <h1 id="page-10">Chapter Two</h1>
     ${chapterTwoParagraphs}
   </body>
 </html>`,
@@ -549,25 +596,234 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   const reader = page.getByRole("main", { name: "EPUB reader" });
   await expect(reader).toBeVisible();
   await expect(page.locator(".reader-epub-host iframe")).toHaveCount(1);
-  await expectNoSeriousAccessibilityViolations(page);
   await expect(page.getByRole("button", { name: "Chapter One" })).toBeVisible();
 
   const progressSlider = page.getByRole("slider", { name: "EPUB reading progress" });
-  const epubPageInput = page.getByRole("spinbutton", { name: "EPUB page number" });
+  const epubLocationInput = page.getByRole("spinbutton", {
+    name: "EPUB location number",
+  });
   await expect(progressSlider).toBeEnabled({
     timeout: 20000,
   });
-  await expect(epubPageInput).toBeEnabled();
-  await expect(page.getByText(/Page \d+ \/ \d+/).first()).toBeVisible();
+  await expect(epubLocationInput).toBeEnabled();
+  await expect(page.getByText("Page i").first()).toBeVisible();
 
-  const initialEpubPageState = await readEpubPageState(page);
-  const targetEpubPage = Math.min(
-    initialEpubPageState.totalPages,
-    Math.max(2, Math.ceil(initialEpubPageState.totalPages / 3)),
+  await page.evaluate(() => {
+    const transitionModes: string[] = [];
+    Object.assign(window, { __readerTransitionModes: transitionModes });
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node instanceof HTMLElement &&
+            node.classList.contains("reader-transition-layer")
+          ) {
+            transitionModes.push(node.dataset.mode ?? "unknown");
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __readerTransitionModes?: string[] })
+            .__readerTransitionModes ?? [],
+      ),
+    )
+    .toContain("slide");
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Theme" }).click();
+  const transitionSettings = page.getByRole("group", {
+    name: "EPUB page transition",
+  });
+  await expect(transitionSettings).toBeVisible();
+  await transitionSettings.getByRole("button", { name: "None" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.getByRole("button", { name: "Previous" }).click();
+  await page.waitForTimeout(250);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __readerTransitionModes?: string[] })
+          .__readerTransitionModes ?? [],
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Theme" }).click();
+  await transitionSettings.getByRole("button", { name: "Slide" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(
+    page
+      .frameLocator('.reader-epub-host iframe[title="Chapter One content"]')
+      .getByRole("heading", { name: "Chapter One" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Theme" }).click();
+  await transitionSettings.getByRole("button", { name: "Page curl" }).click();
+  await expect(
+    transitionSettings.getByRole("button", { name: "Page curl" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.locator(".reader-viewport--epub")).toHaveAttribute(
+    "data-page-transition",
+    "page-curl",
   );
-  await epubPageInput.fill(String(targetEpubPage));
-  await epubPageInput.press("Enter");
-  await expect(epubPageInput).toHaveValue(String(targetEpubPage));
+  await expect(page.locator(".reader-viewport--epub")).toHaveAttribute(
+    "data-page-curl-blocked",
+    "false",
+  );
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.getByRole("button", { name: "Next" }).evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  if (process.env.READER_VISUAL_QA === "1") {
+    await expect(page.locator(".reader-transition-layer")).toBeVisible();
+    await page.waitForTimeout(80);
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-page-curl.png",
+    });
+  }
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __readerTransitionModes?: string[] })
+            .__readerTransitionModes ?? [],
+      ),
+    )
+    .toContain("page-curl");
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+  await page.getByRole("button", { name: "Previous" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            (window as typeof window & { __readerTransitionModes?: string[] })
+              .__readerTransitionModes ?? []
+          ).filter((mode) => mode === "page-curl").length,
+      ),
+    )
+    .toBeGreaterThanOrEqual(2);
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+
+  const reducedMotionStartLocation = await epubLocationInput.inputValue();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(epubLocationInput).not.toHaveValue(reducedMotionStartLocation);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __readerTransitionModes?: string[] })
+          .__readerTransitionModes ?? [],
+    ),
+  ).toEqual([]);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.getByRole("button", { name: "Previous" }).click();
+  await expect(epubLocationInput).toHaveValue(reducedMotionStartLocation);
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+
+  const imageFrame = page.frameLocator(".reader-epub-host iframe");
+  const viewableImage = imageFrame.getByRole("button", {
+    name: "Botanical test plate",
+  });
+  await expect(viewableImage).toBeVisible();
+  await viewableImage.click();
+  const imageDialog = page.getByRole("dialog");
+  await expect(imageDialog).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Botanical test plate" }),
+  ).toBeVisible();
+  const locationBeforeBlockedNavigation = await epubLocationInput.inputValue();
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(550);
+  await expect(epubLocationInput).toHaveValue(locationBeforeBlockedNavigation);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __readerTransitionModes?: string[] })
+          .__readerTransitionModes ?? [],
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByText("125%")).toBeVisible();
+  const imageStage = page.getByRole("region", {
+    name: "Zoomed image: Botanical test plate",
+  });
+  const imageStageBox = await imageStage.boundingBox();
+  expect(imageStageBox).not.toBeNull();
+  if (imageStageBox !== null) {
+    await page.mouse.move(
+      imageStageBox.x + imageStageBox.width / 2,
+      imageStageBox.y + imageStageBox.height / 2,
+    );
+    await page.mouse.wheel(0, -100);
+    await expect(page.getByText("150%")).toBeVisible();
+    const initialPan = await page
+      .locator(".epub-image-viewer__image-shell")
+      .evaluate((element) => element.getAttribute("style"));
+    await page.mouse.down();
+    await page.mouse.move(
+      imageStageBox.x + imageStageBox.width / 2 + 70,
+      imageStageBox.y + imageStageBox.height / 2 + 40,
+    );
+    await page.mouse.up();
+    await expect
+      .poll(() =>
+        page
+          .locator(".epub-image-viewer__image-shell")
+          .evaluate((element) => element.getAttribute("style")),
+      )
+      .not.toBe(initialPan);
+  }
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-image-viewer-desktop.png",
+    });
+  }
+  await page.keyboard.press("Escape");
+  await expect(imageDialog).toBeHidden();
+  await expect
+    .poll(() =>
+      viewableImage.evaluate((image) => image.ownerDocument.activeElement === image),
+    )
+    .toBe(true);
+
+  const initialEpubLocationState = await readEpubLocationState(page);
+  const targetEpubLocation = Math.min(
+    initialEpubLocationState.totalLocations,
+    Math.max(2, Math.ceil(initialEpubLocationState.totalLocations / 3)),
+  );
+  await epubLocationInput.fill(String(targetEpubLocation));
+  await epubLocationInput.press("Enter");
+  await expect(epubLocationInput).toHaveValue(String(targetEpubLocation));
 
   await page.getByRole("button", { name: "Chapter Two" }).click();
   await expect(page.getByRole("button", { name: "Chapter Two" })).toHaveAttribute(
@@ -590,7 +846,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       sliderBox.y + sliderBox.height / 2,
     );
     await expect(page.locator(".reader-epub-progress__tooltip")).toContainText(
-      /Page \d+/,
+      /Page (?:i|10)/,
     );
     await page.mouse.up();
   }
@@ -599,11 +855,11 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     .poll(async () => Number(await progressSlider.inputValue()))
     .toBeGreaterThan(beforeSliderValue);
 
-  const { totalPages } = await readEpubPageState(page);
-  expect(totalPages).toBeGreaterThan(2);
+  const { totalLocations } = await readEpubLocationState(page);
+  expect(totalLocations).toBeGreaterThan(2);
 
   const penultimateSliderValue = Math.round(
-    ((totalPages - 2.5) / (totalPages - 1)) * 1000,
+    ((totalLocations - 2.5) / (totalLocations - 1)) * 1000,
   );
   await progressSlider.evaluate((element, value) => {
     const input = element as HTMLInputElement;
@@ -617,14 +873,10 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
   }, penultimateSliderValue);
-  await expect(
-    page.getByText(new RegExp(`Page ${totalPages - 1} / ${totalPages}`)).first(),
-  ).toBeVisible();
+  await expect(epubLocationInput).toHaveValue(String(totalLocations - 1));
 
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(
-    page.getByText(new RegExp(`Page ${totalPages} / ${totalPages}`)).first(),
-  ).toBeVisible();
+  await expect(epubLocationInput).toHaveValue(String(totalLocations));
   await expect(page.getByText("100%").first()).toBeVisible();
 
   await page.getByRole("button", { name: "Double" }).click();
@@ -740,9 +992,85 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     expect(underlineStyles.lineDashes.every((dash) => dash !== "none")).toBe(true);
   }
 
-  await page.getByRole("button", { name: "Theme" }).click();
-  await page.getByRole("button", { name: "dark" }).click();
-  await expect(reader).toHaveAttribute("data-reader-theme", "dark");
+  await page.getByRole("button", { name: "Chapter One" }).click();
+  await expect(viewableImage).toBeVisible();
+  for (const mode of ["light", "sepia", "green", "dark"]) {
+    await page.getByRole("button", { name: "Theme" }).click();
+    await page.getByRole("button", { name: mode }).click();
+    await expect(reader).toHaveAttribute("data-reader-theme", mode);
+    await viewableImage.click();
+    await expect(imageDialog).toBeVisible();
+
+    if (mode !== "dark") {
+      await page.keyboard.press("Escape");
+      await expect(imageDialog).toBeHidden();
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(() =>
+      page
+        .locator(".epub-image-viewer__image-shell img")
+        .evaluate(
+          (image) =>
+            Number.parseFloat(getComputedStyle(image).transitionDuration) <= 0.00001,
+        ),
+    )
+    .toBe(true);
+  await page.setViewportSize({ width: 375, height: 760 });
+  await expect(imageDialog).toHaveCSS("width", "375px");
+  const mobileViewerLayout = await page.evaluate(() => ({
+    bodyWidth: document.body.scrollWidth,
+    buttonHeights: Array.from(
+      document.querySelectorAll(".epub-image-viewer-modal button"),
+    ).map((button) => Math.round(button.getBoundingClientRect().height)),
+    closeRight:
+      document
+        .querySelector<HTMLButtonElement>(
+          '.epub-image-viewer-modal button[aria-label="Close image viewer"]',
+        )
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    footerRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer__footer")
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    modalRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer-modal")
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    panHintRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer__pan-hint")
+        ?.getBoundingClientRect().right ?? 0,
+    viewportWidth: document.documentElement.clientWidth,
+  }));
+  expect(mobileViewerLayout.bodyWidth).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.buttonHeights.every((height) => height >= 44)).toBe(true);
+  expect(mobileViewerLayout.modalRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.closeRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.footerRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.panHintRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-image-viewer-mobile.png",
+    });
+  }
+  await page.keyboard.press("Escape");
+  await expect(imageDialog).toBeHidden();
+  await expect(page.locator(".reader-epub-host")).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(viewableImage).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page, consoleIssues);
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
   await expect(

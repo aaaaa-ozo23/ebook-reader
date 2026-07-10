@@ -4,9 +4,15 @@ import "./controls.css";
 import { IconButton } from "./IconButton";
 
 interface ModalProps {
+  backdropClassName?: string;
   children: ReactNode;
+  className?: string;
+  closeLabel?: string;
+  description?: string;
+  headerActions?: ReactNode;
   isOpen: boolean;
   onClose: () => void;
+  restoreFocusOnClose?: boolean;
   title: string;
   variant?: "modal" | "sheet";
 }
@@ -21,9 +27,15 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function Modal({
+  backdropClassName,
   children,
+  className,
+  closeLabel,
+  description,
+  headerActions,
   isOpen,
   onClose,
+  restoreFocusOnClose = true,
   title,
   variant = "modal",
 }: ModalProps) {
@@ -73,9 +85,11 @@ export function Modal({
     document.addEventListener("keydown", handleKeyDown);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
-      restoreTarget?.focus();
+      if (restoreFocusOnClose) {
+        restoreTarget?.focus();
+      }
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, restoreFocusOnClose]);
 
   if (!isOpen) {
     return null;
@@ -85,7 +99,7 @@ export function Modal({
     <div
       className={`ui-modal-backdrop ${
         variant === "sheet" ? "ui-modal-backdrop--sheet" : ""
-      }`.trim()}
+      } ${backdropClassName ?? ""}`.trim()}
       onMouseDown={(event) => {
         if (event.currentTarget === event.target) {
           onClose();
@@ -94,16 +108,20 @@ export function Modal({
     >
       <div
         ref={dialogRef}
-        className="ui-modal"
+        className={`ui-modal ${className ?? ""}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
       >
         <header className="ui-modal__header">
-          <h2 id={titleId}>{title}</h2>
+          <div className="ui-modal__heading">
+            <h2 id={titleId}>{title}</h2>
+            {description === undefined ? null : <p>{description}</p>}
+          </div>
+          {headerActions}
           <IconButton
-            aria-label={`Close ${title}`}
+            aria-label={closeLabel ?? `Close ${title}`}
             icon={<CloseIcon />}
             onClick={onClose}
           />

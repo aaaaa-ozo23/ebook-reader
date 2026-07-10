@@ -390,3 +390,65 @@
 - Focus 快捷键回归测试暴露 `focusButtonRef` 实际挂在 Contents 按钮的旧缺陷；把 ref 移到 Focus 按钮并使用短延迟重试后，焦点恢复测试稳定通过。
 - Browser/IAB 的受控 `evaluate` 上下文不暴露 localStorage，不能在 Browser 标签页注入三格式书籍；因此 Browser 用于三档视口、四主题、焦点、面板、console 和 `view_image` 视觉检查，三格式真实 reader 数据态由项目 Playwright 生成 TXT/EPUB/PDF fixture 并执行 axe，12/12 通过。
 - 阶段 9 最终生产构建把书架入口压到 66.85 kB gzip；ReaderShell JS 29.79 kB、CSS 5.48 kB 均保持异步，封面生成器单独为 1.25 kB gzip chunk。
+## 2026-07-07 大阶段 10：EPUB 增强
+
+### 10.1 page-list 模型
+
+- epub.js 0.3.93 的 `book.load(navPath, "xml")` 可以读取原始 EPUB3 navigation XHTML 或 EPUB2 NCX；这条路径保留 `i`、`xiv` 等标签，不使用 `book.pageList.pages` 的整数化结果。
+- page-list href 需要同时尝试 navigation 相对路径、去前导斜杠路径和原 href，最终以 `book.spine.get(...)` 返回的 section href/index 为标准。
+- href-only 边界表示 section 起点；fragment 边界通过 `section.load()` + `cfiFromElement()` 转成可比较 CFI；package CFI 直接由 spine 解析。解析阶段共享同一 section load Promise，结束统一 unload。
+- 新缓存键固定为 `epub_page_list_v1`，内容为 `{ version: 1, boundaries }`；继续使用 `reader_cache` 的 source hash 自动失效，无 schema migration。
+- 当前 CFI 早于首个有效边界、缓存损坏、目标外部/为空或 fragment 无法解析时，不伪造出版物页码，交给 10.2 显示 Location 回退。
+
+### 10.2 页码与 Location UI
+
+- EPUB generated locations 是每 1500 字符生成的布局无关进度索引，内部和 UI 均改用 `location/totalLocations`，避免测试和后续动画再次把它误称为出版物页码。
+- 数字输入固定为 `Location`；page-list 标签可能是罗马数字或其他字符串，不提供误导性的数字 Page 跳转。
+- 状态和滑杆 tooltip 优先显示 `Page <publicationPageLabel>`；当前 CFI 尚未越过首个 page-list 边界、无 page-list 或边界损坏时显示 `Location x / y`。
+- href-only page-list 边界代表 section 起点，适合封面/章节第一页；fragment/CFI 边界只有在当前 CFI 到达后才生效。generated EPUB smoke 已验证这一差异。
+
+### 10.3 图片资源桥接
+
+- 图片桥接以 rendition `rendered` 后的 Document 为生命周期单位，用一次 click/keydown 事件代理覆盖 HTML `img` 与 SVG `image`；同一文档复用既有 WeakSet，章节/书籍销毁时统一移除 listener。
+- 可查看图片只在运行时增加 `role=button`、`tabindex=0`、`aria-haspopup=dialog` 和 focus class；cleanup 精确恢复 EPUB 原属性，不修改源文件。
+- 激活资源只读取 HTML `currentSrc`/`src` 或 SVG `href`，不调用 `fetch`、`URL.createObjectURL`、导出或远程解析；损坏图片在激活时用 `complete && naturalWidth <= 0` 安全忽略。
+- 可访问名称按图片 aria-label/alt/title/figcaption、SVG aria-label/title 回退，最终兜底为 `EPUB image`；触发元素随资源一起传给 10.4 用于关闭后焦点恢复。
+
+### 10.4 图片查看器
+
+- 图片查看器复用共享 Modal/focus 规范，但关闭后不让 Modal 自行恢复主文档焦点；EPUB 内容层负责优先恢复 iframe 内触发图片，触发元素失效时回退 `.reader-epub-host`。
+- Fit 是适应当前舞台的比例，可以低于 100%；100% 表示图片原始像素比例。手动缩放从 100% 到 500%，25% 步进，Reset 回到 Fit。
+- 浏览器把 React `onWheel` 注册为 passive listener 时无法阻止页面滚动；查看器舞台改用原生 `wheel` listener `{ passive: false }` 处理 Ctrl/trackpad pinch 和滚轮缩放。
+- 平移边界按舞台尺寸、图片原始尺寸和当前缩放计算；图片小于舞台时对应轴锁定为 0，大于舞台时限制在可见边界内。
+- EPUB iframe 图片来自不同 JavaScript realm，不能依赖主窗口的 `instanceof HTMLImageElement`；桥接判断改为 `nodeType/localName/namespaceURI` 结构检查，避免真实 iframe 图片无法打开。
+- 图片资源较早查询封面或 rendition 时需等待 `book.opened`，避免 epub.js 在资源替换路径上出现竞态；封面提取和 reader open 均在打开完成后继续。
+- 375×760 使用全屏紧凑布局：标题、Close 和工具栏换行在顶部，控制目标保持至少 44px，底部滑杆与帮助文案不产生横向溢出。
+- Browser/IAB 已按前端 QA 约定优先尝试，但本轮工具端在 `incrementalAriaSnapshot` 缺失处失败；真实三格式和三视口验证改由项目 Playwright、截图和 `view_image` 完成，并记录为工具限制而非产品缺陷。
+
+### 10.5 平滑切换启动
+
+- 当前 `PageTransitionController` 已具备首个 + 最终方向合并、捕获/展示失败可恢复、真实导航失败不 commit 的事务语义；10.5 应直接接入 EPUB，不在内容层复制队列。
+- 当前 `PageTransitionLayer` 已提供 slide/page-curl 原型，但 `capturePageSnapshot` 只是普通 `cloneNode`；EPUB 接入前必须增加 iframe 文档的只读净化快照，移除 script、form、嵌套 frame 与交互状态。
+- EPUB 的 pending progress 已由 relocated 事件进入 750ms 延迟写入；事务 commit 需要主动刷新这一 pending 值，并取消旧 timer，才能保证成功导航每次只写一次。
+- 本轮检查命令曾引用不存在的 `ReaderFormatContents.test.tsx` 和 `components/ReaderThemePanel.tsx`；实际测试集中在 `App.test.tsx` / 各模块旁，主题面板位于 reader 模块，后续按 `rg --files` 结果定位。
+
+### 10.5 平滑切换完成
+
+- EPUB 按钮与 iframe ArrowLeft/ArrowRight 都通过 `PageTransitionController`；30 次快速输入仍只执行首个与最终方向，整个 single/double spread 只捕获一组 current/target 快照。
+- 快照使用不含 `allow-scripts` 的 sandboxed iframe；源文档序列化前移除 script、form、iframe/frame/frameset、object/embed，清除 autofocus/contenteditable 并禁用表单控件。保留 `allow-same-origin` 只为复用当前 rendition 的 blob/样式资源，避免重新 fetch 或创建 blob。
+- theme、resize、spread、目录/Location/slider 跳转会取消活动视觉动画并清空 pending 方向；adapter 使用最后一个 CFI/href 重新 display，保持重排后的阅读锚点。
+- relocated 仍只更新一个 pending progress；controller commit 清除 750ms timer 并立即 flush，因而每次成功真实导航只保存一次。None/reduced-motion 直接导航，不捕获快照。
+- 保存的 `page-curl` 在本阶段只映射为运行时 Slide，偏好对象不写回；Theme 面板只显示 None/Slide。10.6 将启用真实 Page curl。
+
+### 10.6 真实翻页视觉检查
+
+- 首张 230ms 中间态截图暴露 Chromium 对 3D transformed snapshot iframe 的合成边界黑屏：阅读页本身仍显示，但 host 之外被黑色合成面覆盖。动画层已增加 strict paint containment、clip-path 与不透明阅读背景，frame 恢复 overflow hidden；需重新截图确认合成面被限制在 EPUB host。
+- 最终方案不再对 snapshot iframe 本身做 3D transform：iframe 只负责 current/target 只读内容并用 clip-path 揭示；独立的无交互 CSS sheet 承担 3D rotateY、背面和阴影。重拍确认 host 外黑屏完全消失，阅读 chrome、侧栏和进度控件保持稳定。
+- Page curl 固定 500ms；snapshot/资源准备、Web Animations 任一不可用时 controller 已完成真实导航并直接 commit，不留下动画层。图片查看器、选择菜单、note editor/popover 打开时仅 page-curl 解析为 none，Slide 语义不被改变。
+
+### 10.7 最终验收结论
+
+- 阶段 10 fixture 已覆盖 EPUB3、EPUB2 NCX、无 page-list、完全损坏 page-list/cache、href/fragment/package CFI、HTML/SVG 图片、长章节与双页；无需新增二进制 fixture 或网络资源。
+- axe 4.12 默认 frame aggregation 在 blob rendition 上不能创建聚合 page；legacy mode 可检查同源 EPUB iframe，但其脚本注入会被产品 sandbox 正确阻止并产生一条工具诊断。验收只在 axe 调用时间窗内过滤该精确诊断，其他 console 问题仍失败。
+- Browser/IAB viewport override 后必须 reload 才能得到正确截图比例；reload 后 1280/640/375 截图和 DOM 无横向溢出，console clean。seeded EPUB 仍由项目 Playwright fixture 提供，避免 Browser 本地状态注入限制。
+- 最终包体相较 10.4：书架入口只从 66.85 增至 67.09 kB gzip；所有 page-list、查看器和动画代码仍位于 39.33 kB gzip 的异步 ReaderShell chunk，未把 epub.js/PDF runtime 提前到书架。

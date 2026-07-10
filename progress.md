@@ -1651,3 +1651,120 @@
 - **包体：** 书架入口 66.85 kB gzip；ReaderShell JS 29.79 kB、ReaderShell CSS 5.48 kB，继续异步；bookCovers 1.25 kB gzip 独立 chunk。
 - **Browser 限制：** IAB 受控页面不暴露 localStorage，无法直接注入三格式 fixture；Browser 完成视觉/交互检查，真实三格式状态由仓库 Playwright fixture 验证并留下 12/12 结果。
 - **合并与推送：** acceptance 以 `--no-ff` 合入 `codex/v0.2.0-integration`，集成分支再以 `--no-ff` 合入 `main`；随后集成分支快进到 `main` 合并提交。`main` 和 `codex/v0.2.0-integration` 均已推送到 origin；未执行 v0.2 发布或商店操作。
+# 2026-07-07 大阶段 10：EPUB 增强
+
+## 启动
+
+- **状态：** in_progress
+- **集成分支：** `codex/v0.2.0-integration`
+- **本轮边界：** 顺序完成 10.1–10.4；通过中期完整门禁后停止，不创建 10.5、不合入 `main`、不改版本、不发布。
+- 已确认 `main`、`codex/v0.2.0-integration` 与对应 origin 均位于 `1113bc6`；工作区仅有用户未跟踪的 `AGENTS.md`，执行期间保留且不提交。
+- 已恢复 `task_plan.md`、`findings.md`、`progress.md`、阶段 9 设计规格与 page-curl 决策；图片查看器以已批准概念为视觉方向，以路线图校正规则为最高优先级。
+
+### 10.1 page-list 模型
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-page-list`
+- 目标：保留 EPUB3 navigation / EPUB2 NCX 原始 page-list 标签，解析 href/fragment/CFI 边界并复用 `reader_cache`。
+- **过程问题：** 首轮定向 Vitest 90 tests 中 1 个新断言失败；测试要求 href-only 边界含显式 `cfi: undefined`，而实际模型有意省略可选字段。已改为断言字段不存在。当前终端 Node 24.14.0 / pnpm 11.7.0 与仓库声明的 Node 26.1.0 / pnpm 11.1.2 不一致，后续验证改用可定位的项目要求运行时。
+- 第二轮 90 Vitest 与 lint 通过；build 暴露测试 helper 未补必填 `publicationPageLabel`，以及项目当前 ES target 不支持 `Array.prototype.toSorted`。已补默认值并改为复制数组后 `sort`，保持输入不可变。
+- 新增 `EpubPageList` 模块，覆盖 EPUB3 navigation、EPUB2 NCX、相对 href、fragment、package CFI、spine/CFI 排序、当前位置标签查找和版本化缓存校验。
+- `EpubReaderAdapter` 异步生成或恢复 page-list，并在位置/拖动预览结果中返回 `publicationPageLabel`；`ReaderFormatContents` 并行读取 locations、page-list 和 TOC 缓存。
+- **验证：** 90 Vitest passed；desktop lint、build、root format passed。生产书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip，仍保持异步边界。
+
+### 10.2 页码与 Location UI
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-page-labels`
+- 将 EPUB 合成 `page/totalPages` 改名为 `location/totalLocations`，数字跳转统一为 Location；出版物 page-list 只负责 `Page <label>` 展示。
+- **过程问题：** 首轮定向验证在 adapter 的 `locationToPosition(location)` 中把新数值变量也命名为 `location`，导致 esbuild/TypeScript 重复标识符；已将参数改为 `renditionLocation`，保持模型命名清晰。
+- 首轮 generated EPUB Playwright 未找到 `Page i`：fixture 把首个 page-list 边界放在章节 `<h1>` fragment，而 epub.js 初始 CFI 位于该元素之前，按契约正确回退 Location。已将第一页改为 href-only section 起点，并保留第二页 fragment 覆盖。
+- `EpubPosition` / `EpubProgressPreview` 已使用 `location/totalLocations`，位置输入和 aria-label 改为 Location；状态/tooltip 优先使用出版物标签，缺失时回退 Location。
+- generated EPUB fixture 新增 page-list：href-only `i` 和 fragment `10`；Playwright 验证 `Page i`、Location 数字跳转、进度拖动、末位置和 single/double 原路径。
+- **验证：** 90 Vitest、desktop lint/build、root format passed；generated EPUB Chromium smoke 1/1 passed。书架入口 66.85 kB gzip，ReaderShell 31.52 kB gzip。
+
+### 10.3 图片资源桥接
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-image-bridge`
+- 新增 `EpubImageBridge`，对 rendition iframe 的 HTML `img` / SVG `image` 注册单次事件代理，提供鼠标、Enter、Space 激活、可访问名称、自然尺寸和触发元素。
+- adapter 将桥接 cleanup 合并进既有 content document 清理队列；主题规则新增 zoom-in 光标和 amber 3px focus-visible，不增加全局 listener 或新资源 URL。
+- 单测覆盖 HTML/SVG、装饰性/空/损坏图片、修饰键点击、原属性恢复、listener 清理以及禁止 fetch/createObjectURL。
+- **验证：** 96 Vitest、desktop lint/build、root format passed。书架入口 66.85 kB gzip，ReaderShell 32.56 kB gzip，仍为异步 reader chunk。
+
+### 10.4 图片查看器
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-image-viewer`
+- 新增专用 `EpubImageViewer` 和缩放/平移模型，提供 Fit、100%、Zoom out/in、Reset、Close、百分比滑杆和帮助文字。
+- 查看器支持滚轮、触控板 pinch、双指缩放、指针捕获拖动、Space+拖动、键盘 `+/-/0/Escape` 和双击 Fit/100% 切换；背景阅读导航在查看器打开期间暂停。
+- `ReaderFormatContents` 接入图片激活回调并在关闭后恢复 iframe 图片焦点；触发元素失效时回退 EPUB host。
+- 共享 Modal 增加 header actions、描述、className/backdropClassName、closeLabel 和可关闭默认焦点恢复的选项；现有 Modal 语义保持不变。
+- EPUB 图片桥接补充跨 iframe realm 判断和 CSS 隐藏过滤；封面提取与 EPUB reader open 等待 `book.opened` 以规避资源替换竞态。
+- Playwright generated EPUB fixture 新增 SVG 图片，覆盖鼠标/键盘打开、缩放、拖动、Esc 焦点恢复、四主题、reduced motion 和 375×760 触控布局。
+- **定向验证：** `pnpm.cmd --filter @reader/desktop test -- EpubImageViewer.test.tsx EpubImageBridge.test.ts App.test.tsx` passed，101 tests；`pnpm.cmd --filter @reader/desktop lint` passed；`pnpm.cmd --filter @reader/desktop build` passed；`READER_VISUAL_QA=1 pnpm.cmd --filter @reader/desktop exec playwright test tests/smoke.spec.ts --project=chromium --grep "opens a generated EPUB"` passed。
+- **视觉证据：** 已用 `view_image` 检查 `D:\tl-temp\ebook-reader-stage10-image-viewer-desktop.png` 与 `D:\tl-temp\ebook-reader-stage10-image-viewer-mobile.png`；桌面工具栏、舞台、滑杆和关闭按钮完整，375×760 下 Close/Reset/500%/pan hint 均在 viewport 内。
+- **中期门禁：** `git diff --check` passed；`pnpm.cmd check` passed，包含 Prettier、lint、core build/test、desktop build/test，desktop 101 tests；`cargo fmt --manifest-path apps\desktop\src-tauri\Cargo.toml --check` passed；`cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml` passed，36 tests；`pnpm.cmd --filter @reader/desktop test:e2e` passed，12 Playwright tests；`pnpm.cmd --filter @reader/desktop tauri:build` passed，生成 NSIS 和 MSI。
+- **Browser/IAB：** 已优先尝试 Browser/IAB，但工具端 `incrementalAriaSnapshot is not a function` 阻塞继续检查；本轮以项目 Playwright、生成截图和 `view_image` 完成三格式/三视口/视觉回归，并在最终交付中说明该工具限制。
+- **包体观测：** 书架入口保持 66.85 kB gzip；ReaderShell JS 因 EPUB page-list、图片桥接和图片查看器增至 36.44 kB gzip，继续作为异步 reader chunk，不进入书架入口。
+- **停止边界：** 10.4 完成后停止，不创建 10.5、不合并 `main`、不改版本、不发布。
+
+## 2026-07-10 大阶段 10：10.5–10.7 续行
+
+- **状态：** in_progress
+- **当前阶段：** 10.5 EPUB 平滑切换
+- **分支基线：** `codex/v0.2.0-integration` 与 origin 同步于 `df6aa7c`；`main`/origin 仍为 `1113bc6`；仅保留用户未跟踪 `AGENTS.md`。
+- **执行边界：** 顺序完成 10.5、10.6、10.7；每个子阶段按实现、测试、文档提交后 `--no-ff` 合回并推送集成分支。10.7 最终门禁通过后才合入 `main`，随后快进同步集成分支；不改版本、不发布、不新增依赖/schema/格式。
+- 已恢复外部 `PLAN (2).md`、三份跟踪文件、阶段 9 transition 原型与阶段 10 中期结果；已确认 10.5 复用既有 controller/layer 并接通 EPUB 真实导航。
+- **过程问题：** 首轮代码定位命令包含两个不存在路径，组合检查以 exit 1 结束；未产生改动。已记录真实文件布局，后续使用 `rg --files` 和模块旁测试定位。
+- **过程问题：** 10.5 首轮并行定向验证在 TypeScript 构建中因 `AbortSignal.aborted` 被控制流错误窄化为 `false | undefined` 而失败；测试/lint 输出被并行失败中断。已改用独立 helper 读取异步后的 signal 状态，并补充 controller `finally` 清理。
+- **过程问题：** 第二轮定向验证暴露两类独立问题：`App.test.tsx` 的完整 Tauri mock 未补新增 experience exports，导致 41 个 ReaderShell 用例连锁卸载；同时 React refs lint 禁止在 render 期构造并写入 controller ref。已补默认偏好 mock，并把 controller 初始化移入 effect、事件回调只在交互期读取 ref。
+- **过程问题：** 第三轮 lint/build 已通过，69 个定向测试仅 iframe 键盘导航的旧同步断言失败；事务控制器现在异步执行真实导航，测试改为等待 adapter `next()`，并补充偏好保存与快照净化覆盖。
+- **过程问题：** 首轮 generated EPUB Playwright 的功能断言通过，但净化快照 iframe 使用空 sandbox，导致已加载 blob 资源被当作不可访问本地资源并产生 localStorage sandbox console 错误。快照仍移除全部脚本/表单/嵌套 frame；sandbox 改为仅 `allow-same-origin`（不含 `allow-scripts`），以复用当前 rendition 已加载资源并保持只读隔离。
+
+### 10.5 EPUB 平滑切换
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-slide-transition`
+- 已将 `ReaderExperiencePreferences.epub.transition` 接入生产 ReaderShell 与 Theme 面板；None/Slide 可持久化，已有 page-curl 值在 10.6 前仅运行时降级为 Slide且不覆盖保存值。
+- EPUB previous/next 与 iframe 键盘导航共用事务 controller；快照为净化、sandboxed、只读 iframe，实时 rendition DOM 不进入动画层，动画层始终 `aria-hidden`/`pointer-events:none` 并在结束/取消后删除。
+- resize、theme、spread 和非相邻跳转会取消视觉动画与 pending 方向；adapter 以当前 CFI/href 完成 reflow 恢复。成功导航由 commit 立即 flush pending progress。
+- **定向验证：** 73 Vitest passed（controller/layer/adapter/App）；desktop lint passed；desktop build passed；generated EPUB Chromium Playwright 1/1 passed，覆盖 Slide 层出现/清理、None 无动画和 console clean。
+- **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 38.70 kB gzip，继续保持异步 reader chunk；未新增依赖。
+- **合并与推送：** 实现 `553171f`、测试 `9125a1a`、文档 `11e9b9a` 已以 `--no-ff` 合回 `codex/v0.2.0-integration`（merge `aa86c62`）并推送。
+
+### 10.6 EPUB 真实翻页
+
+- **状态：** in_progress
+- **分支：** `codex/stage10-epub-page-curl`
+- 从已同步的 10.5 集成基线创建；目标为启用保存的 Page curl、500ms 3D 翻页背面/阴影/目标页揭示、浮层互斥和资源/WAAPI 失败无动画降级。
+- **过程问题：** 10.6 首轮 lint 与 68 个定向测试通过，build 仅在新动画测试中因 `vi.fn` 被推断成零参数 tuple 而失败；已按原生 `HTMLElement.animate` 签名显式标注 mock，不涉及产品代码。
+- **视觉问题：** `view_image` 检查 230ms page-curl 截图时发现 Chromium 3D iframe 合成面把 EPUB host 外区域渲染为黑色；已在动画层加入 paint containment/clip 与不透明背景，并限制 frame overflow，等待重拍确认。
+
+- **状态：** complete
+- 保存的 `page-curl` 现已直接生效，Theme 面板提供 None/Slide/Page curl；图片查看器、选择菜单、note editor/popover 打开时 page-curl 安全降级为无动画真实导航。
+- page-curl 使用 500ms WAAPI：current/target sandboxed iframe 只做裁切/揭示，独立 CSS 3D sheet 提供正反面、动态阴影和目标页亮度恢复，避免 iframe 3D 合成黑屏。
+- 快照/资源准备和 WAAPI 不可用时动画层及时销毁，真实导航与进度 commit 保持完成；reduced-motion 继续不捕获、不动画且不改保存偏好。
+- **定向验证：** desktop 108 Vitest、lint、build passed；generated EPUB Chromium Playwright 普通与视觉 QA passed，覆盖 page-curl、往返、图片查看器互斥和 console clean。
+- **Browser/IAB：** 当前 Browser 运行路径恢复可用；本地 `http://127.0.0.1:1420/` title=`Ebook Reader`、首屏非空、无 framework overlay、console warn/error 为空，截图确认书架视觉正常。受控 Browser 无 seeded EPUB 数据，真实 page-curl 由仓库 Playwright fixture 验证。
+- **视觉对照：** `view_image` 对照批准阅读器概念与 `D:\tl-temp\ebook-reader-stage10-page-curl.png`；最终重拍无 host 外黑屏，保留现有 charcoal/teal/amber/paper chrome，动画仅覆盖阅读页舞台。
+- **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 39.26 kB gzip/CSS 6.88 kB gzip，继续保持异步边界；未新增依赖。
+- **合并与推送：** 实现 `cdb2126`、测试 `2f177c5`、文档 `db2ee8a` 已以 `--no-ff` 合回 `codex/v0.2.0-integration`（merge `42c4846`）并推送。
+
+### 10.7 阶段 10 验收
+
+- **状态：** in_progress
+- **分支：** `codex/stage10-epub-acceptance`
+- 从已同步的 10.6 集成基线创建；补齐无 page-list/完全损坏 page-list fixture、reduced-motion page-curl 真导航无动画路径，并让 axe 检查可访问的 EPUB iframe 内容。
+- **过程问题：** 启动检查命令把 Windows PowerShell 不支持的 `src\*.test.tsx` 路径 glob 传给 `rg`，导致组合命令 exit 1；分支创建和只读文件输出均已完成，未产生异常改动。后续只使用 `rg --files` 或目录级 glob。
+- **过程问题：** 移除 axe 的 EPUB iframe 排除后，默认 4.12 frame 聚合会调用 `browserContext.newPage` 并在 blob rendition 上等待至 30s 超时。按 axe 官方提供的受限环境 fallback 改用 `setLegacyMode()`，保留同源可访问 iframe 检查且避免创建聚合空白页；需以 targeted Playwright 复验结果为准。
+- **验收发现：** legacy axe 成功进入真实 EPUB 页面后报告 serious `frame-title`：epub.js 生成的 rendition iframe 没有 accessible name。adapter 的 `rendered` 生命周期现按章节文档 title 设置 `<iframe title="… content">`，无标题时回退 `EPUB publication content`，并补单测。
+- **过程问题：** frame-title 修复后的 targeted Playwright 在 reduced-motion 复位后的 page-curl 尚未销毁时就构造通用 iframe locator，命中实时 rendition + 两个 snapshot frame 而 strict-mode 失败。产品动画按预期仍在运行；测试在继续图片交互前显式等待 `.reader-transition-layer` 清理。
+- **axe 工具观测：** legacy mode 会向不允许脚本的 EPUB sandbox iframe 注入 axe，自身触发一条精确的 `about:srcdoc` blocked-script console error。验收 helper 仅在 axe 调用时间窗内移除这条已知工具诊断，其他 warning/error 继续作为产品失败；serious/critical 结果仍完整断言。
+- **过程问题：** 将 axe 移到交互末尾后，page-curl fixture 仍偶发无动画：None 模式 Previous 已更新 Location，但新的 rendition document 尚未进入可捕获状态。验收在启用 Page curl 前等待带 title 的实时 iframe 章节 heading 可见；产品仍按契约在快照未就绪时完成无动画真实导航。
+
+- **状态：** complete
+- 新增 `docs/design/v0.2/stage10-fidelity-ledger.md`，汇总 10.1–10.7 能力、fixture、视觉、a11y、降级、性能、包体与最终门禁。
+- **最终门禁：** `pnpm.cmd check` passed（core 5、desktop 110）；Cargo fmt check + Rust 36 tests passed；Playwright 12/12 passed；Browser/IAB 1280×800、640×640、375×760 与 console clean passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
+- **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 39.33 kB、CSS 6.88 kB，继续异步；bookCovers 1.25 kB gzip。
+- **边界：** 未新增依赖、schema、格式或版本；未执行发布。下一步仅按计划提交验收文档、合回集成分支、`--no-ff` 合入 `main` 并快进同步集成分支。

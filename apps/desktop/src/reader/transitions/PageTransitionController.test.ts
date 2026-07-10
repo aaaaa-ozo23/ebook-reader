@@ -2,10 +2,17 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   PageTransitionController,
+  resolvePageTransitionMode,
   type PageDirection,
 } from "./PageTransitionController";
 
 describe("PageTransitionController", () => {
+  it("disables only page-curl while a blocking reader surface is open", () => {
+    expect(resolvePageTransitionMode("page-curl", true)).toBe("none");
+    expect(resolvePageTransitionMode("page-curl", false)).toBe("page-curl");
+    expect(resolvePageTransitionMode("slide", true)).toBe("slide");
+    expect(resolvePageTransitionMode("none", true)).toBe("none");
+  });
   it("coalesces 30 rapid inputs into the active transaction and latest pending direction", async () => {
     const navigationGate = createDeferred<void>();
     const navigations: PageDirection[] = [];
@@ -111,6 +118,37 @@ describe("PageTransitionController", () => {
 
     await expect(controller.request("next")).rejects.toThrow("navigation failed");
     expect(commit).not.toHaveBeenCalled();
+    expect(controller.getState()).toBe("idle");
+  });
+
+  it("cancels the active animation and clears the pending direction", async () => {
+    const animationGate = createDeferred<void>();
+    const signals: AbortSignal[] = [];
+    const navigations: PageDirection[] = [];
+    const controller = new PageTransitionController<string>({
+      animate: async (_frames, _mode, signal) => {
+        signals.push(signal);
+        await animationGate.promise;
+      },
+      captureCurrent: () => "current",
+      captureTarget: () => "target",
+      commit: vi.fn(),
+      getMode: () => "slide",
+      navigate: async (direction) => {
+        navigations.push(direction);
+      },
+      prefersReducedMotion: () => false,
+    });
+
+    const running = controller.request("next");
+    void controller.request("previous");
+    await vi.waitFor(() => expect(signals).toHaveLength(1));
+    controller.cancel();
+    animationGate.resolve();
+    await running;
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect(navigations).toEqual(["next"]);
     expect(controller.getState()).toBe("idle");
   });
 });

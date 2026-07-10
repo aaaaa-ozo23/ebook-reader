@@ -7,13 +7,27 @@ import type {
 } from "@reader/core";
 import type { Book as EpubBook, Location, NavItem, Rendition } from "epubjs";
 
+import {
+  registerEpubImageBridge,
+  type EpubImageActivateHandler,
+} from "./EpubImageBridge";
+import {
+  findPublicationPageLabel,
+  loadPublicationPageList,
+  parseCachedPublicationPageList,
+  serializePublicationPageList,
+  type EpubCfiComparator,
+  type PublicationPageBoundary,
+} from "./EpubPageList";
+
 export type EpubSpreadMode = "single" | "double";
 
 export interface EpubPosition {
   locator: EpubLocator;
   progression: number | null;
-  page: number | null;
-  totalPages: number | null;
+  location: number | null;
+  totalLocations: number | null;
+  publicationPageLabel: string | null;
   displayedPage: number | null;
   displayedTotal: number | null;
   locationsReady: boolean;
@@ -22,8 +36,9 @@ export interface EpubPosition {
 export interface EpubProgressPreview {
   locator: EpubLocator;
   progression: number;
-  page: number;
-  totalPages: number;
+  location: number;
+  totalLocations: number;
+  publicationPageLabel: string | null;
   locationsReady: true;
 }
 
@@ -33,16 +48,22 @@ export interface EpubSpreadState {
   canRenderDouble: boolean;
 }
 
+export type EpubLayoutInvalidationReason = "resize" | "spread" | "theme";
+
 interface EpubReaderAdapterOptions {
   bookId: string;
   cachedLocations?: string;
+  cachedPublicationPageList?: string;
   sourceUrl: string;
   container: HTMLElement;
   initialLocator?: EpubLocator;
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
   onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  onImageActivate?: EpubImageActivateHandler;
+  onLayoutInvalidated?: (reason: EpubLayoutInvalidationReason) => void;
   onLocationsGenerated?: (serializedLocations: string) => void;
+  onPublicationPageListGenerated?: (serializedPageList: string) => void;
   onSelected?: (selection: EpubSelectionSnapshot) => void;
   onSelectionCleared?: () => void;
   onSpreadChange?: (state: EpubSpreadState) => void;
@@ -106,26 +127,38 @@ interface EpubRenderedView {
     document?: Document;
   };
   document?: Document;
+  element?: HTMLElement;
+  iframe?: HTMLIFrameElement;
 }
 
 export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly bookId: string;
   private readonly cachedLocations?: string;
+  private readonly cachedPublicationPageList?: string;
   private readonly sourceUrl: string;
   private readonly container: HTMLElement;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
+  private readonly onImageActivate?: EpubImageActivateHandler;
+  private readonly onLayoutInvalidated?: (reason: EpubLayoutInvalidationReason) => void;
   private readonly onLocationsGenerated?: (serializedLocations: string) => void;
+  private readonly onPublicationPageListGenerated?: (
+    serializedPageList: string,
+  ) => void;
   private readonly onSelected?: (selection: EpubSelectionSnapshot) => void;
   private readonly onSelectionCleared?: () => void;
   private readonly onSpreadChange?: (state: EpubSpreadState) => void;
   private book: EpubBook | null = null;
+  private cfiComparator: EpubCfiComparator | null = null;
   private locationsPromise: Promise<void> | null = null;
   private locationsReady = false;
+  private publicationPageList: PublicationPageBoundary[] = [];
+  private publicationPageListPromise: Promise<void> | null = null;
   private lastPosition: EpubPosition | null = null;
   private resizeObserver: ResizeObserver | null = null;
   private rendition: Rendition | null = null;
+  private reflowPromise: Promise<void> | null = null;
   private selectionCleanupCallbacks: Array<() => void> = [];
   private selectionDocuments = new WeakSet<Document>();
   private spreadMode: EpubSpreadMode = "single";
@@ -140,13 +173,17 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   constructor(options: EpubReaderAdapterOptions) {
     this.bookId = options.bookId;
     this.cachedLocations = options.cachedLocations;
+    this.cachedPublicationPageList = options.cachedPublicationPageList;
     this.sourceUrl = options.sourceUrl;
     this.container = options.container;
     this.initialLocator = options.initialLocator;
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
     this.onKeyDown = options.onKeyDown;
+    this.onImageActivate = options.onImageActivate;
+    this.onLayoutInvalidated = options.onLayoutInvalidated;
     this.onLocationsGenerated = options.onLocationsGenerated;
+    this.onPublicationPageListGenerated = options.onPublicationPageListGenerated;
     this.onSelected = options.onSelected;
     this.onSelectionCleared = options.onSelectionCleared;
     this.onSpreadChange = options.onSpreadChange;
@@ -162,12 +199,15 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await this.close();
     this.locationsReady = false;
     this.lastPosition = null;
+    this.reflowPromise = null;
 
-    const { default: createEpub } = await import("epubjs");
+    const { default: createEpub, EpubCFI } = await import("epubjs");
+    const cfiComparator = new EpubCFI();
     const book = createEpub(this.sourceUrl, {
       openAs: "epub",
       replacements: "blobUrl",
     });
+    await book.opened;
     const rendition = book.renderTo(this.container, {
       allowScriptedContent: false,
       flow: "paginated",
@@ -179,6 +219,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     });
 
     this.book = book;
+    this.cfiComparator = cfiComparator;
     this.rendition = rendition;
     this.registerRenditionEvents(rendition);
     this.startResizeObserver();
@@ -186,6 +227,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await rendition.display(this.initialLocator?.cfi ?? this.initialLocator?.href);
     await this.reportCurrentPosition();
     void this.generateLocations(book);
+    void this.generatePublicationPageList(book, cfiComparator);
   }
 
   async close(): Promise<void> {
@@ -193,6 +235,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.stopSelectionObservers();
     this.locationsPromise = null;
     this.locationsReady = false;
+    this.publicationPageList = [];
+    this.publicationPageListPromise = null;
+    this.cfiComparator = null;
     this.lastPosition = null;
 
     if (this.rendition !== null) {
@@ -224,12 +269,15 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   async next(): Promise<void> {
     if (this.locationsReady) {
       const currentPosition = this.lastPosition ?? (await this.getCurrentPosition());
-      const isFinalPageBoundary =
-        currentPosition.page !== null &&
-        currentPosition.totalPages !== null &&
-        currentPosition.page >= currentPosition.totalPages - 1;
-      const nextLocationIndex = isFinalPageBoundary
-        ? nextEpubLocationIndex(currentPosition.page, currentPosition.totalPages)
+      const isFinalLocationBoundary =
+        currentPosition.location !== null &&
+        currentPosition.totalLocations !== null &&
+        currentPosition.location >= currentPosition.totalLocations - 1;
+      const nextLocationIndex = isFinalLocationBoundary
+        ? nextEpubLocationIndex(
+            currentPosition.location,
+            currentPosition.totalLocations,
+          )
         : null;
 
       if (nextLocationIndex !== null) {
@@ -260,17 +308,18 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
   previewProgress(progression: number): EpubProgressPreview {
     const book = this.requireBook();
-    const totalPages = this.getTotalPages();
+    const totalLocations = this.getTotalLocations();
 
-    if (!this.locationsReady || totalPages === null) {
+    if (!this.locationsReady || totalLocations === null) {
       throw new Error("EPUB locations are not ready.");
     }
 
     const nextProgression = clampProgressValue(progression);
     const cfi = book.locations.cfiFromPercentage(nextProgression);
-    const page = progressionToEpubPage(nextProgression, totalPages);
+    const location = progressionToEpubLocation(nextProgression, totalLocations);
     const href =
       getSectionHrefForCfi(book, cfi) ?? this.lastPosition?.locator.href ?? "";
+    const publicationPageLabel = this.getPublicationPageLabel(href, cfi);
 
     return {
       locator: {
@@ -280,8 +329,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
         progression: nextProgression,
       },
       progression: nextProgression,
-      page,
-      totalPages,
+      location,
+      totalLocations,
+      publicationPageLabel,
       locationsReady: true,
     };
   }
@@ -290,7 +340,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     const book = this.requireBook();
     const rendition = this.requireRendition();
 
-    if (!this.locationsReady || this.getTotalPages() === null) {
+    if (!this.locationsReady || this.getTotalLocations() === null) {
       throw new Error("EPUB locations are not ready.");
     }
 
@@ -302,14 +352,14 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private async goToLocationIndex(locationIndex: number): Promise<void> {
     const book = this.requireBook();
     const rendition = this.requireRendition();
-    const totalPages = this.getTotalPages();
+    const totalLocations = this.getTotalLocations();
 
-    if (totalPages === null) {
+    if (totalLocations === null) {
       return;
     }
 
     const clampedIndex = Math.min(
-      totalPages - 1,
+      totalLocations - 1,
       Math.max(0, Math.floor(locationIndex)),
     );
     const cfi = book.locations.cfiFromLocation(clampedIndex) as unknown;
@@ -322,8 +372,11 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   }
 
   setSpreadMode(mode: EpubSpreadMode): EpubSpreadState {
+    this.onLayoutInvalidated?.("spread");
     this.spreadMode = mode;
-    return this.applySpreadMode(true);
+    const nextState = this.applySpreadMode(true);
+    void this.restoreCurrentPositionAfterReflow();
+    return nextState;
   }
 
   async setTheme(theme: ReaderTheme): Promise<void> {
@@ -333,10 +386,12 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       return;
     }
 
+    this.onLayoutInvalidated?.("theme");
     this.rendition.themes.register(EPUB_THEME_NAME, buildEpubThemeRules(theme));
     this.rendition.themes.select(EPUB_THEME_NAME);
     this.rendition.themes.font(theme.fontFamily);
     this.rendition.themes.fontSize(`${theme.fontSize}px`);
+    await this.restoreCurrentPositionAfterReflow();
   }
 
   async search(query: string): Promise<SearchHit<EpubLocator>[]> {
@@ -450,8 +505,28 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     });
 
     rendition.on("rendered", (_section: unknown, view: EpubRenderedView) => {
-      this.observeSelectionDocument(view.document ?? view.contents?.document);
+      const contentDocument = view.document ?? view.contents?.document;
+      this.labelRenderedFrame(view, contentDocument);
+      this.observeSelectionDocument(contentDocument);
     });
+  }
+
+  private labelRenderedFrame(
+    view: EpubRenderedView,
+    contentDocument: Document | undefined,
+  ): void {
+    const frame =
+      view.iframe ??
+      (view.element?.querySelector("iframe") as HTMLIFrameElement | null) ??
+      (contentDocument?.defaultView?.frameElement as HTMLIFrameElement | null);
+
+    if (frame === null || frame === undefined) {
+      return;
+    }
+
+    const documentTitle = contentDocument?.title.trim() ?? "";
+    frame.title =
+      documentTitle === "" ? "EPUB publication content" : `${documentTitle} content`;
   }
 
   private async captureSelection(cfiRange: string): Promise<void> {
@@ -510,11 +585,16 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     document.addEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
     document.addEventListener("keyup", handleKeyUp);
     document.addEventListener("keydown", handleKeyDown);
+    const cleanupImageBridge =
+      this.onImageActivate === undefined
+        ? null
+        : registerEpubImageBridge(document, this.onImageActivate);
     this.selectionCleanupCallbacks.push(() => {
       document.removeEventListener("selectionchange", notifyIfSelectionEmpty);
       document.removeEventListener("pointerdown", deferredNotifyIfSelectionEmpty);
       document.removeEventListener("keyup", handleKeyUp);
       document.removeEventListener("keydown", handleKeyDown);
+      cleanupImageBridge?.();
     });
   }
 
@@ -573,6 +653,41 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return this.locationsPromise;
   }
 
+  private async generatePublicationPageList(
+    book: EpubBook,
+    comparator: EpubCfiComparator,
+  ): Promise<void> {
+    if (this.publicationPageListPromise !== null) {
+      return this.publicationPageListPromise;
+    }
+
+    this.publicationPageListPromise = (async () => {
+      const cached = parseCachedPublicationPageList(
+        this.cachedPublicationPageList,
+        comparator,
+      );
+      const boundaries = cached ?? (await loadPublicationPageList(book, comparator));
+
+      if (this.book !== book) {
+        return;
+      }
+
+      this.publicationPageList = boundaries;
+
+      if (cached === null) {
+        this.onPublicationPageListGenerated?.(serializePublicationPageList(boundaries));
+      }
+
+      await this.reportCurrentPosition();
+    })().catch(() => {
+      if (this.book === book) {
+        this.publicationPageList = [];
+      }
+    });
+
+    return this.publicationPageListPromise;
+  }
+
   private async reportCurrentPosition(): Promise<void> {
     if (this.rendition === null) {
       return;
@@ -584,20 +699,23 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onRelocated?.(position);
   }
 
-  private locationToPosition(location: Location | EpubLocationLike): EpubPosition {
+  private locationToPosition(
+    renditionLocation: Location | EpubLocationLike,
+  ): EpubPosition {
     const book = this.requireBook();
-    const start = getLocationStart(location);
-    const totalPages = this.getTotalPages();
-    const locationsReady = this.locationsReady && totalPages !== null;
-    const pageIndex = locationsReady ? getLocationIndex(book, start) : null;
-    const page =
-      locationsReady && totalPages !== null && pageIndex !== null
-        ? Math.min(totalPages, Math.max(1, pageIndex + 1))
+    const start = getLocationStart(renditionLocation);
+    const totalLocations = this.getTotalLocations();
+    const locationsReady = this.locationsReady && totalLocations !== null;
+    const locationIndex = locationsReady ? getLocationIndex(book, start) : null;
+    const location =
+      locationsReady && totalLocations !== null && locationIndex !== null
+        ? Math.min(totalLocations, Math.max(1, locationIndex + 1))
         : null;
     const progression = locationsReady
-      ? resolveProgression(book, start, pageIndex, totalPages)
+      ? resolveProgression(book, start, locationIndex, totalLocations)
       : null;
     const href = start.href ?? getSectionHrefForCfi(book, start.cfi) ?? "";
+    const publicationPageLabel = this.getPublicationPageLabel(href, start.cfi);
     const locator: EpubLocator = {
       kind: "epub",
       href,
@@ -608,22 +726,46 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     return {
       locator,
       progression,
-      page,
-      totalPages: locationsReady ? totalPages : null,
+      location,
+      totalLocations: locationsReady ? totalLocations : null,
+      publicationPageLabel,
       displayedPage: normalizePositiveInteger(start.displayed?.page),
       displayedTotal: normalizePositiveInteger(start.displayed?.total),
       locationsReady,
     };
   }
 
-  private getTotalPages(): number | null {
+  private getPublicationPageLabel(
+    href: string,
+    cfi: string | undefined,
+  ): string | null {
+    if (
+      this.book === null ||
+      this.cfiComparator === null ||
+      this.publicationPageList.length === 0
+    ) {
+      return null;
+    }
+
+    const section = getSpineSectionForTarget(this.book, cfi ?? href);
+
+    return section === null
+      ? null
+      : findPublicationPageLabel(
+          this.publicationPageList,
+          { cfi, spineIndex: section.index },
+          this.cfiComparator,
+        );
+  }
+
+  private getTotalLocations(): number | null {
     if (this.book === null || !this.locationsReady) {
       return null;
     }
 
-    const totalPages = this.book.locations.length();
+    const totalLocations = this.book.locations.length();
 
-    return totalPages > 0 ? totalPages : null;
+    return totalLocations > 0 ? totalLocations : null;
   }
 
   private getRenderedSpreadOption(): "none" | "auto" {
@@ -681,14 +823,18 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(() => {
+        this.onLayoutInvalidated?.("resize");
         this.applySpreadMode(false);
+        void this.restoreCurrentPositionAfterReflow();
       });
       this.resizeObserver.observe(this.container);
       return;
     }
 
     this.windowResizeHandler = () => {
+      this.onLayoutInvalidated?.("resize");
       this.applySpreadMode(false);
+      void this.restoreCurrentPositionAfterReflow();
     };
     window.addEventListener("resize", this.windowResizeHandler);
   }
@@ -701,6 +847,27 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       window.removeEventListener("resize", this.windowResizeHandler);
       this.windowResizeHandler = null;
     }
+  }
+
+  private restoreCurrentPositionAfterReflow(): Promise<void> {
+    if (this.reflowPromise !== null) {
+      return this.reflowPromise;
+    }
+
+    const target = this.lastPosition?.locator.cfi ?? this.lastPosition?.locator.href;
+
+    if (this.rendition === null || target === undefined || target.length === 0) {
+      return Promise.resolve();
+    }
+
+    const rendition = this.rendition;
+    this.reflowPromise = Promise.resolve(rendition.display(target)).finally(() => {
+      if (this.rendition === rendition) {
+        this.reflowPromise = null;
+      }
+    });
+
+    return this.reflowPromise;
   }
 
   private requireBook(): EpubBook {
@@ -784,11 +951,23 @@ function getSectionHrefForCfi(book: EpubBook, cfi: string | undefined): string |
   }
 }
 
+function getSpineSectionForTarget(
+  book: EpubBook,
+  target: string,
+): { href: string; index: number } | null {
+  try {
+    const section = book.spine.get(target);
+    return section === undefined ? null : { href: section.href, index: section.index };
+  } catch {
+    return null;
+  }
+}
+
 function resolveProgression(
   book: EpubBook,
   start: EpubLocationLike,
-  pageIndex: number | null,
-  totalPages: number | null,
+  locationIndex: number | null,
+  totalLocations: number | null,
 ): number | null {
   const percentage = clampProgress(start.percentage);
 
@@ -804,40 +983,43 @@ function resolveProgression(
     }
   }
 
-  if (pageIndex !== null && totalPages !== null && totalPages > 1) {
-    return clampProgressValue(pageIndex / (totalPages - 1));
+  if (locationIndex !== null && totalLocations !== null && totalLocations > 1) {
+    return clampProgressValue(locationIndex / (totalLocations - 1));
   }
 
   return null;
 }
 
-export function progressionToEpubPage(progression: number, totalPages: number): number {
-  const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
-  const pageIndex = Math.ceil(
-    (normalizedTotalPages - 1) * clampProgressValue(progression),
+export function progressionToEpubLocation(
+  progression: number,
+  totalLocations: number,
+): number {
+  const normalizedTotalLocations = Math.max(1, Math.floor(totalLocations));
+  const locationIndex = Math.ceil(
+    (normalizedTotalLocations - 1) * clampProgressValue(progression),
   );
 
-  return Math.min(normalizedTotalPages, Math.max(1, pageIndex + 1));
+  return Math.min(normalizedTotalLocations, Math.max(1, locationIndex + 1));
 }
 
 export function nextEpubLocationIndex(
-  page: number | null,
-  totalPages: number | null,
+  location: number | null,
+  totalLocations: number | null,
 ): number | null {
   if (
-    page === null ||
-    totalPages === null ||
-    !Number.isFinite(page) ||
-    !Number.isFinite(totalPages)
+    location === null ||
+    totalLocations === null ||
+    !Number.isFinite(location) ||
+    !Number.isFinite(totalLocations)
   ) {
     return null;
   }
 
-  if (page < 1 || totalPages < 2 || page >= totalPages) {
+  if (location < 1 || totalLocations < 2 || location >= totalLocations) {
     return null;
   }
 
-  return Math.min(totalPages - 1, Math.max(0, Math.floor(page)));
+  return Math.min(totalLocations - 1, Math.max(0, Math.floor(location)));
 }
 
 function normalizePositiveInteger(value: number | undefined): number | null {
@@ -898,6 +1080,13 @@ export function buildEpubThemeRules(
     },
     "a, a:visited": {
       color: theme.mode === "dark" ? "#f3bc55" : "#2f5d62",
+    },
+    ".reader-epub-viewable-image": {
+      cursor: "zoom-in !important",
+    },
+    ".reader-epub-viewable-image:focus-visible": {
+      outline: "3px solid #f3bc55 !important",
+      "outline-offset": "3px !important",
     },
     "::selection": {
       background: "rgba(243, 188, 85, 0.32)",
