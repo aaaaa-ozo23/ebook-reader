@@ -51,13 +51,19 @@ async function captureTransitionKeyframes(
   for (const fraction of [0.25, 0.5, 0.75]) {
     await page.evaluate(
       ({ currentTime }) => {
-        const animations = document.getAnimations().filter((animation) => {
-          const target = (animation.effect as KeyframeEffect | null)?.target;
-          return (
-            target instanceof Element &&
-            target.closest(".reader-transition-layer") !== null
-          );
-        });
+        const layer = document.querySelector(".reader-transition-layer");
+        const animations = [
+          ...document.getAnimations().filter((animation) => {
+            const target = (animation.effect as KeyframeEffect | null)?.target;
+            return (
+              target instanceof Element &&
+              target.closest(".reader-transition-layer") === layer
+            );
+          }),
+          ...Array.from(
+            layer?.querySelectorAll<HTMLIFrameElement>("iframe") ?? [],
+          ).flatMap((frame) => frame.contentDocument?.getAnimations() ?? []),
+        ];
 
         for (const animation of animations) {
           animation.pause();
@@ -66,23 +72,102 @@ async function captureTransitionKeyframes(
       },
       { currentTime: duration * fraction },
     );
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
     await page.screenshot({
       path: `D:\\tl-temp\\ebook-reader-stage10x-${mode}-${Math.round(fraction * 100)}.png`,
     });
   }
 
   await page.evaluate(() => {
-    for (const animation of document.getAnimations()) {
-      const target = (animation.effect as KeyframeEffect | null)?.target;
-      if (
-        target instanceof Element &&
-        target.closest(".reader-transition-layer") !== null
-      ) {
+    const layer = document.querySelector(".reader-transition-layer");
+    const animations = [
+      ...document.getAnimations().filter((animation) => {
+        const target = (animation.effect as KeyframeEffect | null)?.target;
+        return (
+          target instanceof Element &&
+          target.closest(".reader-transition-layer") === layer
+        );
+      }),
+      ...Array.from(layer?.querySelectorAll<HTMLIFrameElement>("iframe") ?? []).flatMap(
+        (frame) => frame.contentDocument?.getAnimations() ?? [],
+      ),
+    ];
+    for (const animation of animations) {
+      if (animation.playState !== "finished") {
         animation.play();
       }
     }
   });
   return true;
+}
+
+async function readTransitionSnapshotOffsets(
+  page: Page,
+  mode: "slide" | "cover" | "page-curl",
+): Promise<{ current: number; target: number }> {
+  const layer = page.locator(`.reader-transition-layer[data-mode="${mode}"]`);
+  await layer.waitFor({ state: "visible", timeout: 1200 });
+
+  return page.evaluate(() => {
+    const transitionLayer = document.querySelector<HTMLElement>(
+      ".reader-transition-layer",
+    );
+    if (transitionLayer === null) {
+      throw new Error("Transition layer disappeared before snapshot inspection");
+    }
+
+    const animations = document.getAnimations().filter((animation) => {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      return (
+        target instanceof Element &&
+        target.closest(".reader-transition-layer") === transitionLayer
+      );
+    });
+    for (const animation of animations) {
+      animation.pause();
+    }
+
+    const readOffset = (kind: "current" | "target") => {
+      const frame = transitionLayer.querySelector<HTMLIFrameElement>(
+        `.reader-transition-layer__frame--${kind} .reader-transition-snapshot__frame`,
+      );
+      const left = Number.parseFloat(frame?.style.left ?? "");
+      const scrollLeft = Number.parseFloat(
+        frame?.dataset.readerSnapshotScrollLeft ?? "",
+      );
+      const bodyLeft = Number.parseFloat(frame?.contentDocument?.body.style.left ?? "");
+      if (
+        !Number.isFinite(left) ||
+        !Number.isFinite(scrollLeft) ||
+        !Number.isFinite(bodyLeft) ||
+        bodyLeft !== -scrollLeft
+      ) {
+        throw new Error(
+          `Missing positioned ${kind} EPUB snapshot: ${JSON.stringify({
+            bodyLeft: frame?.contentDocument?.body.style.left,
+            frameCount: transitionLayer.querySelectorAll(
+              `.reader-transition-layer__frame--${kind} .reader-transition-snapshot__frame`,
+            ).length,
+            layout: frame?.parentElement?.dataset.layout,
+            left: frame?.style.left,
+            scrollLeft: frame?.dataset.readerSnapshotScrollLeft,
+          })}`,
+        );
+      }
+      return left + bodyLeft;
+    };
+    const offsets = { current: readOffset("current"), target: readOffset("target") };
+
+    for (const animation of animations) {
+      animation.play();
+    }
+    return offsets;
+  });
 }
 
 async function expectNoSeriousAccessibilityViolations(
@@ -714,6 +799,8 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     }
   });
   await page.getByRole("button", { name: "Next" }).click();
+  const smoothOffsets = await readTransitionSnapshotOffsets(page, "slide");
+  expect(smoothOffsets.target).toBeLessThan(smoothOffsets.current);
   expect(await captureTransitionKeyframes(page, "slide", 280)).toBe(true);
   await expect
     .poll(() =>
@@ -742,6 +829,8 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     }
   });
   await page.getByRole("button", { name: "Next" }).click();
+  const coverOffsets = await readTransitionSnapshotOffsets(page, "cover");
+  expect(coverOffsets.target).toBeLessThan(coverOffsets.current);
   expect(await captureTransitionKeyframes(page, "cover", 320)).toBe(true);
   await expect
     .poll(() =>
@@ -788,6 +877,8 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
       }
     });
     await page.getByRole("button", { name: "Next" }).click();
+    const realisticOffsets = await readTransitionSnapshotOffsets(page, "page-curl");
+    expect(realisticOffsets.target).toBeLessThan(realisticOffsets.current);
     const captured = await captureTransitionKeyframes(page, "page-curl", 650);
     await expect(epubLocationInput).not.toHaveValue(initialTransitionLocation);
     await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
@@ -807,6 +898,8 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   }
   expect(pageCurlVerified).toBe(true);
   await page.getByRole("button", { name: "Previous" }).click();
+  const previousOffsets = await readTransitionSnapshotOffsets(page, "page-curl");
+  expect(previousOffsets.target).toBeGreaterThan(previousOffsets.current);
   await expect(epubLocationInput).toHaveValue(initialTransitionLocation);
   await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
 

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   animateIsolatedPageTransition,
   captureEpubRenditionSnapshot,
+  captureEpubRenditionSnapshotAfterLayout,
   capturePageSnapshot,
   PAGE_TRANSITION_DURATIONS,
   serializeSanitizedDocument,
@@ -12,6 +13,7 @@ const originalAnimate = HTMLElement.prototype.animate;
 
 afterEach(() => {
   HTMLElement.prototype.animate = originalAnimate;
+  vi.restoreAllMocks();
   document.body.replaceChildren();
 });
 
@@ -35,6 +37,7 @@ describe("isolated page transition layer", () => {
     const host = document.createElement("div");
     const current = document.createElement("article");
     const target = document.createElement("article");
+    Object.defineProperty(host, "clientWidth", { value: 400 });
     document.body.append(host);
 
     await animateIsolatedPageTransition(
@@ -48,7 +51,8 @@ describe("isolated page transition layer", () => {
     );
 
     expect(animate).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(-100%, 0, 0)");
+    expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
+    expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(100%, 0, 0)");
     expect(animate.mock.calls[0]?.[1]).toEqual(
       expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS.slide }),
     );
@@ -171,6 +175,109 @@ describe("isolated page transition layer", () => {
     expect(snapshotFrame?.getAttribute("srcdoc")).not.toContain("contenteditable");
   });
 
+  it("preserves the live EPUB page viewport instead of resetting to chapter start", () => {
+    const host = document.createElement("div");
+    const liveFrame = document.createElement("iframe");
+    host.append(liveFrame);
+    document.body.append(host);
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: 100, top: 40, width: 400 }),
+    );
+    vi.spyOn(liveFrame, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: -700, top: 40, width: 2400 }),
+    );
+
+    const snapshot = captureEpubRenditionSnapshot(host);
+    const snapshotFrame = snapshot?.node.querySelector<HTMLIFrameElement>("iframe");
+
+    expect(snapshot?.node).toHaveAttribute("data-layout", "positioned");
+    expect(snapshotFrame?.style.left).toBe("0px");
+    expect(snapshotFrame?.style.top).toBe("0px");
+    expect(snapshotFrame?.style.width).toBe("400px");
+    expect(snapshotFrame?.style.height).toBe("600px");
+    expect(snapshotFrame?.dataset.readerSnapshotScrollLeft).toBe("800");
+  });
+
+  it("captures different previous and next EPUB page offsets", () => {
+    const host = document.createElement("div");
+    const liveFrame = document.createElement("iframe");
+    host.append(liveFrame);
+    document.body.append(host);
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: 0, top: 0, width: 400 }),
+    );
+    const frameRect = vi
+      .spyOn(liveFrame, "getBoundingClientRect")
+      .mockReturnValueOnce(createRect({ height: 600, left: -800, top: 0, width: 2400 }))
+      .mockReturnValueOnce(
+        createRect({ height: 600, left: -400, top: 0, width: 2400 }),
+      );
+
+    const laterPage = captureEpubRenditionSnapshot(host);
+    const previousPage = captureEpubRenditionSnapshot(host);
+
+    expect(frameRect).toHaveBeenCalledTimes(2);
+    expect(
+      laterPage?.node.querySelector<HTMLIFrameElement>("iframe")?.dataset
+        .readerSnapshotScrollLeft,
+    ).toBe("800");
+    expect(
+      previousPage?.node.querySelector<HTMLIFrameElement>("iframe")?.dataset
+        .readerSnapshotScrollLeft,
+    ).toBe("400");
+  });
+
+  it("ignores zero-sized preloaded frames when a visible EPUB view is available", () => {
+    const host = document.createElement("div");
+    const visibleFrame = document.createElement("iframe");
+    const preloadedFrame = document.createElement("iframe");
+    host.append(visibleFrame, preloadedFrame);
+    document.body.append(host);
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: 0, top: 0, width: 400 }),
+    );
+    vi.spyOn(visibleFrame, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: -400, top: 0, width: 2400 }),
+    );
+    vi.spyOn(preloadedFrame, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 0, left: 0, top: 0, width: 0 }),
+    );
+
+    const snapshot = captureEpubRenditionSnapshot(host);
+
+    expect(snapshot?.node).toHaveAttribute("data-layout", "positioned");
+    expect(snapshot?.node.querySelectorAll("iframe")).toHaveLength(1);
+    expect(
+      snapshot?.node.querySelector<HTMLIFrameElement>("iframe")?.dataset
+        .readerSnapshotScrollLeft,
+    ).toBe("400");
+  });
+
+  it("waits for a transient zero-sized EPUB view to finish layout", async () => {
+    const host = document.createElement("div");
+    const liveFrame = document.createElement("iframe");
+    host.append(liveFrame);
+    document.body.append(host);
+    vi.spyOn(host, "getBoundingClientRect").mockReturnValue(
+      createRect({ height: 600, left: 0, top: 0, width: 400 }),
+    );
+    vi.spyOn(liveFrame, "getBoundingClientRect")
+      .mockReturnValueOnce(createRect({ height: 0, left: 0, top: 0, width: 0 }))
+      .mockReturnValue(createRect({ height: 600, left: -400, top: 0, width: 2400 }));
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+
+    const snapshot = await captureEpubRenditionSnapshotAfterLayout(host);
+
+    expect(snapshot?.node).toHaveAttribute("data-layout", "positioned");
+    expect(
+      snapshot?.node.querySelector<HTMLIFrameElement>("iframe")?.dataset
+        .readerSnapshotScrollLeft,
+    ).toBe("400");
+  });
+
   it("serializes resources against the already loaded document base", () => {
     const sourceDocument = document.implementation.createHTMLDocument("Snapshot");
     const image = sourceDocument.createElement("img");
@@ -183,3 +290,27 @@ describe("isolated page transition layer", () => {
     expect(serialized).toContain("images/figure.png");
   });
 });
+
+function createRect({
+  height,
+  left,
+  top,
+  width,
+}: {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}): DOMRect {
+  return {
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    toJSON: () => ({}),
+    top,
+    width,
+    x: left,
+    y: top,
+  };
+}
