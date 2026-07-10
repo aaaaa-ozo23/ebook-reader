@@ -8,6 +8,8 @@ export interface PageSnapshot {
   node: HTMLElement;
 }
 
+const SNAPSHOT_LOAD_TIMEOUT_MS = 180;
+
 export function capturePageSnapshot(element: HTMLElement | null): PageSnapshot | null {
   if (element === null) {
     return null;
@@ -16,10 +18,52 @@ export function capturePageSnapshot(element: HTMLElement | null): PageSnapshot |
   return { node: element.cloneNode(true) as HTMLElement };
 }
 
+export function captureEpubRenditionSnapshot(
+  element: HTMLElement | null,
+): PageSnapshot | null {
+  if (element === null) {
+    return null;
+  }
+
+  const sourceFrames = Array.from(element.querySelectorAll("iframe")).filter(
+    (frame) => frame.contentDocument?.documentElement !== undefined,
+  );
+
+  if (sourceFrames.length === 0) {
+    return null;
+  }
+
+  const snapshot = document.createElement("div");
+  snapshot.className = "reader-transition-snapshot";
+  snapshot.style.setProperty(
+    "--reader-transition-column-count",
+    String(sourceFrames.length),
+  );
+
+  for (const sourceFrame of sourceFrames) {
+    const sourceDocument = sourceFrame.contentDocument;
+
+    if (sourceDocument === null) {
+      continue;
+    }
+
+    const snapshotFrame = document.createElement("iframe");
+    snapshotFrame.className = "reader-transition-snapshot__frame";
+    snapshotFrame.setAttribute("aria-hidden", "true");
+    snapshotFrame.setAttribute("sandbox", "allow-same-origin");
+    snapshotFrame.setAttribute("tabindex", "-1");
+    snapshotFrame.srcdoc = serializeSanitizedDocument(sourceDocument);
+    snapshot.append(snapshotFrame);
+  }
+
+  return snapshot.childElementCount === 0 ? null : { node: snapshot };
+}
+
 export async function animateIsolatedPageTransition(
   host: HTMLElement,
   frames: PageTransitionFrames<PageSnapshot>,
   mode: Exclude<PageTransitionMode, "none">,
+  signal?: AbortSignal,
 ): Promise<void> {
   const layer = document.createElement("div");
   const currentFrame = createFrame("current", frames.current.node);
@@ -31,6 +75,12 @@ export async function animateIsolatedPageTransition(
   host.append(layer);
 
   try {
+    await waitForSnapshotFrames(layer, signal);
+
+    if (signal?.aborted === true) {
+      return;
+    }
+
     if (
       typeof currentFrame.animate !== "function" ||
       typeof targetFrame.animate !== "function"
@@ -42,10 +92,88 @@ export async function animateIsolatedPageTransition(
       mode === "slide"
         ? createSlideAnimations(currentFrame, targetFrame, frames.direction)
         : createPageCurlAnimations(currentFrame, targetFrame, frames.direction);
-    await Promise.all(animations.map((animation) => animation.finished));
+    const handleAbort = () => {
+      for (const animation of animations) {
+        animation.cancel();
+      }
+    };
+    signal?.addEventListener("abort", handleAbort, { once: true });
+
+    try {
+      await Promise.all(animations.map((animation) => animation.finished));
+    } catch (error) {
+      if (!isAbortSignalAborted(signal)) {
+        throw error;
+      }
+    } finally {
+      signal?.removeEventListener("abort", handleAbort);
+    }
   } finally {
     layer.remove();
   }
+}
+
+function isAbortSignalAborted(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
+export function serializeSanitizedDocument(sourceDocument: Document): string {
+  const documentElement = sourceDocument.documentElement.cloneNode(true) as HTMLElement;
+  documentElement
+    .querySelectorAll("script, form, iframe, frame, frameset, object, embed")
+    .forEach((element) => element.remove());
+  documentElement
+    .querySelectorAll("[autofocus], [contenteditable]")
+    .forEach((element) => {
+      element.removeAttribute("autofocus");
+      element.removeAttribute("contenteditable");
+    });
+  documentElement
+    .querySelectorAll("input, button, select, textarea")
+    .forEach((element) => {
+      element.setAttribute("disabled", "");
+      element.setAttribute("tabindex", "-1");
+    });
+
+  const head = documentElement.querySelector("head");
+  if (head !== null && sourceDocument.baseURI.length > 0) {
+    const base = sourceDocument.createElement("base");
+    base.href = sourceDocument.baseURI;
+    head.prepend(base);
+  }
+
+  return `<!doctype html>${documentElement.outerHTML}`;
+}
+
+async function waitForSnapshotFrames(
+  layer: HTMLElement,
+  signal?: AbortSignal,
+): Promise<void> {
+  const frames = Array.from(
+    layer.querySelectorAll<HTMLIFrameElement>(".reader-transition-snapshot__frame"),
+  );
+
+  if (frames.length === 0 || signal?.aborted === true) {
+    return;
+  }
+
+  await Promise.all(
+    frames.map(
+      (frame) =>
+        new Promise<void>((resolve) => {
+          let timeoutId = 0;
+          const finish = () => {
+            window.clearTimeout(timeoutId);
+            frame.removeEventListener("load", finish);
+            signal?.removeEventListener("abort", finish);
+            resolve();
+          };
+          frame.addEventListener("load", finish, { once: true });
+          signal?.addEventListener("abort", finish, { once: true });
+          timeoutId = window.setTimeout(finish, SNAPSHOT_LOAD_TIMEOUT_MS);
+        }),
+    ),
+  );
 }
 
 function createFrame(kind: "current" | "target", snapshot: HTMLElement): HTMLElement {

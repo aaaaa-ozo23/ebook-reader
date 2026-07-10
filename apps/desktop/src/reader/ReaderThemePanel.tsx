@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- theme tokens and their panel share one reader-only module */
 import { useCallback, type ChangeEvent } from "react";
-import type { ReaderTheme, ReaderThemeMode } from "@reader/core";
+import type { PageTransitionMode, ReaderTheme, ReaderThemeMode } from "@reader/core";
 import { Button } from "../components/ui/Button";
 
 export const THEME_PRESETS: Record<
@@ -52,15 +52,23 @@ export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string>
 
 interface ReaderThemePanelProps {
   isOpen: boolean;
+  pageTransition?: PageTransitionMode;
+  pageTransitionError?: string | null;
+  pageTransitionModes?: readonly PageTransitionMode[];
   theme: ReaderTheme;
   themeError: string | null;
+  onPageTransitionChange?: (mode: PageTransitionMode) => void;
   onThemeChange: (theme: ReaderTheme) => void;
 }
 
 export function ReaderThemePanel({
   isOpen,
+  pageTransition,
+  pageTransitionError,
+  pageTransitionModes,
   theme,
   themeError,
+  onPageTransitionChange,
   onThemeChange,
 }: ReaderThemePanelProps) {
   const handleModeChange = useCallback(
@@ -154,9 +162,41 @@ export function ReaderThemePanel({
         value={theme.pageMargin}
         onChange={handleNumberChange("pageMargin")}
       />
+      {pageTransition !== undefined &&
+      pageTransitionModes !== undefined &&
+      onPageTransitionChange !== undefined ? (
+        <div className="theme-field">
+          <span>Page transition</span>
+          <div
+            className="reader-theme-transition-options"
+            role="group"
+            aria-label="EPUB page transition"
+          >
+            {pageTransitionModes.map((mode) => (
+              <Button
+                key={mode}
+                variant="ghost"
+                aria-pressed={pageTransition === mode}
+                onClick={() => onPageTransitionChange(mode)}
+              >
+                {formatTransitionLabel(mode)}
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {themeError !== null ? <p className="theme-error">{themeError}</p> : null}
+      {pageTransitionError !== null && pageTransitionError !== undefined ? (
+        <p className="theme-error">{pageTransitionError}</p>
+      ) : null}
     </aside>
   );
+}
+
+function formatTransitionLabel(mode: PageTransitionMode): string {
+  return mode === "page-curl"
+    ? "Page curl"
+    : `${mode[0]?.toUpperCase()}${mode.slice(1)}`;
 }
 
 interface ThemeSliderProps {

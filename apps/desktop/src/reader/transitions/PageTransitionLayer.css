@@ -26,6 +26,25 @@
   margin: 0;
 }
 
+.reader-transition-snapshot {
+  display: grid;
+  grid-template-columns: repeat(
+    var(--reader-transition-column-count, 1),
+    minmax(0, 1fr)
+  );
+  width: 100%;
+  height: 100%;
+  background: var(--txt-reader-background, var(--ds-color-reading-paper));
+}
+
+.reader-transition-snapshot__frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  pointer-events: none;
+  background: transparent;
+}
+
 .reader-transition-layer__frame--target {
   z-index: -1;
 }
