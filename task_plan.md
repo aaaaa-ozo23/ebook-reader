@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 10：in_progress；正式首轮按固定顺序实施 10.1–10.4，并在 10.4 中期门禁通过后停止，不创建 10.5、不合入 `main`。
+大阶段 10：in_progress；正式首轮 10.1–10.4 已完成并通过中期门禁，当前停止于 10.4，不创建 10.5、不合入 `main`。
 
 ## 分支策略
 
@@ -409,7 +409,7 @@
 | 10.1 page-list 模型 | complete | EPUB3/EPUB2 原始标签、href/fragment/CFI 边界、`epub_page_list_v1` 缓存；90 Vitest、lint/build/format 通过 |
 | 10.2 页码与 Location UI | complete | 出版物 `Page <label>` 与生成 `Location x / y` 分离；90 Vitest、lint/build/format、generated EPUB Playwright 通过 |
 | 10.3 图片资源桥接 | complete | HTML `img` / SVG `image` 事件代理、语义装饰、已加载 URL 复用和完整清理；96 Vitest、lint/build/format 通过 |
-| 10.4 图片查看器 | pending | 等待 10.3 合回集成分支 |
+| 10.4 图片查看器 | complete | 专用 Modal 查看器、Fit/100%/100%–500% 缩放、滚轮/pinch/拖动、Esc/Close 和 iframe 焦点恢复；101 Vitest、12 Playwright、Rust 36 tests、Tauri build、中期门禁通过 |
 | 10.5–10.7 | deferred | 本轮在 10.4 后停止 |
 
 ## 大阶段 11：TXT 分页

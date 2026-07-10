@@ -198,6 +198,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       openAs: "epub",
       replacements: "blobUrl",
     });
+    await book.opened;
     const rendition = book.renderTo(this.container, {
       allowScriptedContent: false,
       flow: "paginated",

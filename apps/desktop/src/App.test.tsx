@@ -2371,6 +2371,60 @@ describe("App", () => {
     );
   });
 
+  it("opens EPUB images in a modal viewer and restores iframe focus", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-image-viewer",
+      title: "Illustrated EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { name: "Illustrated EPUB" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    const reader = await screen.findByRole("main", { name: "EPUB reader" });
+    const adapterOptions = EpubReaderAdapterMock.mock.calls[0]?.[0] as
+      | {
+          onImageActivate?: (resource: {
+            sourceUrl: string;
+            accessibleName: string;
+            description?: string;
+            naturalWidth?: number;
+            naturalHeight?: number;
+            trigger: Element;
+          }) => void;
+        }
+      | undefined;
+    const trigger = document.createElement("img");
+    trigger.tabIndex = 0;
+    reader.querySelector(".reader-epub-host")?.append(trigger);
+    trigger.focus();
+
+    adapterOptions?.onImageActivate?.({
+      sourceUrl: "blob:botanical-plate",
+      accessibleName: "Dog rose plate",
+      description: "Botanical illustration",
+      naturalWidth: 1200,
+      naturalHeight: 800,
+      trigger,
+    });
+
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Dog rose plate" })).toBeVisible();
+    await user.keyboard("{ArrowRight}");
+    expect(epubAdapterNextMock).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(screen.getByText("125%")).toBeVisible();
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
   it("opens a PDF book in the reader shell", async () => {
     const user = userEvent.setup();
     const pdfBook = createBook({

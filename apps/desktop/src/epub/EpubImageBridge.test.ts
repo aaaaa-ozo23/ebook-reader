@@ -3,6 +3,40 @@ import { describe, expect, it, vi } from "vitest";
 import { registerEpubImageBridge, resolveEpubImageResource } from "./EpubImageBridge";
 
 describe("EPUB image bridge", () => {
+  it("recognizes HTML image elements owned by an EPUB iframe", () => {
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument;
+    expect(frameDocument).not.toBeNull();
+    if (frameDocument === null) {
+      return;
+    }
+
+    frameDocument.body.innerHTML = '<img src="plate.svg" alt="Botanical plate" />';
+    const image = frameDocument.querySelector("img");
+    const frameWindow = frame.contentWindow as (Window & typeof globalThis) | null;
+    expect(frameWindow).not.toBeNull();
+    if (frameWindow === null) {
+      return;
+    }
+    const onActivate = vi.fn();
+    const cleanup = registerEpubImageBridge(frameDocument, onActivate);
+
+    expect(image).toHaveAttribute("role", "button");
+    image?.dispatchEvent(
+      new frameWindow.MouseEvent("click", { bubbles: true, button: 0 }),
+    );
+    expect(onActivate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibleName: "Botanical plate",
+        trigger: image,
+      }),
+    );
+
+    cleanup();
+    frame.remove();
+  });
+
   it("decorates loaded HTML images and activates them by click", () => {
     document.body.innerHTML = `
       <figure>

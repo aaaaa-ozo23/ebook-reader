@@ -77,8 +77,9 @@ export function resolveEpubImageResource(candidate: Element): EpubImageResource 
   const description = getImageDescription(candidate, accessibleName);
   const dimensions = getNaturalImageDimensions(candidate);
 
-  if (candidate instanceof HTMLImageElement) {
-    if (candidate.complete && candidate.naturalWidth <= 0) {
+  if (isHtmlImage(candidate)) {
+    const image = candidate as HTMLImageElement;
+    if (image.complete && image.naturalWidth <= 0) {
       return null;
     }
   }
@@ -144,7 +145,7 @@ function getImageCandidates(document: Document): Element[] {
 }
 
 function findImageCandidate(target: EventTarget | null): Element | null {
-  if (!(target instanceof Element)) {
+  if (!isElementNode(target)) {
     return null;
   }
 
@@ -153,7 +154,7 @@ function findImageCandidate(target: EventTarget | null): Element | null {
 
 function isSupportedImage(candidate: Element): boolean {
   return (
-    candidate instanceof HTMLImageElement ||
+    isHtmlImage(candidate) ||
     (candidate.namespaceURI === "http://www.w3.org/2000/svg" &&
       candidate.localName.toLowerCase() === "image")
   );
@@ -161,19 +162,22 @@ function isSupportedImage(candidate: Element): boolean {
 
 function isDecorativeImage(candidate: Element): boolean {
   const role = candidate.getAttribute("role")?.toLowerCase();
+  const computedStyle =
+    candidate.ownerDocument.defaultView?.getComputedStyle(candidate);
   return (
     candidate.getAttribute("aria-hidden") === "true" ||
     role === "none" ||
     role === "presentation" ||
-    candidate.closest("[hidden]") !== null
+    candidate.closest("[hidden]") !== null ||
+    computedStyle?.display === "none" ||
+    computedStyle?.visibility === "hidden"
   );
 }
 
 function getResolvedImageSource(candidate: Element): string | null {
-  const value =
-    candidate instanceof HTMLImageElement
-      ? candidate.currentSrc || candidate.getAttribute("src") || ""
-      : getSvgImageHref(candidate);
+  const value = isHtmlImage(candidate)
+    ? (candidate as HTMLImageElement).currentSrc || candidate.getAttribute("src") || ""
+    : getSvgImageHref(candidate);
   const trimmedValue = value.trim();
 
   if (trimmedValue === "") {
@@ -238,11 +242,12 @@ function getNaturalImageDimensions(candidate: Element): {
   naturalWidth?: number;
   naturalHeight?: number;
 } {
-  if (candidate instanceof HTMLImageElement) {
-    return candidate.naturalWidth > 0 && candidate.naturalHeight > 0
+  if (isHtmlImage(candidate)) {
+    const image = candidate as HTMLImageElement;
+    return image.naturalWidth > 0 && image.naturalHeight > 0
       ? {
-          naturalWidth: candidate.naturalWidth,
-          naturalHeight: candidate.naturalHeight,
+          naturalWidth: image.naturalWidth,
+          naturalHeight: image.naturalHeight,
         }
       : {};
   }
@@ -259,6 +264,23 @@ function getNaturalImageDimensions(candidate: Element): {
     naturalHeight > 0
     ? { naturalWidth, naturalHeight }
     : {};
+}
+
+function isElementNode(target: EventTarget | null): target is Element {
+  return (
+    typeof target === "object" &&
+    target !== null &&
+    "nodeType" in target &&
+    target.nodeType === 1
+  );
+}
+
+function isHtmlImage(candidate: Element): boolean {
+  return (
+    candidate.localName.toLowerCase() === "img" &&
+    (candidate.namespaceURI === null ||
+      candidate.namespaceURI === "http://www.w3.org/1999/xhtml")
+  );
 }
 
 function focusImageCandidate(candidate: Element) {

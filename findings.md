@@ -413,3 +413,14 @@
 - 可查看图片只在运行时增加 `role=button`、`tabindex=0`、`aria-haspopup=dialog` 和 focus class；cleanup 精确恢复 EPUB 原属性，不修改源文件。
 - 激活资源只读取 HTML `currentSrc`/`src` 或 SVG `href`，不调用 `fetch`、`URL.createObjectURL`、导出或远程解析；损坏图片在激活时用 `complete && naturalWidth <= 0` 安全忽略。
 - 可访问名称按图片 aria-label/alt/title/figcaption、SVG aria-label/title 回退，最终兜底为 `EPUB image`；触发元素随资源一起传给 10.4 用于关闭后焦点恢复。
+
+### 10.4 图片查看器
+
+- 图片查看器复用共享 Modal/focus 规范，但关闭后不让 Modal 自行恢复主文档焦点；EPUB 内容层负责优先恢复 iframe 内触发图片，触发元素失效时回退 `.reader-epub-host`。
+- Fit 是适应当前舞台的比例，可以低于 100%；100% 表示图片原始像素比例。手动缩放从 100% 到 500%，25% 步进，Reset 回到 Fit。
+- 浏览器把 React `onWheel` 注册为 passive listener 时无法阻止页面滚动；查看器舞台改用原生 `wheel` listener `{ passive: false }` 处理 Ctrl/trackpad pinch 和滚轮缩放。
+- 平移边界按舞台尺寸、图片原始尺寸和当前缩放计算；图片小于舞台时对应轴锁定为 0，大于舞台时限制在可见边界内。
+- EPUB iframe 图片来自不同 JavaScript realm，不能依赖主窗口的 `instanceof HTMLImageElement`；桥接判断改为 `nodeType/localName/namespaceURI` 结构检查，避免真实 iframe 图片无法打开。
+- 图片资源较早查询封面或 rendition 时需等待 `book.opened`，避免 epub.js 在资源替换路径上出现竞态；封面提取和 reader open 均在打开完成后继续。
+- 375×760 使用全屏紧凑布局：标题、Close 和工具栏换行在顶部，控制目标保持至少 44px，底部滑杆与帮助文案不产生横向溢出。
+- Browser/IAB 已按前端 QA 约定优先尝试，但本轮工具端在 `incrementalAriaSnapshot` 缺失处失败；真实三格式和三视口验证改由项目 Playwright、截图和 `view_image` 完成，并记录为工具限制而非产品缺陷。

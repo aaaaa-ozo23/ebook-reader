@@ -36,6 +36,8 @@ import {
   saveReadingProgress,
   saveReaderCache,
 } from "../tauri/reader";
+import type { EpubImageResource } from "../epub/EpubImageBridge";
+import { EpubImageViewer } from "../epub/EpubImageViewer";
 import {
   EpubReaderAdapter,
   type EpubPosition,
@@ -536,6 +538,7 @@ export interface EpubReaderContentProps {
   onActiveTocItemChange: (tocItemId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
+  onBlockingOverlayChange: (isOpen: boolean) => void;
   onCurrentLocatorChange: (locator: EpubLocator) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
   onReaderKeyDown: (event: globalThis.KeyboardEvent) => void;
@@ -554,6 +557,7 @@ export function EpubReaderContent({
   onActiveTocItemChange,
   onAnnotationActivate,
   onBackToLibrary,
+  onBlockingOverlayChange,
   onCurrentLocatorChange,
   onNavigationActionsChange,
   onReaderKeyDown,
@@ -574,6 +578,7 @@ export function EpubReaderContent({
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
+  const [activeImage, setActiveImage] = useState<EpubImageResource | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
@@ -649,6 +654,56 @@ export function EpubReaderContent({
     [onActiveTocItemChange],
   );
 
+  const handleImageActivate = useCallback(
+    (resource: EpubImageResource) => {
+      onSelectionCleared();
+      onSelectionChange(null);
+      setActiveImage(resource);
+      onBlockingOverlayChange(true);
+    },
+    [onBlockingOverlayChange, onSelectionChange, onSelectionCleared],
+  );
+
+  const handleImageViewerClose = useCallback(() => {
+    const trigger = activeImage?.trigger;
+    setActiveImage(null);
+    onBlockingOverlayChange(false);
+    window.requestAnimationFrame(() => {
+      const ownerFrame =
+        trigger?.isConnected === true
+          ? (trigger.ownerDocument.defaultView?.frameElement as HTMLElement | null)
+          : null;
+      const canRestoreTrigger =
+        trigger?.ownerDocument === document || ownerFrame?.isConnected === true;
+      const focusTarget = canRestoreTrigger ? trigger : hostRef.current;
+      const focusableTarget = focusTarget as Element & {
+        focus?: (options?: FocusOptions) => void;
+      };
+      if (ownerFrame?.isConnected === true) {
+        ownerFrame.focus({ preventScroll: true });
+      }
+      focusableTarget?.focus?.({ preventScroll: true });
+      if (ownerFrame?.isConnected === true && trigger !== undefined) {
+        window.requestAnimationFrame(() => {
+          const triggerOwnsFocus =
+            ownerFrame.ownerDocument.activeElement === ownerFrame &&
+            trigger.ownerDocument.activeElement === trigger;
+
+          if (!triggerOwnsFocus) {
+            hostRef.current?.focus({ preventScroll: true });
+          }
+        });
+      }
+    });
+  }, [activeImage, onBlockingOverlayChange]);
+
+  useEffect(
+    () => () => {
+      onBlockingOverlayChange(false);
+    },
+    [onBlockingOverlayChange],
+  );
+
   const handleRelocated = useCallback(
     (nextPosition: EpubPosition) => {
       positionRef.current = nextPosition;
@@ -687,6 +742,8 @@ export function EpubReaderContent({
     async function openEpub() {
       setIsLoading(true);
       setError(null);
+      setActiveImage(null);
+      onBlockingOverlayChange(false);
       setIsAdapterReadyForHighlights(false);
       setPosition(null);
       setPreviewPosition(null);
@@ -732,6 +789,7 @@ export function EpubReaderContent({
           theme: themeRef.current,
           onRelocated: handleRelocated,
           onKeyDown: onReaderKeyDown,
+          onImageActivate: handleImageActivate,
           onLocationsGenerated: (serializedLocations) => {
             void saveReaderCache(
               book,
@@ -826,6 +884,8 @@ export function EpubReaderContent({
   }, [
     book,
     handleRelocated,
+    handleImageActivate,
+    onBlockingOverlayChange,
     onSearchProviderChange,
     onReaderKeyDown,
     onSelectionChange,
@@ -1114,6 +1174,7 @@ export function EpubReaderContent({
             ref={hostRef}
             className="reader-epub-host"
             aria-hidden={error !== null}
+            tabIndex={-1}
           />
         </div>
         <div className="reader-epub-controls" aria-label="EPUB navigation">
@@ -1211,6 +1272,12 @@ export function EpubReaderContent({
           </div>
         </div>
       </article>
+      <EpubImageViewer
+        key={activeImage?.sourceUrl ?? "closed"}
+        isOpen={activeImage !== null}
+        onClose={handleImageViewerClose}
+        resource={activeImage}
+      />
     </section>
   );
 }

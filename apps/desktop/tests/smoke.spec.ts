@@ -403,6 +403,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="chapter-one" href="chapter-one.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter-two" href="chapter-two.xhtml" media-type="application/xhtml+xml"/>
+    <item id="plate" href="plate.svg" media-type="image/svg+xml"/>
   </manifest>
   <spine>
     <itemref idref="chapter-one"/>
@@ -438,9 +439,34 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   <head><title>Chapter One</title></head>
   <body>
     <h1 id="page-i">Chapter One</h1>
+    <figure>
+      <img src="plate.svg" alt="Botanical test plate" title="Generated illustration" style="display:block;width:360px;max-width:90%;margin:1rem auto" />
+      <figcaption>Botanical illustration fixture</figcaption>
+    </figure>
     ${chapterOneParagraphs}
   </body>
 </html>`,
+      },
+      {
+        name: "OPS/plate.svg",
+        content: `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <rect width="800" height="600" fill="#f7f1e3"/>
+  <path d="M410 520C390 400 420 260 510 90" fill="none" stroke="#405a38" stroke-width="18"/>
+  <g fill="#d98f9a" stroke="#8d5962" stroke-width="5">
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(-18 510 150)"/>
+    <ellipse cx="515" cy="150" rx="95" ry="52" transform="rotate(54 515 150)"/>
+    <ellipse cx="515" cy="150" rx="95" ry="52" transform="rotate(126 515 150)"/>
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(198 510 150)"/>
+    <ellipse cx="510" cy="150" rx="95" ry="52" transform="rotate(270 510 150)"/>
+  </g>
+  <circle cx="510" cy="150" r="38" fill="#d8b256"/>
+  <g fill="#66805b" stroke="#405a38" stroke-width="4">
+    <ellipse cx="365" cy="350" rx="105" ry="42" transform="rotate(24 365 350)"/>
+    <ellipse cx="510" cy="305" rx="110" ry="44" transform="rotate(-28 510 305)"/>
+  </g>
+  <text x="36" y="554" font-family="Georgia, serif" font-size="30" fill="#463e32">Plate IV — Rosa canina</text>
+</svg>`,
       },
       {
         name: "OPS/chapter-two.xhtml",
@@ -566,6 +592,61 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   });
   await expect(epubLocationInput).toBeEnabled();
   await expect(page.getByText("Page i").first()).toBeVisible();
+
+  const imageFrame = page.frameLocator(".reader-epub-host iframe");
+  const viewableImage = imageFrame.getByRole("button", {
+    name: "Botanical test plate",
+  });
+  await expect(viewableImage).toBeVisible();
+  await viewableImage.click();
+  const imageDialog = page.getByRole("dialog");
+  await expect(imageDialog).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Botanical test plate" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByText("125%")).toBeVisible();
+  const imageStage = page.getByRole("region", {
+    name: "Zoomed image: Botanical test plate",
+  });
+  const imageStageBox = await imageStage.boundingBox();
+  expect(imageStageBox).not.toBeNull();
+  if (imageStageBox !== null) {
+    await page.mouse.move(
+      imageStageBox.x + imageStageBox.width / 2,
+      imageStageBox.y + imageStageBox.height / 2,
+    );
+    await page.mouse.wheel(0, -100);
+    await expect(page.getByText("150%")).toBeVisible();
+    const initialPan = await page
+      .locator(".epub-image-viewer__image-shell")
+      .evaluate((element) => element.getAttribute("style"));
+    await page.mouse.down();
+    await page.mouse.move(
+      imageStageBox.x + imageStageBox.width / 2 + 70,
+      imageStageBox.y + imageStageBox.height / 2 + 40,
+    );
+    await page.mouse.up();
+    await expect
+      .poll(() =>
+        page
+          .locator(".epub-image-viewer__image-shell")
+          .evaluate((element) => element.getAttribute("style")),
+      )
+      .not.toBe(initialPan);
+  }
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-image-viewer-desktop.png",
+    });
+  }
+  await page.keyboard.press("Escape");
+  await expect(imageDialog).toBeHidden();
+  await expect
+    .poll(() =>
+      viewableImage.evaluate((image) => image.ownerDocument.activeElement === image),
+    )
+    .toBe(true);
 
   const initialEpubLocationState = await readEpubLocationState(page);
   const targetEpubLocation = Math.min(
@@ -743,9 +824,84 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     expect(underlineStyles.lineDashes.every((dash) => dash !== "none")).toBe(true);
   }
 
-  await page.getByRole("button", { name: "Theme" }).click();
-  await page.getByRole("button", { name: "dark" }).click();
-  await expect(reader).toHaveAttribute("data-reader-theme", "dark");
+  await page.getByRole("button", { name: "Chapter One" }).click();
+  await expect(viewableImage).toBeVisible();
+  for (const mode of ["light", "sepia", "green", "dark"]) {
+    await page.getByRole("button", { name: "Theme" }).click();
+    await page.getByRole("button", { name: mode }).click();
+    await expect(reader).toHaveAttribute("data-reader-theme", mode);
+    await viewableImage.click();
+    await expect(imageDialog).toBeVisible();
+
+    if (mode !== "dark") {
+      await page.keyboard.press("Escape");
+      await expect(imageDialog).toBeHidden();
+    }
+  }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(() =>
+      page
+        .locator(".epub-image-viewer__image-shell img")
+        .evaluate(
+          (image) =>
+            Number.parseFloat(getComputedStyle(image).transitionDuration) <= 0.00001,
+        ),
+    )
+    .toBe(true);
+  await page.setViewportSize({ width: 375, height: 760 });
+  await expect(imageDialog).toHaveCSS("width", "375px");
+  const mobileViewerLayout = await page.evaluate(() => ({
+    bodyWidth: document.body.scrollWidth,
+    buttonHeights: Array.from(
+      document.querySelectorAll(".epub-image-viewer-modal button"),
+    ).map((button) => Math.round(button.getBoundingClientRect().height)),
+    closeRight:
+      document
+        .querySelector<HTMLButtonElement>(
+          '.epub-image-viewer-modal button[aria-label="Close image viewer"]',
+        )
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    footerRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer__footer")
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    modalRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer-modal")
+        ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
+    panHintRight:
+      document
+        .querySelector<HTMLElement>(".epub-image-viewer__pan-hint")
+        ?.getBoundingClientRect().right ?? 0,
+    viewportWidth: document.documentElement.clientWidth,
+  }));
+  expect(mobileViewerLayout.bodyWidth).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.buttonHeights.every((height) => height >= 44)).toBe(true);
+  expect(mobileViewerLayout.modalRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.closeRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.footerRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  expect(mobileViewerLayout.panHintRight).toBeLessThanOrEqual(
+    mobileViewerLayout.viewportWidth,
+  );
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage10-image-viewer-mobile.png",
+    });
+  }
+  await page.keyboard.press("Escape");
+  await expect(imageDialog).toBeHidden();
+  await expect(page.locator(".reader-epub-host")).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(viewableImage).toBeVisible();
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
   await expect(

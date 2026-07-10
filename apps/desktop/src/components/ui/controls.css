@@ -172,6 +172,17 @@
   font-size: 1.1rem;
 }
 
+.ui-modal__heading {
+  min-width: 0;
+}
+
+.ui-modal__heading p {
+  margin: var(--ds-space-1) 0 0;
+  color: var(--ds-color-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
 .ui-modal__body {
   padding: var(--ds-space-4);
 }

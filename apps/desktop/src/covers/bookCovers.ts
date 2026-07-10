@@ -48,7 +48,7 @@ async function extractEpubCover(book: Book): Promise<Uint8Array> {
   });
 
   try {
-    await epub.ready;
+    await epub.opened;
     const coverUrl = await epub.coverUrl();
 
     if (coverUrl === null || coverUrl.length === 0) {
