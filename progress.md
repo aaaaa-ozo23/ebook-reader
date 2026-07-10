@@ -1768,3 +1768,4 @@
 - **最终门禁：** `pnpm.cmd check` passed（core 5、desktop 110）；Cargo fmt check + Rust 36 tests passed；Playwright 12/12 passed；Browser/IAB 1280×800、640×640、375×760 与 console clean passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
 - **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 39.33 kB、CSS 6.88 kB，继续异步；bookCovers 1.25 kB gzip。
 - **边界：** 未新增依赖、schema、格式或版本；未执行发布。下一步仅按计划提交验收文档、合回集成分支、`--no-ff` 合入 `main` 并快进同步集成分支。
+- **最终 Git 路由：** 10.7 以 `089e9be` `--no-ff` 合回并推送 `codex/v0.2.0-integration`；集成分支再以 `5cc9bc5` `--no-ff` 合入 `main`。本收口提交随后同时推送到 `main`，并由集成分支 fast-forward 同步，结束大阶段 10。
