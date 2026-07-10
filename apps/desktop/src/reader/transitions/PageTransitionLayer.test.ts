@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   animateIsolatedPageTransition,
+  captureEpubRenditionSnapshot,
   capturePageSnapshot,
+  serializeSanitizedDocument,
 } from "./PageTransitionLayer";
 
 const originalAnimate = HTMLElement.prototype.animate;
@@ -63,5 +65,43 @@ describe("isolated page transition layer", () => {
     );
 
     expect(host.querySelector(".reader-transition-layer")).toBeNull();
+  });
+
+  it("builds sandboxed EPUB snapshots and strips active document content", () => {
+    const host = document.createElement("div");
+    const liveFrame = document.createElement("iframe");
+    host.append(liveFrame);
+    document.body.append(host);
+    liveFrame.contentDocument?.open();
+    liveFrame.contentDocument?.write(`<!doctype html><html><head></head><body>
+      <script>window.parent.hacked = true</script>
+      <form><input autofocus value="draft"><button>Submit</button></form>
+      <iframe src="about:blank"></iframe>
+      <p contenteditable="true">Readable page</p>
+    </body></html>`);
+    liveFrame.contentDocument?.close();
+
+    const snapshot = captureEpubRenditionSnapshot(host);
+    const snapshotFrame = snapshot?.node.querySelector("iframe");
+
+    expect(snapshotFrame).toHaveAttribute("sandbox", "allow-same-origin");
+    expect(snapshotFrame).toHaveAttribute("aria-hidden", "true");
+    expect(snapshotFrame?.getAttribute("srcdoc")).toContain("Readable page");
+    expect(snapshotFrame?.getAttribute("srcdoc")).not.toContain("<script");
+    expect(snapshotFrame?.getAttribute("srcdoc")).not.toContain("<form");
+    expect(snapshotFrame?.getAttribute("srcdoc")).not.toContain("<iframe");
+    expect(snapshotFrame?.getAttribute("srcdoc")).not.toContain("contenteditable");
+  });
+
+  it("serializes resources against the already loaded document base", () => {
+    const sourceDocument = document.implementation.createHTMLDocument("Snapshot");
+    const image = sourceDocument.createElement("img");
+    image.src = "images/figure.png";
+    sourceDocument.body.append(image);
+
+    const serialized = serializeSanitizedDocument(sourceDocument);
+
+    expect(serialized).toContain("<base href=");
+    expect(serialized).toContain("images/figure.png");
   });
 });

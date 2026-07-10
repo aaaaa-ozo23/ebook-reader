@@ -593,6 +593,61 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(epubLocationInput).toBeEnabled();
   await expect(page.getByText("Page i").first()).toBeVisible();
 
+  await page.evaluate(() => {
+    const transitionModes: string[] = [];
+    Object.assign(window, { __readerTransitionModes: transitionModes });
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (
+            node instanceof HTMLElement &&
+            node.classList.contains("reader-transition-layer")
+          ) {
+            transitionModes.push(node.dataset.mode ?? "unknown");
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as typeof window & { __readerTransitionModes?: string[] })
+            .__readerTransitionModes ?? [],
+      ),
+    )
+    .toContain("slide");
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Theme" }).click();
+  const transitionSettings = page.getByRole("group", {
+    name: "EPUB page transition",
+  });
+  await expect(transitionSettings).toBeVisible();
+  await transitionSettings.getByRole("button", { name: "None" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.evaluate(() => {
+    const state = window as typeof window & { __readerTransitionModes?: string[] };
+    if (state.__readerTransitionModes !== undefined) {
+      state.__readerTransitionModes.length = 0;
+    }
+  });
+  await page.getByRole("button", { name: "Previous" }).click();
+  await page.waitForTimeout(250);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as typeof window & { __readerTransitionModes?: string[] })
+          .__readerTransitionModes ?? [],
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Theme" }).click();
+  await transitionSettings.getByRole("button", { name: "Slide" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+
   const imageFrame = page.frameLocator(".reader-epub-host iframe");
   const viewableImage = imageFrame.getByRole("button", {
     name: "Botanical test plate",

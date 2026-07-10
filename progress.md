@@ -1708,3 +1708,26 @@
 - **Browser/IAB：** 已优先尝试 Browser/IAB，但工具端 `incrementalAriaSnapshot is not a function` 阻塞继续检查；本轮以项目 Playwright、生成截图和 `view_image` 完成三格式/三视口/视觉回归，并在最终交付中说明该工具限制。
 - **包体观测：** 书架入口保持 66.85 kB gzip；ReaderShell JS 因 EPUB page-list、图片桥接和图片查看器增至 36.44 kB gzip，继续作为异步 reader chunk，不进入书架入口。
 - **停止边界：** 10.4 完成后停止，不创建 10.5、不合并 `main`、不改版本、不发布。
+
+## 2026-07-10 大阶段 10：10.5–10.7 续行
+
+- **状态：** in_progress
+- **当前阶段：** 10.5 EPUB 平滑切换
+- **分支基线：** `codex/v0.2.0-integration` 与 origin 同步于 `df6aa7c`；`main`/origin 仍为 `1113bc6`；仅保留用户未跟踪 `AGENTS.md`。
+- **执行边界：** 顺序完成 10.5、10.6、10.7；每个子阶段按实现、测试、文档提交后 `--no-ff` 合回并推送集成分支。10.7 最终门禁通过后才合入 `main`，随后快进同步集成分支；不改版本、不发布、不新增依赖/schema/格式。
+- 已恢复外部 `PLAN (2).md`、三份跟踪文件、阶段 9 transition 原型与阶段 10 中期结果；已确认 10.5 复用既有 controller/layer 并接通 EPUB 真实导航。
+- **过程问题：** 首轮代码定位命令包含两个不存在路径，组合检查以 exit 1 结束；未产生改动。已记录真实文件布局，后续使用 `rg --files` 和模块旁测试定位。
+- **过程问题：** 10.5 首轮并行定向验证在 TypeScript 构建中因 `AbortSignal.aborted` 被控制流错误窄化为 `false | undefined` 而失败；测试/lint 输出被并行失败中断。已改用独立 helper 读取异步后的 signal 状态，并补充 controller `finally` 清理。
+- **过程问题：** 第二轮定向验证暴露两类独立问题：`App.test.tsx` 的完整 Tauri mock 未补新增 experience exports，导致 41 个 ReaderShell 用例连锁卸载；同时 React refs lint 禁止在 render 期构造并写入 controller ref。已补默认偏好 mock，并把 controller 初始化移入 effect、事件回调只在交互期读取 ref。
+- **过程问题：** 第三轮 lint/build 已通过，69 个定向测试仅 iframe 键盘导航的旧同步断言失败；事务控制器现在异步执行真实导航，测试改为等待 adapter `next()`，并补充偏好保存与快照净化覆盖。
+- **过程问题：** 首轮 generated EPUB Playwright 的功能断言通过，但净化快照 iframe 使用空 sandbox，导致已加载 blob 资源被当作不可访问本地资源并产生 localStorage sandbox console 错误。快照仍移除全部脚本/表单/嵌套 frame；sandbox 改为仅 `allow-same-origin`（不含 `allow-scripts`），以复用当前 rendition 已加载资源并保持只读隔离。
+
+### 10.5 EPUB 平滑切换
+
+- **状态：** complete
+- **分支：** `codex/stage10-epub-slide-transition`
+- 已将 `ReaderExperiencePreferences.epub.transition` 接入生产 ReaderShell 与 Theme 面板；None/Slide 可持久化，已有 page-curl 值在 10.6 前仅运行时降级为 Slide且不覆盖保存值。
+- EPUB previous/next 与 iframe 键盘导航共用事务 controller；快照为净化、sandboxed、只读 iframe，实时 rendition DOM 不进入动画层，动画层始终 `aria-hidden`/`pointer-events:none` 并在结束/取消后删除。
+- resize、theme、spread 和非相邻跳转会取消视觉动画与 pending 方向；adapter 以当前 CFI/href 完成 reflow 恢复。成功导航由 commit 立即 flush pending progress。
+- **定向验证：** 73 Vitest passed（controller/layer/adapter/App）；desktop lint passed；desktop build passed；generated EPUB Chromium Playwright 1/1 passed，覆盖 Slide 层出现/清理、None 无动画和 console clean。
+- **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 38.70 kB gzip，继续保持异步 reader chunk；未新增依赖。

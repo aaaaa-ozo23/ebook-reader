@@ -185,3 +185,51 @@ describe("EPUB rendition image lifecycle", () => {
     expect(onImageActivate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("EPUB layout invalidation", () => {
+  it("cancels animation consumers and restores the current CFI after theme changes", async () => {
+    const onLayoutInvalidated = vi.fn();
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-layout",
+      container: document.createElement("div"),
+      onLayoutInvalidated,
+      sourceUrl: "blob:epub-layout",
+      theme: defaultReaderTheme,
+    });
+    const display = vi.fn(async () => undefined);
+    const register = vi.fn();
+    const select = vi.fn();
+    const font = vi.fn();
+    const fontSize = vi.fn();
+    const internals = adapter as unknown as {
+      lastPosition: {
+        locator: { kind: "epub"; href: string; cfi: string };
+      } | null;
+      rendition: {
+        display: typeof display;
+        themes: {
+          register: typeof register;
+          select: typeof select;
+          font: typeof font;
+          fontSize: typeof fontSize;
+        };
+      } | null;
+    };
+    internals.lastPosition = {
+      locator: {
+        kind: "epub",
+        href: "OPS/chapter.xhtml",
+        cfi: "epubcfi(/6/2!/4/2/2:0)",
+      },
+    };
+    internals.rendition = {
+      display,
+      themes: { register, select, font, fontSize },
+    };
+
+    await adapter.setTheme({ ...defaultReaderTheme, fontSize: 24 });
+
+    expect(onLayoutInvalidated).toHaveBeenCalledWith("theme");
+    expect(display).toHaveBeenCalledWith("epubcfi(/6/2!/4/2/2:0)");
+  });
+});

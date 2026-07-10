@@ -424,3 +424,18 @@
 - 图片资源较早查询封面或 rendition 时需等待 `book.opened`，避免 epub.js 在资源替换路径上出现竞态；封面提取和 reader open 均在打开完成后继续。
 - 375×760 使用全屏紧凑布局：标题、Close 和工具栏换行在顶部，控制目标保持至少 44px，底部滑杆与帮助文案不产生横向溢出。
 - Browser/IAB 已按前端 QA 约定优先尝试，但本轮工具端在 `incrementalAriaSnapshot` 缺失处失败；真实三格式和三视口验证改由项目 Playwright、截图和 `view_image` 完成，并记录为工具限制而非产品缺陷。
+
+### 10.5 平滑切换启动
+
+- 当前 `PageTransitionController` 已具备首个 + 最终方向合并、捕获/展示失败可恢复、真实导航失败不 commit 的事务语义；10.5 应直接接入 EPUB，不在内容层复制队列。
+- 当前 `PageTransitionLayer` 已提供 slide/page-curl 原型，但 `capturePageSnapshot` 只是普通 `cloneNode`；EPUB 接入前必须增加 iframe 文档的只读净化快照，移除 script、form、嵌套 frame 与交互状态。
+- EPUB 的 pending progress 已由 relocated 事件进入 750ms 延迟写入；事务 commit 需要主动刷新这一 pending 值，并取消旧 timer，才能保证成功导航每次只写一次。
+- 本轮检查命令曾引用不存在的 `ReaderFormatContents.test.tsx` 和 `components/ReaderThemePanel.tsx`；实际测试集中在 `App.test.tsx` / 各模块旁，主题面板位于 reader 模块，后续按 `rg --files` 结果定位。
+
+### 10.5 平滑切换完成
+
+- EPUB 按钮与 iframe ArrowLeft/ArrowRight 都通过 `PageTransitionController`；30 次快速输入仍只执行首个与最终方向，整个 single/double spread 只捕获一组 current/target 快照。
+- 快照使用不含 `allow-scripts` 的 sandboxed iframe；源文档序列化前移除 script、form、iframe/frame/frameset、object/embed，清除 autofocus/contenteditable 并禁用表单控件。保留 `allow-same-origin` 只为复用当前 rendition 的 blob/样式资源，避免重新 fetch 或创建 blob。
+- theme、resize、spread、目录/Location/slider 跳转会取消活动视觉动画并清空 pending 方向；adapter 使用最后一个 CFI/href 重新 display，保持重排后的阅读锚点。
+- relocated 仍只更新一个 pending progress；controller commit 清除 750ms timer 并立即 flush，因而每次成功真实导航只保存一次。None/reduced-motion 直接导航，不捕获快照。
+- 保存的 `page-curl` 在本阶段只映射为运行时 Slide，偏好对象不写回；Theme 面板只显示 None/Slide。10.6 将启用真实 Page curl。

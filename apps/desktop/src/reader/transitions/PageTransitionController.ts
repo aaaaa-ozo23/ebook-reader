@@ -13,6 +13,7 @@ interface PageTransitionControllerOptions<TSnapshot> {
   animate: (
     frames: PageTransitionFrames<TSnapshot>,
     mode: Exclude<PageTransitionMode, "none">,
+    signal: AbortSignal,
   ) => Promise<void>;
   captureCurrent: () => Promise<TSnapshot | null> | TSnapshot | null;
   captureTarget: () => Promise<TSnapshot | null> | TSnapshot | null;
@@ -27,11 +28,17 @@ export class PageTransitionController<TSnapshot> {
   private state: PageTransitionControllerState = "idle";
   private pendingDirection: PageDirection | null = null;
   private runningPromise: Promise<void> | null = null;
+  private activeAbortController: AbortController | null = null;
 
   constructor(private readonly options: PageTransitionControllerOptions<TSnapshot>) {}
 
   getState(): PageTransitionControllerState {
     return this.state;
+  }
+
+  cancel(): void {
+    this.pendingDirection = null;
+    this.activeAbortController?.abort();
   }
 
   request(direction: PageDirection): Promise<void> {
@@ -60,30 +67,39 @@ export class PageTransitionController<TSnapshot> {
   }
 
   private async runTransaction(direction: PageDirection): Promise<void> {
-    const mode = this.options.getMode();
-    const canAnimate = mode !== "none" && !this.options.prefersReducedMotion();
-    const current = canAnimate
-      ? await this.captureSafely(this.options.captureCurrent)
-      : null;
+    const abortController = new AbortController();
+    this.activeAbortController = abortController;
+    try {
+      const mode = this.options.getMode();
+      const canAnimate = mode !== "none" && !this.options.prefersReducedMotion();
+      const current = canAnimate
+        ? await this.captureSafely(this.options.captureCurrent)
+        : null;
 
-    await this.options.navigate(direction);
+      await this.options.navigate(direction);
 
-    if (canAnimate && current !== null) {
-      const target = await this.captureSafely(this.options.captureTarget);
+      if (canAnimate && current !== null && !abortController.signal.aborted) {
+        const target = await this.captureSafely(this.options.captureTarget);
 
-      if (target !== null) {
-        try {
-          await this.options.animate(
-            { current, direction, target },
-            mode as Exclude<PageTransitionMode, "none">,
-          );
-        } catch (error) {
-          this.options.onRecoverableError?.(error);
+        if (target !== null) {
+          try {
+            await this.options.animate(
+              { current, direction, target },
+              mode as Exclude<PageTransitionMode, "none">,
+              abortController.signal,
+            );
+          } catch (error) {
+            this.options.onRecoverableError?.(error);
+          }
         }
       }
-    }
 
-    await this.options.commit(direction);
+      await this.options.commit(direction);
+    } finally {
+      if (this.activeAbortController === abortController) {
+        this.activeAbortController = null;
+      }
+    }
   }
 
   private async captureSafely(
