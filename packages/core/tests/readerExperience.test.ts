@@ -18,12 +18,14 @@ describe("reader experience contracts", () => {
     expectTypeOf<EpubViewMode>().toEqualTypeOf<"paginated">();
     expectTypeOf<TxtViewMode>().toEqualTypeOf<"scroll" | "paginated">();
     expectTypeOf<PdfViewMode>().toEqualTypeOf<"single" | "double" | "continuous">();
-    expectTypeOf<PageTransitionMode>().toEqualTypeOf<"none" | "slide" | "page-curl">();
+    expectTypeOf<PageTransitionMode>().toEqualTypeOf<
+      "none" | "slide" | "cover" | "page-curl"
+    >();
   });
 
   it("uses the v0.2 defaults and format capability matrix", () => {
     expect(defaultReaderExperiencePreferences).toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "scroll", transition: "slide" },
       pdf: { viewMode: "single", transition: "slide" },
     });
@@ -35,6 +37,12 @@ describe("reader experience contracts", () => {
       "continuous",
     ]);
     expect(readerCapabilitiesByFormat.epub.pageTransitions).toEqual([
+      "none",
+      "page-curl",
+      "cover",
+      "slide",
+    ]);
+    expect(readerCapabilitiesByFormat.txt.pageTransitions).toEqual([
       "none",
       "slide",
       "page-curl",
@@ -50,10 +58,22 @@ describe("reader experience contracts", () => {
         future: true,
       }),
     ).toEqual({
-      epub: { viewMode: "paginated", transition: "slide" },
+      epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "paginated", transition: "page-curl" },
       pdf: { viewMode: "continuous", transition: "none" },
     });
+  });
+
+  it("preserves the new cover value without changing legacy modes", () => {
+    const preferences = normalizeReaderExperiencePreferences({
+      epub: { transition: "cover" },
+      txt: { transition: "slide" },
+      pdf: { transition: "page-curl" },
+    });
+
+    expect(preferences.epub.transition).toBe("cover");
+    expect(preferences.txt.transition).toBe("slide");
+    expect(preferences.pdf.transition).toBe("page-curl");
   });
 
   it("resolves runtime-only transition overrides without changing preferences", () => {

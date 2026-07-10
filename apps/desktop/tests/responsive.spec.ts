@@ -54,7 +54,7 @@ test("renders the v0.2 design-system fixture across states and reduced motion", 
     name: "Prototype transition",
   });
   await expect(
-    prototypeTransition.getByRole("button", { name: "Slide" }),
+    prototypeTransition.getByRole("button", { name: "Smooth" }),
   ).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("button", { name: "Open settings" }).click();
