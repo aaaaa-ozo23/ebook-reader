@@ -127,6 +127,8 @@ interface EpubRenderedView {
     document?: Document;
   };
   document?: Document;
+  element?: HTMLElement;
+  iframe?: HTMLIFrameElement;
 }
 
 export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
@@ -503,8 +505,28 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     });
 
     rendition.on("rendered", (_section: unknown, view: EpubRenderedView) => {
-      this.observeSelectionDocument(view.document ?? view.contents?.document);
+      const contentDocument = view.document ?? view.contents?.document;
+      this.labelRenderedFrame(view, contentDocument);
+      this.observeSelectionDocument(contentDocument);
     });
+  }
+
+  private labelRenderedFrame(
+    view: EpubRenderedView,
+    contentDocument: Document | undefined,
+  ): void {
+    const frame =
+      view.iframe ??
+      (view.element?.querySelector("iframe") as HTMLIFrameElement | null) ??
+      (contentDocument?.defaultView?.frameElement as HTMLIFrameElement | null);
+
+    if (frame === null || frame === undefined) {
+      return;
+    }
+
+    const documentTitle = contentDocument?.title.trim() ?? "";
+    frame.title =
+      documentTitle === "" ? "EPUB publication content" : `${documentTitle} content`;
   }
 
   private async captureSelection(cfiRange: string): Promise<void> {

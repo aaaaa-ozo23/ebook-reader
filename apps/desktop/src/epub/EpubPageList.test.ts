@@ -55,6 +55,26 @@ describe("EPUB publication page-list", () => {
     ]);
   });
 
+  it("returns no publication pages for absent or unusable page lists", () => {
+    const withoutPageList = parseXml(`
+      <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+        <body><nav epub:type="toc"><ol><li><a href="chapter.xhtml">Chapter</a></li></ol></nav></body>
+      </html>
+    `);
+    const damagedPageList = parseXml(`
+      <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+        <body><nav epub:type="page-list"><ol>
+          <li><a href="">empty target</a></li>
+          <li><a href="chapter.xhtml">   </a></li>
+          <li><a href="https://example.com/page">external</a></li>
+        </ol></nav></body>
+      </html>
+    `);
+
+    expect(parsePublicationPageItems(withoutPageList)).toEqual([]);
+    expect(parsePublicationPageItems(damagedPageList)).toEqual([]);
+  });
+
   it("resolves href, fragment, and package CFI targets into spine order", async () => {
     const navigationDocument = parseXml(`
       <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
