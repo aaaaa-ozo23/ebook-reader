@@ -1179,6 +1179,15 @@ describe("App", () => {
         epub: expect.objectContaining({ transition: "none" }),
       }),
     );
+
+    await user.click(
+      within(transitionGroup).getByRole("button", { name: "Page curl" }),
+    );
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        epub: expect.objectContaining({ transition: "page-curl" }),
+      }),
+    );
   });
 
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {

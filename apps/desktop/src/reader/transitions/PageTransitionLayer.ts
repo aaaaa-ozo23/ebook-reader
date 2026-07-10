@@ -69,15 +69,21 @@ export async function animateIsolatedPageTransition(
   const currentFrame = createFrame("current", frames.current.node);
   const targetFrame = createFrame("target", frames.target.node);
   layer.className = "reader-transition-layer";
+  layer.setAttribute("aria-hidden", "true");
   layer.dataset.direction = frames.direction;
   layer.dataset.mode = mode;
+  const pageCurlDecorations =
+    mode === "page-curl" ? createPageCurlDecorations(currentFrame) : null;
   layer.append(currentFrame, targetFrame);
+  if (pageCurlDecorations !== null) {
+    layer.append(pageCurlDecorations.sheet, pageCurlDecorations.shadow);
+  }
   host.append(layer);
 
   try {
-    await waitForSnapshotFrames(layer, signal);
+    const snapshotsReady = await waitForSnapshotFrames(layer, signal);
 
-    if (signal?.aborted === true) {
+    if (!snapshotsReady || signal?.aborted === true) {
       return;
     }
 
@@ -91,7 +97,12 @@ export async function animateIsolatedPageTransition(
     const animations =
       mode === "slide"
         ? createSlideAnimations(currentFrame, targetFrame, frames.direction)
-        : createPageCurlAnimations(currentFrame, targetFrame, frames.direction);
+        : createPageCurlAnimations(
+            currentFrame,
+            targetFrame,
+            pageCurlDecorations as PageCurlDecorations,
+            frames.direction,
+          );
     const handleAbort = () => {
       for (const animation of animations) {
         animation.cancel();
@@ -148,40 +159,78 @@ export function serializeSanitizedDocument(sourceDocument: Document): string {
 async function waitForSnapshotFrames(
   layer: HTMLElement,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<boolean> {
   const frames = Array.from(
     layer.querySelectorAll<HTMLIFrameElement>(".reader-transition-snapshot__frame"),
   );
 
   if (frames.length === 0 || signal?.aborted === true) {
-    return;
+    return frames.length === 0 && signal?.aborted !== true;
   }
 
-  await Promise.all(
+  const frameResults = await Promise.all(
     frames.map(
       (frame) =>
-        new Promise<void>((resolve) => {
+        new Promise<boolean>((resolve) => {
+          if (frame.contentDocument?.readyState === "complete") {
+            resolve(true);
+            return;
+          }
+
           let timeoutId = 0;
-          const finish = () => {
+          const finish = (isReady: boolean) => {
             window.clearTimeout(timeoutId);
-            frame.removeEventListener("load", finish);
-            signal?.removeEventListener("abort", finish);
-            resolve();
+            frame.removeEventListener("load", handleLoad);
+            frame.removeEventListener("error", handleError);
+            signal?.removeEventListener("abort", handleAbort);
+            resolve(isReady);
           };
-          frame.addEventListener("load", finish, { once: true });
-          signal?.addEventListener("abort", finish, { once: true });
-          timeoutId = window.setTimeout(finish, SNAPSHOT_LOAD_TIMEOUT_MS);
+          const handleLoad = () => finish(true);
+          const handleError = () => finish(false);
+          const handleAbort = () => finish(false);
+          frame.addEventListener("load", handleLoad, { once: true });
+          frame.addEventListener("error", handleError, { once: true });
+          signal?.addEventListener("abort", handleAbort, { once: true });
+          timeoutId = window.setTimeout(() => finish(false), SNAPSHOT_LOAD_TIMEOUT_MS);
         }),
     ),
   );
+
+  return frameResults.every(Boolean);
 }
 
 function createFrame(kind: "current" | "target", snapshot: HTMLElement): HTMLElement {
   const frame = document.createElement("div");
+  const front = document.createElement("div");
   frame.className = `reader-transition-layer__frame reader-transition-layer__frame--${kind}`;
   frame.setAttribute("aria-hidden", "true");
-  frame.append(snapshot);
+  front.className = "reader-transition-layer__front";
+  front.append(snapshot);
+  frame.append(front);
   return frame;
+}
+
+interface PageCurlDecorations {
+  shadow: HTMLElement;
+  sheet: HTMLElement;
+}
+
+function createPageCurlDecorations(currentFrame: HTMLElement): PageCurlDecorations {
+  const sheet = document.createElement("div");
+  const front = document.createElement("div");
+  const back = document.createElement("div");
+  const shadow = document.createElement("div");
+  sheet.className = "reader-transition-layer__curl-sheet";
+  front.className = "reader-transition-layer__curl-sheet-front";
+  back.className = "reader-transition-layer__back";
+  sheet.setAttribute("aria-hidden", "true");
+  front.setAttribute("aria-hidden", "true");
+  back.setAttribute("aria-hidden", "true");
+  shadow.className = "reader-transition-layer__curl-shadow";
+  shadow.setAttribute("aria-hidden", "true");
+  front.style.background = getComputedStyle(currentFrame).backgroundColor;
+  sheet.append(front, back);
+  return { shadow, sheet };
 }
 
 function createSlideAnimations(
@@ -217,11 +266,14 @@ function createSlideAnimations(
 function createPageCurlAnimations(
   currentFrame: HTMLElement,
   targetFrame: HTMLElement,
+  decorations: PageCurlDecorations,
   direction: PageDirection,
 ): Animation[] {
-  const rotation = direction === "next" ? -82 : 82;
+  const { shadow, sheet } = decorations;
+  const rotation = direction === "next" ? -178 : 178;
   const origin = direction === "next" ? "left center" : "right center";
-  currentFrame.style.transformOrigin = origin;
+  sheet.style.transformOrigin = origin;
+  sheet.dataset.direction = direction;
   const options: KeyframeAnimationOptions = {
     duration: 500,
     easing: "cubic-bezier(0.32, 0, 0.2, 1)",
@@ -231,18 +283,57 @@ function createPageCurlAnimations(
   return [
     currentFrame.animate(
       [
-        { filter: "brightness(1)", transform: "perspective(1400px) rotateY(0deg)" },
+        { clipPath: "inset(0 0 0 0)", filter: "brightness(1)" },
         {
-          filter: "brightness(0.72)",
-          transform: `perspective(1400px) rotateY(${rotation}deg)`,
+          clipPath: direction === "next" ? "inset(0 28% 0 0)" : "inset(0 0 0 28%)",
+          filter: "brightness(0.88)",
+          offset: 0.34,
+        },
+        {
+          clipPath: direction === "next" ? "inset(0 76% 0 0)" : "inset(0 0 0 76%)",
+          filter: "brightness(0.68)",
+          offset: 0.72,
+        },
+        {
+          clipPath: direction === "next" ? "inset(0 100% 0 0)" : "inset(0 0 0 100%)",
+          filter: "brightness(0.92)",
         },
       ],
       options,
     ),
     targetFrame.animate(
       [
-        { opacity: 0.65, transform: "scale(0.985)" },
+        { filter: "brightness(0.78)", opacity: 0.72, transform: "scale(0.992)" },
+        { filter: "brightness(0.92)", opacity: 0.9, offset: 0.62 },
         { opacity: 1, transform: "scale(1)" },
+      ],
+      options,
+    ),
+    sheet.animate(
+      [
+        { transform: "translateX(0) rotateY(0deg)" },
+        {
+          offset: 0.48,
+          transform: `translateX(${direction === "next" ? -48 : 48}%) rotateY(${rotation * 0.52}deg)`,
+        },
+        {
+          transform: `translateX(${direction === "next" ? -96 : 96}%) rotateY(${rotation}deg)`,
+        },
+      ],
+      options,
+    ),
+    shadow.animate(
+      [
+        { opacity: 0, transform: "translateX(0)" },
+        {
+          opacity: 0.5,
+          offset: 0.48,
+          transform: `translateX(${direction === "next" ? -7 : 7}%)`,
+        },
+        {
+          opacity: 0,
+          transform: `translateX(${direction === "next" ? -18 : 18}%)`,
+        },
       ],
       options,
     ),

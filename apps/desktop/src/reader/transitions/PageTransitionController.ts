@@ -9,6 +9,13 @@ export interface PageTransitionFrames<TSnapshot> {
   target: TSnapshot;
 }
 
+export function resolvePageTransitionMode(
+  mode: PageTransitionMode,
+  isPageCurlBlocked: boolean,
+): PageTransitionMode {
+  return mode === "page-curl" && isPageCurlBlocked ? "none" : mode;
+}
+
 interface PageTransitionControllerOptions<TSnapshot> {
   animate: (
     frames: PageTransitionFrames<TSnapshot>,

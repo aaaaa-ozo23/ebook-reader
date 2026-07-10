@@ -1731,3 +1731,21 @@
 - resize、theme、spread 和非相邻跳转会取消视觉动画与 pending 方向；adapter 以当前 CFI/href 完成 reflow 恢复。成功导航由 commit 立即 flush pending progress。
 - **定向验证：** 73 Vitest passed（controller/layer/adapter/App）；desktop lint passed；desktop build passed；generated EPUB Chromium Playwright 1/1 passed，覆盖 Slide 层出现/清理、None 无动画和 console clean。
 - **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 38.70 kB gzip，继续保持异步 reader chunk；未新增依赖。
+- **合并与推送：** 实现 `553171f`、测试 `9125a1a`、文档 `11e9b9a` 已以 `--no-ff` 合回 `codex/v0.2.0-integration`（merge `aa86c62`）并推送。
+
+### 10.6 EPUB 真实翻页
+
+- **状态：** in_progress
+- **分支：** `codex/stage10-epub-page-curl`
+- 从已同步的 10.5 集成基线创建；目标为启用保存的 Page curl、500ms 3D 翻页背面/阴影/目标页揭示、浮层互斥和资源/WAAPI 失败无动画降级。
+- **过程问题：** 10.6 首轮 lint 与 68 个定向测试通过，build 仅在新动画测试中因 `vi.fn` 被推断成零参数 tuple 而失败；已按原生 `HTMLElement.animate` 签名显式标注 mock，不涉及产品代码。
+- **视觉问题：** `view_image` 检查 230ms page-curl 截图时发现 Chromium 3D iframe 合成面把 EPUB host 外区域渲染为黑色；已在动画层加入 paint containment/clip 与不透明背景，并限制 frame overflow，等待重拍确认。
+
+- **状态：** complete
+- 保存的 `page-curl` 现已直接生效，Theme 面板提供 None/Slide/Page curl；图片查看器、选择菜单、note editor/popover 打开时 page-curl 安全降级为无动画真实导航。
+- page-curl 使用 500ms WAAPI：current/target sandboxed iframe 只做裁切/揭示，独立 CSS 3D sheet 提供正反面、动态阴影和目标页亮度恢复，避免 iframe 3D 合成黑屏。
+- 快照/资源准备和 WAAPI 不可用时动画层及时销毁，真实导航与进度 commit 保持完成；reduced-motion 继续不捕获、不动画且不改保存偏好。
+- **定向验证：** desktop 108 Vitest、lint、build passed；generated EPUB Chromium Playwright 普通与视觉 QA passed，覆盖 page-curl、往返、图片查看器互斥和 console clean。
+- **Browser/IAB：** 当前 Browser 运行路径恢复可用；本地 `http://127.0.0.1:1420/` title=`Ebook Reader`、首屏非空、无 framework overlay、console warn/error 为空，截图确认书架视觉正常。受控 Browser 无 seeded EPUB 数据，真实 page-curl 由仓库 Playwright fixture 验证。
+- **视觉对照：** `view_image` 对照批准阅读器概念与 `D:\tl-temp\ebook-reader-stage10-page-curl.png`；最终重拍无 host 外黑屏，保留现有 charcoal/teal/amber/paper chrome，动画仅覆盖阅读页舞台。
+- **包体观测：** 书架入口 67.08 kB gzip；ReaderShell 39.26 kB gzip/CSS 6.88 kB gzip，继续保持异步边界；未新增依赖。

@@ -1321,6 +1321,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
+            isPageCurlBlocked={
+              isFormatOverlayOpen ||
+              selectionSnapshot !== null ||
+              noteEditor !== null ||
+              notePopover !== null
+            }
             jumpRequest={epubJumpRequest}
             theme={theme}
             transition={readerExperiencePreferences.epub.transition}
@@ -1359,13 +1365,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           isOpen={isThemePanelOpen}
           pageTransition={
             book.format === "epub"
-              ? readerExperiencePreferences.epub.transition === "none"
-                ? "none"
-                : "slide"
+              ? readerExperiencePreferences.epub.transition
               : undefined
           }
           pageTransitionError={readerExperienceError}
-          pageTransitionModes={["none", "slide"]}
+          pageTransitionModes={["none", "slide", "page-curl"]}
           theme={theme}
           themeError={themeError}
           onPageTransitionChange={handleEpubTransitionChange}
