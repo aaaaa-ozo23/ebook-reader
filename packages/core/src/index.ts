@@ -5,7 +5,7 @@ export type AnnotationKind = "highlight" | "note";
 
 export type ReaderThemeMode = "light" | "dark" | "sepia" | "green";
 
-export type PageTransitionMode = "none" | "slide" | "page-curl";
+export type PageTransitionMode = "none" | "slide" | "cover" | "page-curl";
 export type EpubViewMode = "paginated";
 export type TxtViewMode = "scroll" | "paginated";
 export type PdfViewMode = "single" | "double" | "continuous";
@@ -195,33 +195,34 @@ export const defaultReaderTheme: ReaderTheme = {
   textColor: "#25211d",
 };
 
-const PAGE_TRANSITIONS = ["none", "slide", "page-curl"] as const;
+const BASE_PAGE_TRANSITIONS = ["none", "slide", "page-curl"] as const;
+const EPUB_PAGE_TRANSITIONS = ["none", "page-curl", "cover", "slide"] as const;
 
 export const readerCapabilitiesByFormat: Readonly<
   Record<BookFormat, ReaderCapabilities>
 > = {
   epub: {
     viewModes: ["paginated"],
-    pageTransitions: PAGE_TRANSITIONS,
+    pageTransitions: EPUB_PAGE_TRANSITIONS,
     supportsPublicationPageLabels: true,
     supportsImageViewer: true,
   },
   txt: {
     viewModes: ["scroll", "paginated"],
-    pageTransitions: PAGE_TRANSITIONS,
+    pageTransitions: BASE_PAGE_TRANSITIONS,
     supportsPublicationPageLabels: false,
     supportsImageViewer: false,
   },
   pdf: {
     viewModes: ["single", "double", "continuous"],
-    pageTransitions: PAGE_TRANSITIONS,
+    pageTransitions: BASE_PAGE_TRANSITIONS,
     supportsPublicationPageLabels: false,
     supportsImageViewer: false,
   },
 };
 
 export const defaultReaderExperiencePreferences: ReaderExperiencePreferences = {
-  epub: { viewMode: "paginated", transition: "slide" },
+  epub: { viewMode: "paginated", transition: "none" },
   txt: { viewMode: "scroll", transition: "slide" },
   pdf: { viewMode: "single", transition: "slide" },
 };
@@ -237,14 +238,20 @@ export function normalizeReaderExperiencePreferences(
   return {
     epub: {
       viewMode: "paginated",
-      transition: normalizePageTransition(epub.transition),
+      transition: normalizePageTransition(
+        epub.transition,
+        defaultReaderExperiencePreferences.epub.transition,
+      ),
     },
     txt: {
       viewMode:
         txt.viewMode === "paginated" || txt.viewMode === "scroll"
           ? txt.viewMode
           : defaultReaderExperiencePreferences.txt.viewMode,
-      transition: normalizePageTransition(txt.transition),
+      transition: normalizePageTransition(
+        txt.transition,
+        defaultReaderExperiencePreferences.txt.transition,
+      ),
     },
     pdf: {
       viewMode:
@@ -253,7 +260,10 @@ export function normalizeReaderExperiencePreferences(
         pdf.viewMode === "single"
           ? pdf.viewMode
           : defaultReaderExperiencePreferences.pdf.viewMode,
-      transition: normalizePageTransition(pdf.transition),
+      transition: normalizePageTransition(
+        pdf.transition,
+        defaultReaderExperiencePreferences.pdf.transition,
+      ),
     },
   };
 }
@@ -289,10 +299,16 @@ export function normalizePdfLocator(locator: PdfLocator): PdfLocator {
   };
 }
 
-function normalizePageTransition(value: unknown): PageTransitionMode {
-  return value === "none" || value === "page-curl" || value === "slide"
+function normalizePageTransition(
+  value: unknown,
+  fallback: PageTransitionMode,
+): PageTransitionMode {
+  return value === "none" ||
+    value === "page-curl" ||
+    value === "cover" ||
+    value === "slide"
     ? value
-    : "slide";
+    : fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -22,13 +22,14 @@ const VIEW_OPTIONS = [
 
 const TRANSITION_OPTIONS = [
   { label: "None", value: "none" },
-  { label: "Slide", value: "slide" },
-  { label: "Page curl", value: "page-curl" },
+  { label: "Realistic", value: "page-curl" },
+  { label: "Cover", value: "cover" },
+  { label: "Smooth", value: "slide" },
 ] as const;
 
 export function DesignSystemFixture() {
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [transition, setTransition] = useState<"none" | "slide" | "page-curl">("slide");
+  const [transition, setTransition] = useState<PageTransitionMode>("none");
   const [fontSize, setFontSize] = useState(18);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const openModal = useCallback(() => setIsModalOpen(true), []);

@@ -12,9 +12,6 @@
   contain: strict;
   clip-path: inset(0);
   background: var(--txt-reader-background, var(--ds-color-reading-paper));
-  perspective: 1600px;
-  perspective-origin: center;
-  transform: translateZ(0);
 }
 
 .reader-transition-layer__frame {
@@ -23,6 +20,7 @@
   z-index: 2;
   overflow: hidden;
   background: var(--txt-reader-background, var(--ds-color-reading-paper));
+  will-change: transform, width, left;
 }
 
 .reader-transition-layer__front {
@@ -42,17 +40,20 @@
   z-index: 4;
   top: 0;
   bottom: 0;
-  width: 54%;
-  transform-style: preserve-3d;
+  width: 62%;
+  overflow: hidden;
+  will-change: transform;
 }
 
 .reader-transition-layer[data-direction="next"] .reader-transition-layer__curl-sheet {
   right: 0;
+  clip-path: polygon(22% 0, 100% 0, 100% 100%, 0 100%);
 }
 
 .reader-transition-layer[data-direction="previous"]
   .reader-transition-layer__curl-sheet {
   left: 0;
+  clip-path: polygon(0 0, 78% 0, 100% 100%, 0 100%);
 }
 
 .reader-transition-layer__curl-sheet-front,
@@ -60,37 +61,59 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  backface-visibility: hidden;
   background: var(--txt-reader-background, var(--ds-color-reading-paper));
 }
 
 .reader-transition-layer__curl-sheet-front {
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(38, 30, 20, 0.08)),
+    radial-gradient(circle at 82% 44%, rgba(255, 255, 255, 0.42), transparent 36%),
+    linear-gradient(100deg, rgba(255, 255, 255, 0.24), rgba(38, 30, 20, 0.12)),
     var(--txt-reader-background, var(--ds-color-reading-paper));
 }
 
 .reader-transition-layer__back {
-  transform: rotateY(180deg);
   background:
+    repeating-linear-gradient(
+      8deg,
+      transparent 0 13px,
+      rgba(54, 47, 38, 0.1) 13px 14px,
+      transparent 14px 23px
+    ),
     linear-gradient(
-      90deg,
-      rgba(38, 30, 20, 0.2),
-      transparent 14%,
-      transparent 86%,
-      rgba(38, 30, 20, 0.16)
+      105deg,
+      rgba(38, 30, 20, 0.28),
+      rgba(255, 255, 255, 0.13) 38%,
+      rgba(38, 30, 20, 0.12) 76%,
+      rgba(38, 30, 20, 0.26)
     ),
     var(--txt-reader-background, var(--ds-color-reading-paper));
+}
+
+.reader-transition-layer__target-shade {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: rgba(39, 32, 24, 0.22);
+  will-change: opacity;
 }
 
 .reader-transition-layer__curl-shadow {
   position: absolute;
   z-index: 3;
   inset-block: 0;
-  width: 34%;
+  width: 46%;
   opacity: 0;
-  background: linear-gradient(90deg, transparent, rgba(18, 22, 24, 0.38), transparent);
-  filter: blur(12px);
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(18, 22, 24, 0.48) 46%,
+    rgba(18, 22, 24, 0.12) 62%,
+    transparent
+  );
+  filter: blur(14px);
+  will-change: transform, opacity;
 }
 
 .reader-transition-layer[data-direction="next"] .reader-transition-layer__curl-shadow {
@@ -123,6 +146,29 @@
 
 .reader-transition-layer__frame--target {
   z-index: 1;
+}
+
+.reader-transition-layer[data-mode="cover"] .reader-transition-layer__frame--target {
+  z-index: 3;
+}
+
+.reader-transition-layer__cover-edge {
+  position: absolute;
+  z-index: 4;
+  left: -18px;
+  inset-block: 0;
+  width: 36px;
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(18, 22, 24, 0.3) 44%,
+    color-mix(in srgb, var(--txt-reader-heading, #25211d) 24%, transparent) 49%,
+    rgba(255, 255, 255, 0.2) 54%,
+    transparent
+  );
+  filter: blur(4px);
+  will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
