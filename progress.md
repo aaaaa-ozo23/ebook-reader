@@ -1769,3 +1769,23 @@
 - **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 39.33 kB、CSS 6.88 kB，继续异步；bookCovers 1.25 kB gzip。
 - **边界：** 未新增依赖、schema、格式或版本；未执行发布。下一步仅按计划提交验收文档、合回集成分支、`--no-ff` 合入 `main` 并快进同步集成分支。
 - **最终 Git 路由：** 10.7 以 `089e9be` `--no-ff` 合回并推送 `codex/v0.2.0-integration`；集成分支再以 `5cc9bc5` `--no-ff` 合入 `main`。本收口提交随后同时推送到 `main`，并由集成分支 fast-forward 同步，结束大阶段 10。
+
+## 2026-07-10 大阶段 10.x：EPUB 翻页动画视觉升级
+
+- **状态：** in_progress
+- **分支：** `codex/stage10-transition-polish`
+- **基线：** `codex/v0.2.0-integration`、`main` 及对应 origin 均为 `806e474`；工作区仅保留用户未跟踪 `AGENTS.md`。
+- **执行边界：** 新增 Cover，升级 Realistic/Smooth，重构四模式设置卡；不新增依赖、数据库迁移、版本或发布操作，不接通 TXT/PDF 动画。
+- **兼容决策：** UI `None/Realistic/Cover/Smooth` 分别持久化为 `none/page-curl/cover/slide`；新 EPUB 默认 None，旧保存值保持兼容。
+- **实现进展：** core/Rust 已加入 `cover` 并按格式归一默认值；EPUB 设置面板已改为四张可键盘操作的动效卡；Smooth 使用 280ms 全宽双页位移，Cover 使用 320ms 目标页压入，Realistic 使用 650ms 斜向裁切、二维镜像折页文字、CSS 3D 纸背和移动阴影。
+- **过程问题：** 第一轮定向 core 6、desktop 113、Rust 2 项通过；并行 lint/build 中 build 仅因两个新动画测试的 `vi.fn` 被推断为零参数 tuple 而无法读取第二个调用参数。已按原生 `HTMLElement.animate` 签名标注 mock，产品代码未受影响。
+- **视觉问题：** 首轮 25%/50%/75% 截图中 Cover 的 translated target iframe 在 Chromium 产生舞台外黑色合成面；Realistic 的固定 iframe＋裁切方案无黑屏。Cover 改为固定 target、动画 clip-path，并用独立无内容 edge 层移动纸缝和阴影。
+- **过程问题：** compositor 隔离改写后的 visual Playwright 首次没有捕获 Realistic 层；测试在点击 Previous 后立即断言动画层数量为 0，可能在异步事务创建层之前提前通过，后续模式切换与仍在运行的事务重叠。现改为先等待 Location 恢复起点，再断言动画层清理。
+- **根因修复：** 等待 Location 后 Realistic 仍稳定降级，定位为关闭 Theme 面板后的 DOM 已更新，但 controller 的 transition/block refs 尚待普通 effect 同步。改为 `useLayoutEffect`，确保下一次按钮/键盘输入前 controller 读取到最新模式与互斥状态。
+- **合成稳定方案：** 冻结关键帧确认额外折页 iframe 与 rotateY 在边缘角度仍会黑屏；Realistic 最终只保留 current/target 两个真实快照，使用布局宽度揭示和纯 CSS 印刷纸背、二维压缩/斜切及阴影，不再创建第三个 iframe 或 3D 合成层。
+- **视觉验收：** 九张真实 EPUB 25%/50%/75% 关键帧最终均无黑面；桌面与 375×760 设置截图确认四卡为 2×2、触控高度 ≥44px、无横向溢出。Browser/IAB 的 1280 与 375 截图、页面 identity、交互和 console clean 通过；640×640 DOM/宽度/console 通过，但该档 screenshot CDP 捕获超时，已用项目 Playwright 视觉证据补充。
+- **门禁问题：** 首轮 `pnpm.cmd check` 在 Prettier 检查发现 `ReaderShell.css` 的暗色主题特异性修复尚未机械格式化；lint 已通过。已仅格式化该文件后重跑完整 check。
+- **门禁问题：** 首轮完整 Playwright 10/12 通过；两个 design-system DPR 项仍断言旧标签 `Slide`，而兼容值 `slide` 的新 UI 名称为 `Smooth`。产品行为与其余测试正常，已更新可访问名称断言后重跑。
+- **状态：** complete
+- **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 113）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；Browser/IAB 三视口 identity/DOM/console 通过；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
+- **包体：** 书架入口 67.10 kB gzip；ReaderShell JS 40.03 kB、CSS 7.76 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。
