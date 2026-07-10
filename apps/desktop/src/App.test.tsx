@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import {
   type Annotation,
+  defaultReaderExperiencePreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
@@ -36,6 +37,7 @@ import {
   getEpubBookSource,
   getPdfBookSource,
   getReaderCache,
+  getReaderExperiencePreferences,
   getReaderLayoutPreferences,
   getReaderTheme,
   getReadingProgress,
@@ -43,6 +45,7 @@ import {
   listBookmarks,
   openTxtBook,
   saveReaderTheme,
+  saveReaderExperiencePreferences,
   saveReaderCache,
   saveReadingProgress,
   saveReaderLayoutPreferences,
@@ -264,6 +267,7 @@ vi.mock("./tauri/reader", () => ({
   getEpubBookSource: vi.fn(),
   getPdfBookSource: vi.fn(),
   getReaderCache: vi.fn(),
+  getReaderExperiencePreferences: vi.fn(),
   getReaderLayoutPreferences: vi.fn(),
   getReaderTheme: vi.fn(),
   getReadingProgress: vi.fn(),
@@ -271,6 +275,7 @@ vi.mock("./tauri/reader", () => ({
   listBookmarks: listBookmarksMock,
   openTxtBook: vi.fn(),
   saveReaderTheme: vi.fn(),
+  saveReaderExperiencePreferences: vi.fn(),
   saveReaderCache: vi.fn(),
   saveReadingProgress: vi.fn(),
   saveReaderLayoutPreferences: vi.fn(),
@@ -421,6 +426,7 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
 const getEpubBookSourceMock = vi.mocked(getEpubBookSource);
 const getPdfBookSourceMock = vi.mocked(getPdfBookSource);
 const getReaderCacheMock = vi.mocked(getReaderCache);
+const getReaderExperiencePreferencesMock = vi.mocked(getReaderExperiencePreferences);
 const getReaderLayoutPreferencesMock = vi.mocked(getReaderLayoutPreferences);
 const getReaderThemeMock = vi.mocked(getReaderTheme);
 const getReadingProgressMock = vi.mocked(getReadingProgress);
@@ -439,6 +445,7 @@ const openTxtBookMock = vi.mocked(openTxtBook);
 const pickBookFileMock = vi.mocked(pickBookFile);
 const removeBookMock = vi.mocked(removeBook);
 const saveReaderThemeMock = vi.mocked(saveReaderTheme);
+const saveReaderExperiencePreferencesMock = vi.mocked(saveReaderExperiencePreferences);
 const saveReaderCacheMock = vi.mocked(saveReaderCache);
 const saveReadingProgressMock = vi.mocked(saveReadingProgress);
 const saveReaderLayoutPreferencesMock = vi.mocked(saveReaderLayoutPreferences);
@@ -508,6 +515,9 @@ describe("App", () => {
     getEpubBookSourceMock.mockResolvedValue("blob:mock-epub");
     getPdfBookSourceMock.mockResolvedValue("blob:mock-pdf");
     getReaderCacheMock.mockResolvedValue(null);
+    getReaderExperiencePreferencesMock.mockResolvedValue(
+      defaultReaderExperiencePreferences,
+    );
     getReaderLayoutPreferencesMock.mockResolvedValue({ sidebarWidth: 292 });
     getReaderThemeMock.mockResolvedValue(defaultReaderTheme);
     getReadingProgressMock.mockResolvedValue(null);
@@ -553,6 +563,9 @@ describe("App", () => {
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
     saveReaderThemeMock.mockImplementation(async (theme) => theme);
+    saveReaderExperiencePreferencesMock.mockImplementation(
+      async (preferences) => preferences,
+    );
     saveReaderCacheMock.mockResolvedValue(undefined);
     saveReadingProgressMock.mockImplementation(async (bookId, locator, progress) => ({
       bookId,
@@ -1135,7 +1148,37 @@ describe("App", () => {
     adapterOptions.onKeyDown?.(nextEvent);
 
     expect(nextEvent.defaultPrevented).toBe(true);
-    expect(epubAdapterNextMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(epubAdapterNextMock).toHaveBeenCalledTimes(1));
+  });
+
+  it("loads and saves EPUB page transition preferences", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "transition-settings-epub",
+      title: "Transition Settings EPUB",
+      format: "epub",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+
+    const transitionGroup = screen.getByRole("group", {
+      name: "EPUB page transition",
+    });
+    expect(
+      within(transitionGroup).getByRole("button", { name: "Slide" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(transitionGroup).getByRole("button", { name: "None" }));
+
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        epub: expect.objectContaining({ transition: "none" }),
+      }),
+    );
   });
 
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
