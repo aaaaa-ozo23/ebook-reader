@@ -452,3 +452,21 @@
 - axe 4.12 默认 frame aggregation 在 blob rendition 上不能创建聚合 page；legacy mode 可检查同源 EPUB iframe，但其脚本注入会被产品 sandbox 正确阻止并产生一条工具诊断。验收只在 axe 调用时间窗内过滤该精确诊断，其他 console 问题仍失败。
 - Browser/IAB viewport override 后必须 reload 才能得到正确截图比例；reload 后 1280/640/375 截图和 DOM 无横向溢出，console clean。seeded EPUB 仍由项目 Playwright fixture 提供，避免 Browser 本地状态注入限制。
 - 最终包体相较 10.4：书架入口只从 66.85 增至 67.09 kB gzip；所有 page-list、查看器和动画代码仍位于 39.33 kB gzip 的异步 ReaderShell chunk，未把 epub.js/PDF runtime 提前到书架。
+
+## 2026-07-10 大阶段 10.x：EPUB 翻页动画视觉升级
+
+- 现有偏好值只有 `none`、`slide`、`page-curl`；为避免迁移，`slide` 原值升级为 Smooth，`page-curl` 原值升级为 Realistic，仅新增 `cover`。
+- 当前 EPUB 默认和非法值回退均为 `slide`。本轮需要让 EPUB 缺失/非法值回退 `none`，同时保持 TXT/PDF 默认 `slide`，因此 TypeScript 与 Rust 归一化必须改为按格式使用各自默认值。
+- 现有 Slide 只移动 9% 并大幅淡出，Page curl 使用矩形裁切和纯色 3D sheet；参考图要求分别升级为全宽同步位移、目标页覆盖，以及斜向折角/纸背/移动阴影。
+- Chromium 曾对 3D transformed snapshot iframe 产生黑色合成面；Realistic 必须继续让 current/target/折页文字快照保持二维裁切，仅让无内容 CSS 纸张装饰层承担 3D 变换。
+- 本轮锁定自动动画，不增加页角拖动或手势进度控制；新 EPUB 默认 None，已有保存偏好不写回也不覆盖。
+- 首轮真实 EPUB 50% 关键帧显示 Smooth 与 Realistic 均限制在阅读舞台内；Cover 对 target snapshot iframe 做二维全宽 transform 时仍触发 Chromium 舞台外黑色合成面。Cover 必须和 Realistic 一样保持 iframe 固定，改用 clip-path 展开，并让独立 CSS edge 承担移动纸缝/阴影。
+- 进一步冻结 25%/75% 暴露 Realistic 的第三个折页文字 iframe 与 3D sheet 仍会触发边缘黑面。最终策略只保留 current/target 两个真实快照；折页使用印刷线纹、二维压缩/斜切、斜向轮廓和移动阴影表达纸背，不再让任何额外 iframe 或 3D 合成参与。
+- 最终桌面/375px 设置截图确认四卡无裁切、无横向滚动且触控高度达标；同时发现暗色主题下既有 `.ui-button--ghost` 覆盖 theme mode 文字色，已提高 `.theme-mode-button.ui-button` 特异性恢复 panel text 对比。
+
+### 10.x 最终验收结论
+
+- 新 EPUB 默认 None；旧 `slide` 与 `page-curl` 原值分别获得 Smooth 与 Realistic 新视觉，`cover` 在 TypeScript/Rust v1 envelope 中可往返，无数据库迁移。
+- 隔离动画层仍只使用净化 sandboxed current/target 快照；Realistic 最终避免第三 iframe 与 3D 合成，九个关键帧和完整 generated EPUB 流程均无黑面。
+- 设置面板四卡具备 radio/roving focus 语义、44px 触控目标、静态 reduced-motion 预览和四主题样式；375px 无横向溢出。
+- 最终包体为书架入口 67.10 kB gzip、ReaderShell 40.03 kB gzip、ReaderShell CSS 7.76 kB gzip，重动画代码继续位于异步 reader chunk。

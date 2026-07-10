@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- theme tokens and their panel share one reader-only module */
-import { useCallback, type ChangeEvent } from "react";
+import { useCallback, type ChangeEvent, type KeyboardEvent } from "react";
 import type { PageTransitionMode, ReaderTheme, ReaderThemeMode } from "@reader/core";
 import { Button } from "../components/ui/Button";
 
@@ -28,6 +28,13 @@ const FONT_OPTIONS = [
     value: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   },
 ] as const;
+
+const TRANSITION_LABELS: Record<PageTransitionMode, string> = {
+  none: "None",
+  "page-curl": "Realistic",
+  cover: "Cover",
+  slide: "Smooth",
+};
 
 export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
   const isDark = theme.mode === "dark";
@@ -169,17 +176,29 @@ export function ReaderThemePanel({
           <span>Page transition</span>
           <div
             className="reader-theme-transition-options"
-            role="group"
+            role="radiogroup"
             aria-label="EPUB page transition"
           >
-            {pageTransitionModes.map((mode) => (
+            {pageTransitionModes.map((mode, index) => (
               <Button
                 key={mode}
+                className="reader-transition-option"
                 variant="ghost"
-                aria-pressed={pageTransition === mode}
+                role="radio"
+                aria-checked={pageTransition === mode}
+                tabIndex={pageTransition === mode ? 0 : -1}
                 onClick={() => onPageTransitionChange(mode)}
+                onKeyDown={(event) =>
+                  handleTransitionKeyDown(
+                    event,
+                    index,
+                    pageTransitionModes,
+                    onPageTransitionChange,
+                  )
+                }
               >
-                {formatTransitionLabel(mode)}
+                <TransitionPreview mode={mode} />
+                <span>{TRANSITION_LABELS[mode]}</span>
               </Button>
             ))}
           </div>
@@ -193,10 +212,47 @@ export function ReaderThemePanel({
   );
 }
 
-function formatTransitionLabel(mode: PageTransitionMode): string {
-  return mode === "page-curl"
-    ? "Page curl"
-    : `${mode[0]?.toUpperCase()}${mode.slice(1)}`;
+function TransitionPreview({ mode }: { mode: PageTransitionMode }) {
+  return (
+    <span
+      className={`reader-transition-preview reader-transition-preview--${mode}`}
+      aria-hidden="true"
+    >
+      <span className="reader-transition-preview__page reader-transition-preview__page--target" />
+      <span className="reader-transition-preview__page reader-transition-preview__page--current" />
+      <span className="reader-transition-preview__fold" />
+    </span>
+  );
+}
+
+function handleTransitionKeyDown(
+  event: KeyboardEvent<HTMLButtonElement>,
+  index: number,
+  modes: readonly PageTransitionMode[],
+  onChange: (mode: PageTransitionMode) => void,
+) {
+  let nextIndex: number | null = null;
+
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+    nextIndex = (index + 1) % modes.length;
+  } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+    nextIndex = (index - 1 + modes.length) % modes.length;
+  } else if (event.key === "Home") {
+    nextIndex = 0;
+  } else if (event.key === "End") {
+    nextIndex = modes.length - 1;
+  }
+
+  if (nextIndex === null) return;
+
+  event.preventDefault();
+  const nextMode = modes[nextIndex];
+  const buttons =
+    event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+      '[role="radio"]',
+    );
+  buttons?.[nextIndex]?.focus();
+  if (nextMode !== undefined) onChange(nextMode);
 }
 
 interface ThemeSliderProps {

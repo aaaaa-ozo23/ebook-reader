@@ -4,6 +4,7 @@ import {
   animateIsolatedPageTransition,
   captureEpubRenditionSnapshot,
   capturePageSnapshot,
+  PAGE_TRANSITION_DURATIONS,
   serializeSanitizedDocument,
 } from "./PageTransitionLayer";
 
@@ -26,8 +27,8 @@ describe("isolated page transition layer", () => {
     expect(livePage.parentElement).toBeNull();
   });
 
-  it("animates slide and removes the isolated layer", async () => {
-    const animate = vi.fn(
+  it("animates smooth as a full-width two-page movement", async () => {
+    const animate = vi.fn<typeof HTMLElement.prototype.animate>(
       () => ({ finished: Promise.resolve() }) as unknown as Animation,
     );
     HTMLElement.prototype.animate = animate;
@@ -47,7 +48,37 @@ describe("isolated page transition layer", () => {
     );
 
     expect(animate).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(-100%, 0, 0)");
+    expect(animate.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS.slide }),
+    );
     expect(host.querySelector(".reader-transition-layer")).toBeNull();
+  });
+
+  it("animates cover with a moving target edge over a stationary page", async () => {
+    const animate = vi.fn<typeof HTMLElement.prototype.animate>(
+      () => ({ finished: Promise.resolve() }) as unknown as Animation,
+    );
+    HTMLElement.prototype.animate = animate;
+    const host = document.createElement("div");
+    document.body.append(host);
+
+    await animateIsolatedPageTransition(
+      host,
+      {
+        current: { node: document.createElement("article") },
+        direction: "previous",
+        target: { node: document.createElement("article") },
+      },
+      "cover",
+    );
+
+    expect(animate).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
+    expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(0px, 0, 0)");
+    expect(animate.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS.cover }),
+    );
   });
 
   it("falls back immediately when Web Animations is unavailable", async () => {
@@ -67,7 +98,7 @@ describe("isolated page transition layer", () => {
     expect(host.querySelector(".reader-transition-layer")).toBeNull();
   });
 
-  it("renders a 500ms page curl with a back face, shadow, and target reveal", async () => {
+  it("renders a 650ms diagonal realistic curl with printed paper depth", async () => {
     let finishAnimation!: () => void;
     const finished = new Promise<void>((resolve) => {
       finishAnimation = resolve;
@@ -100,9 +131,13 @@ describe("isolated page transition layer", () => {
       layer?.querySelector(".reader-transition-layer__curl-shadow"),
     ).not.toBeNull();
     expect(animate).toHaveBeenCalledTimes(4);
-    expect(JSON.stringify(animate.mock.calls)).toContain("rotateY(-178deg)");
+    expect(JSON.stringify(animate.mock.calls)).toContain(
+      "translateX(-112%) scaleX(0.08) skewY(0deg)",
+    );
+    expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
+    expect(JSON.stringify(animate.mock.calls)).not.toContain("clipPath");
     expect(animate.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ duration: 500 }),
+      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS["page-curl"] }),
     );
 
     finishAnimation();

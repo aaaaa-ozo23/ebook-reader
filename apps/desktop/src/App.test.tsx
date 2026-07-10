@@ -1166,23 +1166,21 @@ describe("App", () => {
     await screen.findByRole("main", { name: "EPUB reader" });
     await user.click(screen.getByRole("button", { name: "Theme" }));
 
-    const transitionGroup = screen.getByRole("group", {
+    const transitionGroup = screen.getByRole("radiogroup", {
       name: "EPUB page transition",
     });
     expect(
-      within(transitionGroup).getByRole("button", { name: "Slide" }),
-    ).toHaveAttribute("aria-pressed", "true");
-    await user.click(within(transitionGroup).getByRole("button", { name: "None" }));
+      within(transitionGroup).getByRole("radio", { name: "None" }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(within(transitionGroup).getByRole("radio", { name: "Cover" }));
 
     expect(saveReaderExperiencePreferencesMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        epub: expect.objectContaining({ transition: "none" }),
+        epub: expect.objectContaining({ transition: "cover" }),
       }),
     );
 
-    await user.click(
-      within(transitionGroup).getByRole("button", { name: "Page curl" }),
-    );
+    await user.click(within(transitionGroup).getByRole("radio", { name: "Realistic" }));
     expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         epub: expect.objectContaining({ transition: "page-curl" }),
