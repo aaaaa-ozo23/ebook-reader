@@ -431,8 +431,20 @@
 | 11.3 三页渲染窗口 | `codex/stage11-txt-page-window` | 只挂载前页、当前页、后页并预取相邻边界；复用标注切片 | 大型 TXT 不生成整书 DOM；翻页无空白闪烁；标注范围跨页显示正确 |
 | 11.4 阅读模式切换 | `codex/stage11-txt-reading-modes` | 增加 scroll/paginated 控件和偏好恢复，切换前后用 chapterId + charOffset 锚定 | 默认仍为 scroll；模式切换、重启、主题/窗口变化回到相同文本附近 |
 | 11.5 定位与跳转整合 | `codex/stage11-txt-locator-integrations` | 统一目录、搜索、书签、批注和进度滑杆到分页器 charOffset 路径 | 所有入口能定位正确页/滚动位置；数据库不保存临时页号 |
-| 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
+| 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/cover/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
 | 11.7 阶段 11 验收 | `codex/stage11-txt-acceptance` | 执行长文本性能、视觉、a11y、定位和三格式回归 | 既有 TXT 滚动性能不回退；全局门禁和 Tauri build 通过；合入 main 并同步集成分支 |
+
+### 阶段 11 执行记录
+
+| 小阶段 | 状态 | 验证 |
+|--------|------|------|
+| 11.1 分页测量引擎 | complete | UTF-16/字素安全的可取消分页核心和 DOM 测量器完成；desktop 121 tests、lint 通过 |
+| 11.2 分页缓存 | pending | - |
+| 11.3 三窗口渲染 | pending | - |
+| 11.4 阅读模式切换 | pending | - |
+| 11.5 定位与跳转 | pending | - |
+| 11.6 分页动画 | pending | - |
+| 11.7 阶段验收 | pending | - |
 
 ## 大阶段 12：PDF 连续模式
 

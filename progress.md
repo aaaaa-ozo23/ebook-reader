@@ -1804,3 +1804,10 @@
 - **视觉验收：** `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 九张均显示真实 Location 2 目标内容；正常播放与应用内浏览器无黑面。CDP 强制暂停后的 full-page capture 偶发把舞台外区域记录为黑色，已等待两帧提交并记录为截图路径限制；应用内浏览器页面 identity、非空、无 overlay、console clean 与 Grid→List 交互通过。
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 117）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；视觉 Playwright 1/1 passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
 - **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 40.79 kB、CSS 7.79 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。
+## 2026-07-11 大阶段 11 实施
+
+- 已从最新 `codex/v0.2.0-integration` 的 `d763798` 创建 `codex/stage11-txt-paginator-measurement`，保留未跟踪 `AGENTS.md`。
+- 已新增可取消、可分批让出主线程的 TXT 分页算法和真实 DOM 测量器；长段落使用字素边界二分，页模型保存 UTF-16 `[startCharOffset, endCharOffset)`。
+- 已将路线图和 DEVELOPMENT 的旧三动画规格同步为 TXT 五项并列阅读方式、四动画与 single/double。
+- 首次定向测试发现空段 fixture 的测量阈值预期错误；已调整 fixture 阈值，未改变产品算法。
+- 11.1 门禁通过：desktop 13 files / 121 tests，`pnpm.cmd --filter @reader/desktop lint` 通过。
