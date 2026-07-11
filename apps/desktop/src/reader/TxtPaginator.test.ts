@@ -1,11 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createTxtPaginationCacheEnvelope,
+  findTxtPageIndex,
   getGraphemeBreakOffsets,
   paginateTxtBlocks,
+  parseTxtPaginationCache,
+  reconstructTxtPages,
   type TxtPageFragment,
   type TxtPaginationSourceBlock,
 } from "./TxtPaginator";
+
+const signature = {
+  devicePixelRatio: 1.25,
+  pageHeight: 640,
+  pageWidth: 720,
+  spreadMode: "single" as const,
+  themeFingerprint: "theme-v1",
+};
 
 const paragraph = (
   text: string,
@@ -116,5 +128,57 @@ describe("TXT paginator", () => {
       }),
     ).rejects.toMatchObject({ name: "AbortError" });
     expect(yieldToMain).toHaveBeenCalledTimes(1);
+  });
+
+  it("round-trips a matching boundary cache and rejects stale or corrupt entries", () => {
+    const pages = [
+      { index: 0, startCharOffset: 0, endCharOffset: 4, fragments: [] },
+      { index: 1, startCharOffset: 4, endCharOffset: 10, fragments: [] },
+    ];
+    const serialized = JSON.stringify(
+      createTxtPaginationCacheEnvelope(pages, signature, 10),
+    );
+
+    expect(parseTxtPaginationCache(serialized, signature, 10)).toEqual([
+      { startCharOffset: 0, endCharOffset: 4 },
+      { startCharOffset: 4, endCharOffset: 10 },
+    ]);
+    expect(
+      parseTxtPaginationCache(serialized, { ...signature, pageWidth: 721 }, 10),
+    ).toBeNull();
+    expect(parseTxtPaginationCache(serialized, signature, 11)).toBeNull();
+    expect(parseTxtPaginationCache("not-json", signature, 10)).toBeNull();
+    expect(
+      parseTxtPaginationCache(
+        JSON.stringify({
+          ...createTxtPaginationCacheEnvelope(pages, signature, 10),
+          boundaries: [{ startCharOffset: 0, endCharOffset: 9 }],
+        }),
+        signature,
+        10,
+      ),
+    ).toBeNull();
+  });
+
+  it("reconstructs cached fragments and resolves charOffset pages", () => {
+    const blocks = [paragraph("abcd", 0, "first"), paragraph("efghij", 4, "second")];
+    const pages = reconstructTxtPages(blocks, [
+      { startCharOffset: 0, endCharOffset: 6 },
+      { startCharOffset: 6, endCharOffset: 10 },
+    ]);
+
+    expect(
+      pages[0]?.fragments.map((fragment) =>
+        fragment.text.slice(fragment.startInBlock, fragment.endInBlock),
+      ),
+    ).toEqual(["abcd", "ef"]);
+    expect(pages[1]?.fragments[0]).toMatchObject({
+      id: "second",
+      startInBlock: 2,
+      endInBlock: 6,
+    });
+    expect(findTxtPageIndex(pages, 0)).toBe(0);
+    expect(findTxtPageIndex(pages, 6)).toBe(1);
+    expect(findTxtPageIndex(pages, 999)).toBe(1);
   });
 });

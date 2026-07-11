@@ -1811,3 +1811,4 @@
 - 已将路线图和 DEVELOPMENT 的旧三动画规格同步为 TXT 五项并列阅读方式、四动画与 single/double。
 - 首次定向测试发现空段 fixture 的测量阈值预期错误；已调整 fixture 阈值，未改变产品算法。
 - 11.1 门禁通过：desktop 13 files / 121 tests，`pnpm.cmd --filter @reader/desktop lint` 通过。
+- 11.2 已完成固定 `txt_pagination_v1` envelope、布局签名归一、损坏/失配拒绝、连续边界验证、缓存切片重建和 charOffset 页二分；desktop 123 tests、lint 通过。

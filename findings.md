@@ -488,3 +488,4 @@
 - `reader_cache` 已按书籍 source hash 自动失效，TXT 只需固定 `txt_pagination_v1` 键和布局签名，不应为每个 viewport 生成无界 key。
 - 现有字符串切片和 DOM Range 使用 UTF-16 offset；分页切点必须保持 UTF-16 数值，同时只落在字素边界，避免拆开 emoji、组合字符和代理对。
 - single/double 会改变单页可用宽度，因此 spread 渲染结果必须进入分页签名；double 的有限渲染窗口应按三个 spread 计，而不是强行限制为三个 DOM 页面。
+- 缓存只需保存连续边界；命中后可用 block 全局 UTF-16 范围与页边界求交，确定性重建标题/段落切片，不必缓存 DOM 或重复测量。
