@@ -44,8 +44,9 @@ describe("reader experience contracts", () => {
     ]);
     expect(readerCapabilitiesByFormat.txt.pageTransitions).toEqual([
       "none",
-      "slide",
       "page-curl",
+      "cover",
+      "slide",
     ]);
   });
 

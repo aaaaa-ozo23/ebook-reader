@@ -72,7 +72,7 @@ import {
   MemoizedReaderSidebar,
   type ReaderSidebarTab,
 } from "./ReaderSidebar";
-import { ReaderThemePanel } from "./ReaderThemePanel";
+import { ReaderThemePanel, type TxtReadingModeOption } from "./ReaderThemePanel";
 import {
   DEFAULT_HIGHLIGHT_COLOR,
   getLocatorLabel,
@@ -481,6 +481,27 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         epub: {
           ...readerExperiencePreferences.epub,
           transition,
+        },
+      };
+      setReaderExperiencePreferences(nextPreferences);
+      setReaderExperienceError(null);
+      void saveReaderExperiencePreferences(nextPreferences).catch(
+        (experienceSaveError: unknown) => {
+          setReaderExperienceError(getErrorMessage(experienceSaveError));
+        },
+      );
+    },
+    [readerExperiencePreferences],
+  );
+
+  const handleTxtReadingModeChange = useCallback(
+    (mode: TxtReadingModeOption) => {
+      const nextPreferences: ReaderExperiencePreferences = {
+        ...readerExperiencePreferences,
+        txt: {
+          viewMode: mode === "continuous" ? "scroll" : "paginated",
+          transition:
+            mode === "continuous" ? readerExperiencePreferences.txt.transition : mode,
         },
       };
       setReaderExperiencePreferences(nextPreferences);
@@ -1308,6 +1329,9 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             initialProgress={readingProgress}
             isLoading={isLoading}
             jumpRequest={txtJumpRequest}
+            theme={theme}
+            transition={readerExperiencePreferences.txt.transition}
+            viewMode={readerExperiencePreferences.txt.viewMode}
             onActiveChapterChange={setActiveTocItemId}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onProgressChange={handleTxtProgressChange}
@@ -1372,8 +1396,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           pageTransitionModes={["none", "page-curl", "cover", "slide"]}
           theme={theme}
           themeError={themeError}
+          txtReadingMode={
+            book.format === "txt"
+              ? readerExperiencePreferences.txt.viewMode === "scroll"
+                ? "continuous"
+                : readerExperiencePreferences.txt.transition
+              : undefined
+          }
+          txtReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           onPageTransitionChange={handleEpubTransitionChange}
           onThemeChange={handleThemeChange}
+          onTxtReadingModeChange={handleTxtReadingModeChange}
         />
         <SelectionMenu
           menuRef={selectionMenuRef}

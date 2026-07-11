@@ -420,8 +420,15 @@ function layoutSignaturesMatch(
     return false;
   }
   return (
-    JSON.stringify(normalizeLayoutSignature(value as TxtPaginationLayoutSignature)) ===
-    JSON.stringify(normalizeLayoutSignature(expected))
+    JSON.stringify(
+      normalizeLayoutSignature({
+        devicePixelRatio: value.devicePixelRatio,
+        pageHeight: value.pageHeight,
+        pageWidth: value.pageWidth,
+        spreadMode: value.spreadMode,
+        themeFingerprint: value.themeFingerprint,
+      }),
+    ) === JSON.stringify(normalizeLayoutSignature(expected))
   );
 }
 

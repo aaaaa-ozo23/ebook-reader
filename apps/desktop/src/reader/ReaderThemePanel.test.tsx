@@ -39,6 +39,26 @@ describe("ReaderThemePanel page transitions", () => {
     expect(onChange).toHaveBeenLastCalledWith("slide");
     expect(screen.getByRole("radio", { name: "Smooth" })).toHaveFocus();
   });
+
+  it("presents continuous and four paginated TXT modes as peers", () => {
+    const onTxtReadingModeChange = vi.fn();
+    render(
+      <ReaderThemePanel
+        isOpen
+        theme={defaultReaderTheme}
+        themeError={null}
+        txtReadingMode="continuous"
+        txtReadingModeOptions={["continuous", ...MODES]}
+        onThemeChange={vi.fn()}
+        onTxtReadingModeChange={onTxtReadingModeChange}
+      />,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "TXT reading mode" });
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(5);
+    fireEvent.click(screen.getByRole("radio", { name: "Cover" }));
+    expect(onTxtReadingModeChange).toHaveBeenCalledWith("cover");
+  });
 });
 
 function renderPanel(

@@ -36,6 +36,12 @@ const TRANSITION_LABELS: Record<PageTransitionMode, string> = {
   slide: "Smooth",
 };
 
+export type TxtReadingModeOption = "continuous" | PageTransitionMode;
+const TXT_READING_MODE_LABELS: Record<TxtReadingModeOption, string> = {
+  continuous: "Continuous",
+  ...TRANSITION_LABELS,
+};
+
 export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
   const isDark = theme.mode === "dark";
 
@@ -64,8 +70,11 @@ interface ReaderThemePanelProps {
   pageTransitionModes?: readonly PageTransitionMode[];
   theme: ReaderTheme;
   themeError: string | null;
+  txtReadingMode?: TxtReadingModeOption;
+  txtReadingModeOptions?: readonly TxtReadingModeOption[];
   onPageTransitionChange?: (mode: PageTransitionMode) => void;
   onThemeChange: (theme: ReaderTheme) => void;
+  onTxtReadingModeChange?: (mode: TxtReadingModeOption) => void;
 }
 
 export function ReaderThemePanel({
@@ -75,8 +84,11 @@ export function ReaderThemePanel({
   pageTransitionModes,
   theme,
   themeError,
+  txtReadingMode,
+  txtReadingModeOptions,
   onPageTransitionChange,
   onThemeChange,
+  onTxtReadingModeChange,
 }: ReaderThemePanelProps) {
   const handleModeChange = useCallback(
     (mode: ReaderThemeMode) => {
@@ -169,6 +181,41 @@ export function ReaderThemePanel({
         value={theme.pageMargin}
         onChange={handleNumberChange("pageMargin")}
       />
+      {txtReadingMode !== undefined &&
+      txtReadingModeOptions !== undefined &&
+      onTxtReadingModeChange !== undefined ? (
+        <div className="theme-field">
+          <span>Reading mode</span>
+          <div
+            className="reader-theme-transition-options reader-theme-transition-options--txt"
+            role="radiogroup"
+            aria-label="TXT reading mode"
+          >
+            {txtReadingModeOptions.map((mode, index) => (
+              <Button
+                key={mode}
+                className="reader-transition-option"
+                variant="ghost"
+                role="radio"
+                aria-checked={txtReadingMode === mode}
+                tabIndex={txtReadingMode === mode ? 0 : -1}
+                onClick={() => onTxtReadingModeChange(mode)}
+                onKeyDown={(event) =>
+                  handleReadingModeKeyDown(
+                    event,
+                    index,
+                    txtReadingModeOptions,
+                    onTxtReadingModeChange,
+                  )
+                }
+              >
+                <TransitionPreview mode={mode} />
+                <span>{TXT_READING_MODE_LABELS[mode]}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {pageTransition !== undefined &&
       pageTransitionModes !== undefined &&
       onPageTransitionChange !== undefined ? (
@@ -212,7 +259,7 @@ export function ReaderThemePanel({
   );
 }
 
-function TransitionPreview({ mode }: { mode: PageTransitionMode }) {
+function TransitionPreview({ mode }: { mode: TxtReadingModeOption }) {
   return (
     <span
       className={`reader-transition-preview reader-transition-preview--${mode}`}
@@ -225,11 +272,29 @@ function TransitionPreview({ mode }: { mode: PageTransitionMode }) {
   );
 }
 
+function handleReadingModeKeyDown(
+  event: KeyboardEvent<HTMLButtonElement>,
+  index: number,
+  modes: readonly TxtReadingModeOption[],
+  onChange: (mode: TxtReadingModeOption) => void,
+) {
+  handleRadioKeyDown(event, index, modes, onChange);
+}
+
 function handleTransitionKeyDown(
   event: KeyboardEvent<HTMLButtonElement>,
   index: number,
   modes: readonly PageTransitionMode[],
   onChange: (mode: PageTransitionMode) => void,
+) {
+  handleRadioKeyDown(event, index, modes, onChange);
+}
+
+function handleRadioKeyDown<T extends string>(
+  event: KeyboardEvent<HTMLButtonElement>,
+  index: number,
+  modes: readonly T[],
+  onChange: (mode: T) => void,
 ) {
   let nextIndex: number | null = null;
 
