@@ -439,7 +439,7 @@
 | 小阶段 | 状态 | 验证 |
 |--------|------|------|
 | 11.1 分页测量引擎 | complete | UTF-16/字素安全的可取消分页核心和 DOM 测量器完成；desktop 121 tests、lint 通过 |
-| 11.2 分页缓存 | pending | - |
+| 11.2 分页缓存 | complete | `txt_pagination_v1` 版本 envelope、布局签名、边界校验和确定性切片重建完成；desktop 123 tests、lint 通过 |
 | 11.3 三窗口渲染 | pending | - |
 | 11.4 阅读模式切换 | pending | - |
 | 11.5 定位与跳转 | pending | - |
