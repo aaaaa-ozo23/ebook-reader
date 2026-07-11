@@ -481,3 +481,10 @@
 - 捕获时排除既有 `.reader-transition-layer` 内 iframe，也忽略隐藏/舞台外预加载 view；无布局的 jsdom 环境仍保留 grid 回退以验证净化行为。
 - generated EPUB 直接校验 snapshot `body.left` 与捕获分页偏移一致：三种模式前进时 target 位于 current 之后，Realistic 后退时 target 位于 current 之前，而不是只断言章节 DOM 存在。
 - 九张 25%/50%/75% 关键帧确认 Location 2 显示段落页、Location 1 保持标题/图片页；Smooth/Cover 使用固定 iframe、布局揭示和 snapshot 内部正文位移，Realistic 延续固定 target 与 current 宽度揭示。正常播放与应用内浏览器无黑面；CDP 强制暂停后立即做 full-page capture 时，个别帧仍可能把阅读舞台外区域捕获成黑色，属于截图合成路径而非可见播放状态。
+
+## 2026-07-11 大阶段 11：TXT 分页
+
+- 现有 TXT 滚动路径由 TanStack Virtual 管理，持久 locator 已是 `chapterId + charOffset`；分页不需要新增数据库字段。
+- `reader_cache` 已按书籍 source hash 自动失效，TXT 只需固定 `txt_pagination_v1` 键和布局签名，不应为每个 viewport 生成无界 key。
+- 现有字符串切片和 DOM Range 使用 UTF-16 offset；分页切点必须保持 UTF-16 数值，同时只落在字素边界，避免拆开 emoji、组合字符和代理对。
+- single/double 会改变单页可用宽度，因此 spread 渲染结果必须进入分页签名；double 的有限渲染窗口应按三个 spread 计，而不是强行限制为三个 DOM 页面。
