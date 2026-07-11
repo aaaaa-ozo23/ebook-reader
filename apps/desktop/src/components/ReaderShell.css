@@ -782,6 +782,15 @@
   max-width: 420px;
 }
 
+.reader-txt-pagination-nav {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.reader-txt-pagination-nav .reader-tool-button {
+  min-height: 44px;
+}
+
 .reader-txt-measure {
   position: absolute;
   top: 0;

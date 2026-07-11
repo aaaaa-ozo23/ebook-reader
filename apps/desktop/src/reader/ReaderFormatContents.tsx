@@ -10,6 +10,7 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -81,6 +82,7 @@ import {
 } from "./transitions/PageTransitionController";
 import {
   animateIsolatedPageTransition,
+  capturePageSnapshot,
   captureEpubRenditionSnapshotAfterLayout,
   type PageSnapshot,
 } from "./transitions/PageTransitionLayer";
@@ -188,6 +190,7 @@ export interface TxtReaderContentProps {
   document: TxtDocument | null;
   error: string | null;
   initialProgress: ReaderProgress<TxtLocator> | null;
+  isPageCurlBlocked: boolean;
   isLoading: boolean;
   jumpRequest: TxtJumpRequest | null;
   theme: ReaderTheme;
@@ -576,6 +579,7 @@ function TxtPaginatedReaderContent({
   document: txtDocument,
   error,
   initialProgress,
+  isPageCurlBlocked,
   isLoading,
   jumpRequest,
   theme,
@@ -589,7 +593,12 @@ function TxtPaginatedReaderContent({
   onBackToLibrary,
 }: TxtReaderContentProps) {
   const viewportRef = useRef<HTMLElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const paginationAbortRef = useRef<AbortController | null>(null);
+  const transitionControllerRef = useRef<PageTransitionController<PageSnapshot> | null>(
+    null,
+  );
+  const pendingTransitionPageRef = useRef<TxtPage | null>(null);
   const currentAnchorRef = useRef(initialProgress?.locator.charOffset ?? 0);
   const committedPageIndexRef = useRef(0);
   const [pages, setPages] = useState<TxtPage[]>([]);
@@ -606,6 +615,11 @@ function TxtPaginatedReaderContent({
       ? "double"
       : "single";
   const spreadSize = renderedSpreadMode === "double" ? 2 : 1;
+  const pagesRef = useRef(pages);
+  const renderedSpreadModeRef = useRef(renderedSpreadMode);
+  const transitionModeRef = useRef(transition);
+  const isPageCurlBlockedRef = useRef(isPageCurlBlocked);
+  const documentRef = useRef(txtDocument);
   const pageWidth = Math.max(
     260,
     renderedSpreadMode === "double"
@@ -629,6 +643,14 @@ function TxtPaginatedReaderContent({
     }),
     [pageHeight, pageWidth, renderedSpreadMode, theme],
   );
+
+  useEffect(() => {
+    pagesRef.current = pages;
+    renderedSpreadModeRef.current = renderedSpreadMode;
+    transitionModeRef.current = transition;
+    isPageCurlBlockedRef.current = isPageCurlBlocked;
+    documentRef.current = txtDocument;
+  }, [isPageCurlBlocked, pages, renderedSpreadMode, transition, txtDocument]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -655,6 +677,8 @@ function TxtPaginatedReaderContent({
     if (isLoading || txtDocument === null || virtualBlocks.length === 0) {
       return;
     }
+    pendingTransitionPageRef.current = null;
+    transitionControllerRef.current?.cancel();
     paginationAbortRef.current?.abort();
     const controller = new AbortController();
     paginationAbortRef.current = controller;
@@ -720,6 +744,8 @@ function TxtPaginatedReaderContent({
 
   useEffect(() => {
     if (jumpRequest === null || pages.length === 0) return;
+    pendingTransitionPageRef.current = null;
+    transitionControllerRef.current?.cancel();
     currentAnchorRef.current = jumpRequest.locator.charOffset;
     const frame = window.requestAnimationFrame(() => {
       const targetPageIndex = Math.max(
@@ -733,9 +759,31 @@ function TxtPaginatedReaderContent({
     return () => window.cancelAnimationFrame(frame);
   }, [jumpRequest, pages]);
 
+  const savePageProgress = useCallback(
+    (page: TxtPage) => {
+      const activeDocument = documentRef.current;
+      if (activeDocument === null) return;
+      currentAnchorRef.current = page.startCharOffset;
+      const firstFragment = page.fragments[0];
+      if (firstFragment !== undefined) {
+        onActiveChapterChange(firstFragment.chapterId);
+      }
+      onProgressChange(
+        {
+          kind: "txt",
+          chapterId: firstFragment?.chapterId,
+          charOffset: page.startCharOffset,
+        },
+        page.startCharOffset / Math.max(activeDocument.charCount, 1),
+      );
+    },
+    [onActiveChapterChange, onProgressChange],
+  );
   const commitPageIndex = useCallback(
     (requestedIndex: number) => {
       if (txtDocument === null || pages.length === 0) return;
+      pendingTransitionPageRef.current = null;
+      transitionControllerRef.current?.cancel();
       const nextIndex = getTxtSpreadStart(
         Math.min(pages.length - 1, Math.max(0, requestedIndex)),
         renderedSpreadMode,
@@ -746,27 +794,86 @@ function TxtPaginatedReaderContent({
       if (nextPage === undefined) return;
       committedPageIndexRef.current = nextIndex;
       setActivePageIndex(nextIndex);
-      currentAnchorRef.current = nextPage.startCharOffset;
-      const firstFragment = nextPage.fragments[0];
-      if (firstFragment !== undefined) {
-        onActiveChapterChange(firstFragment.chapterId);
-      }
-      onProgressChange(
-        {
-          kind: "txt",
-          chapterId: firstFragment?.chapterId,
-          charOffset: nextPage.startCharOffset,
-        },
-        nextPage.startCharOffset / Math.max(txtDocument.charCount, 1),
-      );
+      savePageProgress(nextPage);
     },
-    [onActiveChapterChange, onProgressChange, pages, renderedSpreadMode, txtDocument],
+    [pages, renderedSpreadMode, savePageProgress, txtDocument],
   );
+
+  useEffect(() => {
+    const controller = new PageTransitionController<PageSnapshot>({
+      animate: (frames, mode, signal) => {
+        const frame = frameRef.current;
+        return frame === null
+          ? Promise.resolve()
+          : animateIsolatedPageTransition(frame, frames, mode, signal);
+      },
+      captureCurrent: () =>
+        capturePageSnapshot(
+          frameRef.current?.querySelector<HTMLElement>(
+            '.reader-txt-spread[data-window-state="current"]',
+          ) ?? null,
+        ),
+      captureTarget: () =>
+        capturePageSnapshot(
+          frameRef.current?.querySelector<HTMLElement>(
+            '.reader-txt-spread[data-window-state="current"]',
+          ) ?? null,
+        ),
+      commit: () => {
+        const page = pendingTransitionPageRef.current;
+        pendingTransitionPageRef.current = null;
+        if (page !== null) savePageProgress(page);
+      },
+      getMode: () =>
+        resolvePageTransitionMode(
+          transitionModeRef.current,
+          isPageCurlBlockedRef.current,
+        ),
+      navigate: async (direction) => {
+        const activePages = pagesRef.current;
+        const activeSpreadSize = renderedSpreadModeRef.current === "double" ? 2 : 1;
+        const delta = direction === "next" ? activeSpreadSize : -activeSpreadSize;
+        const nextIndex = getTxtSpreadStart(
+          Math.min(
+            Math.max(0, activePages.length - 1),
+            Math.max(0, committedPageIndexRef.current + delta),
+          ),
+          renderedSpreadModeRef.current,
+        );
+        const page = activePages[nextIndex];
+        if (page === undefined || nextIndex === committedPageIndexRef.current) return;
+        pendingTransitionPageRef.current = page;
+        committedPageIndexRef.current = nextIndex;
+        currentAnchorRef.current = page.startCharOffset;
+        setPreviewPageIndex(null);
+        setActivePageIndex(nextIndex);
+        await new Promise<void>((resolve) =>
+          window.requestAnimationFrame(() => resolve()),
+        );
+      },
+      prefersReducedMotion: () =>
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+    });
+    transitionControllerRef.current = controller;
+    return () => {
+      controller.cancel();
+      pendingTransitionPageRef.current = null;
+      if (transitionControllerRef.current === controller) {
+        transitionControllerRef.current = null;
+      }
+    };
+  }, [savePageProgress]);
+
   const movePage = useCallback(
     (direction: -1 | 1) => {
-      commitPageIndex(committedPageIndexRef.current + direction * spreadSize);
+      const delta = direction * spreadSize;
+      const targetIndex = committedPageIndexRef.current + delta;
+      if (targetIndex < 0 || targetIndex >= pages.length) return;
+      void transitionControllerRef.current?.request(
+        direction === 1 ? "next" : "previous",
+      );
     },
-    [commitPageIndex, spreadSize],
+    [pages.length, spreadSize],
   );
 
   useEffect(() => {
@@ -779,6 +886,8 @@ function TxtPaginatedReaderContent({
 
   const handleSpreadModeChange = useCallback(
     (mode: TxtSpreadMode) => {
+      pendingTransitionPageRef.current = null;
+      transitionControllerRef.current?.cancel();
       const activePage = pages[committedPageIndexRef.current];
       if (activePage !== undefined) {
         currentAnchorRef.current = activePage.startCharOffset;
@@ -790,6 +899,26 @@ function TxtPaginatedReaderContent({
   const handleTextSelection = useCallback(() => {
     onSelectionChange(captureTxtSelection());
   }, [onSelectionChange]);
+  const handlePageEdgeClick = useCallback(
+    (event: ReactMouseEvent<HTMLElement>) => {
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest(
+          'button, a, input, select, textarea, [role="button"], [contenteditable="true"]',
+        ) !== null ||
+        window.getSelection()?.isCollapsed === false
+      ) {
+        return;
+      }
+      const rect = event.currentTarget.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const ratio = (event.clientX - rect.left) / rect.width;
+      if (ratio <= 0.2) movePage(-1);
+      else if (ratio >= 0.8) movePage(1);
+    },
+    [movePage],
+  );
   const renderFragment = useCallback(
     (fragment: TxtPageFragment) =>
       renderAnnotatedText(fragment, annotations, onAnnotationActivate),
@@ -839,12 +968,14 @@ function TxtPaginatedReaderContent({
       ref={viewportRef}
       className="reader-viewport reader-viewport--txt-paginated"
       data-page-transition={transition}
+      data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
       aria-label={`${txtDocument.book.title} content`}
       tabIndex={0}
       onKeyUp={handleTextSelection}
       onMouseUp={handleTextSelection}
+      onClick={handlePageEdgeClick}
     >
-      <div className="reader-txt-paginated-frame">
+      <div ref={frameRef} className="reader-txt-paginated-frame reader-transition-host">
         {isPaginating ? (
           <section className="reader-state" role="status" aria-live="polite">
             <div className="loading-line" aria-hidden="true" />
@@ -879,6 +1010,28 @@ function TxtPaginatedReaderContent({
             onClick={() => handleSpreadModeChange("double")}
           >
             Double
+          </button>
+        </div>
+        <div
+          className="reader-txt-pagination-nav"
+          role="group"
+          aria-label="TXT page navigation"
+        >
+          <button
+            type="button"
+            className="reader-tool-button"
+            disabled={spreadStart === 0}
+            onClick={() => movePage(-1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="reader-tool-button"
+            disabled={spreadEnd >= pages.length}
+            onClick={() => movePage(1)}
+          >
+            Next
           </button>
         </div>
         <span aria-live="polite">

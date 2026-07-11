@@ -1327,6 +1327,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             document={document}
             error={error}
             initialProgress={readingProgress}
+            isPageCurlBlocked={
+              isFormatOverlayOpen ||
+              selectionSnapshot !== null ||
+              noteEditor !== null ||
+              notePopover !== null
+            }
             isLoading={isLoading}
             jumpRequest={txtJumpRequest}
             theme={theme}

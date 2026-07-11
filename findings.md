@@ -492,3 +492,5 @@
 - `splitChapterParagraphs` 旧实现用 `Array.from(line).length` 推进 offset，却用 JavaScript slice/Range 消费 offset；含 emoji 时两者不一致。阶段 11 已统一为 UTF-16 `line.length`，并补偿被 trim 的前导空白。
 - TXT spread 与 EPUB 一致默认 Single；请求 Double 时以 860px 为可渲染阈值，窄窗只改变 rendered spread，不覆盖 requested spread 或持久偏好。
 - 分页滑杆必须把 `onChange` 限定为内存预览，在 pointer/key/blur commit 时才更新 locator；用 committed page ref 去重可避免 pointerup 后 blur 再次保存，也让快速输入读取最新页而不是闭包旧 state。
+- React state 导航后的目标 spread 快照必须至少等待一个 animation frame，确保 `data-window-state=current` 已指向目标页；controller 的 pending direction 继续提供“首个 + 最终方向”合并语义。
+- 视觉动画取消不等于回滚真实导航；布局、跳转或 slider 介入时先清空 TXT pending commit 再 cancel，可防止旧动画完成后覆盖更新后的 locator。
