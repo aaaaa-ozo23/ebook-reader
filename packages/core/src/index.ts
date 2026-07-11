@@ -209,7 +209,7 @@ export const readerCapabilitiesByFormat: Readonly<
   },
   txt: {
     viewModes: ["scroll", "paginated"],
-    pageTransitions: BASE_PAGE_TRANSITIONS,
+    pageTransitions: EPUB_PAGE_TRANSITIONS,
     supportsPublicationPageLabels: false,
     supportsImageViewer: false,
   },

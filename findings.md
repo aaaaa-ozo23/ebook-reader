@@ -481,3 +481,18 @@
 - 捕获时排除既有 `.reader-transition-layer` 内 iframe，也忽略隐藏/舞台外预加载 view；无布局的 jsdom 环境仍保留 grid 回退以验证净化行为。
 - generated EPUB 直接校验 snapshot `body.left` 与捕获分页偏移一致：三种模式前进时 target 位于 current 之后，Realistic 后退时 target 位于 current 之前，而不是只断言章节 DOM 存在。
 - 九张 25%/50%/75% 关键帧确认 Location 2 显示段落页、Location 1 保持标题/图片页；Smooth/Cover 使用固定 iframe、布局揭示和 snapshot 内部正文位移，Realistic 延续固定 target 与 current 宽度揭示。正常播放与应用内浏览器无黑面；CDP 强制暂停后立即做 full-page capture 时，个别帧仍可能把阅读舞台外区域捕获成黑色，属于截图合成路径而非可见播放状态。
+
+## 2026-07-11 大阶段 11：TXT 分页
+
+- 现有 TXT 滚动路径由 TanStack Virtual 管理，持久 locator 已是 `chapterId + charOffset`；分页不需要新增数据库字段。
+- `reader_cache` 已按书籍 source hash 自动失效，TXT 只需固定 `txt_pagination_v1` 键和布局签名，不应为每个 viewport 生成无界 key。
+- 现有字符串切片和 DOM Range 使用 UTF-16 offset；分页切点必须保持 UTF-16 数值，同时只落在字素边界，避免拆开 emoji、组合字符和代理对。
+- single/double 会改变单页可用宽度，因此 spread 渲染结果必须进入分页签名；double 的有限渲染窗口应按三个 spread 计，而不是强行限制为三个 DOM 页面。
+- 缓存只需保存连续边界；命中后可用 block 全局 UTF-16 范围与页边界求交，确定性重建标题/段落切片，不必缓存 DOM 或重复测量。
+- `splitChapterParagraphs` 旧实现用 `Array.from(line).length` 推进 offset，却用 JavaScript slice/Range 消费 offset；含 emoji 时两者不一致。阶段 11 已统一为 UTF-16 `line.length`，并补偿被 trim 的前导空白。
+- TXT spread 与 EPUB 一致默认 Single；请求 Double 时以 860px 为可渲染阈值，窄窗只改变 rendered spread，不覆盖 requested spread 或持久偏好。
+- 分页滑杆必须把 `onChange` 限定为内存预览，在 pointer/key/blur commit 时才更新 locator；用 committed page ref 去重可避免 pointerup 后 blur 再次保存，也让快速输入读取最新页而不是闭包旧 state。
+- React state 导航后的目标 spread 快照必须至少等待一个 animation frame，确保 `data-window-state=current` 已指向目标页；controller 的 pending direction 继续提供“首个 + 最终方向”合并语义。
+- 视觉动画取消不等于回滚真实导航；布局、跳转或 slider 介入时先清空 TXT pending commit 再 cancel，可防止旧动画完成后覆盖更新后的 locator。
+- 375px 首轮真实截图暴露顶部 title/toolbar 同行挤压和底部 controls 竖排；移动端 topbar 改为两行、分页 controls 改为两列三行，并按 frame 实际高度测量后，正文和页码均无裁切。
+- 全量 Playwright 首轮只有 EPUB 强制暂停快照未等 target iframe ready；单独场景通过。验收测试增加 current/target `data-reader-snapshot-ready=true` 等待后，全量并行 12/12 稳定通过。

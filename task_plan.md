@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 10.x 快照定位修复：complete；三种动画均展示真实上/下一分页，完整门禁与打包通过；未改版本、未发布。
+大阶段 11 TXT 分页：complete；连续滚动、charOffset 分页/缓存、五项阅读方式、Single/Double 与四种 EPUB 同款动画完成，完整门禁与打包通过；未改版本、未发布。
 
 ## 分支策略
 
@@ -431,8 +431,34 @@
 | 11.3 三页渲染窗口 | `codex/stage11-txt-page-window` | 只挂载前页、当前页、后页并预取相邻边界；复用标注切片 | 大型 TXT 不生成整书 DOM；翻页无空白闪烁；标注范围跨页显示正确 |
 | 11.4 阅读模式切换 | `codex/stage11-txt-reading-modes` | 增加 scroll/paginated 控件和偏好恢复，切换前后用 chapterId + charOffset 锚定 | 默认仍为 scroll；模式切换、重启、主题/窗口变化回到相同文本附近 |
 | 11.5 定位与跳转整合 | `codex/stage11-txt-locator-integrations` | 统一目录、搜索、书签、批注和进度滑杆到分页器 charOffset 路径 | 所有入口能定位正确页/滚动位置；数据库不保存临时页号 |
-| 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
+| 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/cover/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
 | 11.7 阶段 11 验收 | `codex/stage11-txt-acceptance` | 执行长文本性能、视觉、a11y、定位和三格式回归 | 既有 TXT 滚动性能不回退；全局门禁和 Tauri build 通过；合入 main 并同步集成分支 |
+
+### 阶段 11 执行记录
+
+| 小阶段 | 状态 | 验证 |
+|--------|------|------|
+| 11.1 分页测量引擎 | complete | UTF-16/字素安全的可取消分页核心和 DOM 测量器完成；desktop 121 tests、lint 通过 |
+| 11.2 分页缓存 | complete | `txt_pagination_v1` 版本 envelope、布局签名、边界校验和确定性切片重建完成；desktop 123 tests、lint 通过 |
+| 11.3 三窗口渲染 | complete | memoized 前/当前/后三 spread 窗口完成；Single 最多 3 页、Double 最多 6 页，非当前窗口不可交互；desktop 126 tests、lint 通过 |
+| 11.4 阅读模式切换 | complete | Continuous/None/Realistic/Cover/Smooth 五选一、缓存分页接入、Single/Double 窄窗降级和 UTF-16 block offset 完成；core 6、desktop 128、lint/build 通过 |
+| 11.5 定位与跳转 | complete | TOC/search/bookmark/annotation/jumpRequest 统一 charOffset 二分；分页滑杆预览、spread 对齐与单次进度提交完成；core 6、desktop 128、lint/build 通过 |
+| 11.6 分页动画 | complete | 复用事务控制器和隔离层完成 None/Smooth/Cover/Realistic；按钮、键盘、边缘点击、快速输入、reduced-motion、浮层阻断和单次 commit 接入；desktop 129、lint/build 通过 |
+| 11.7 阶段验收 | complete | core 6、desktop 129、Rust 36、Playwright 12/12、Browser/IAB、桌面/375px `view_image`、包体与 Tauri build 全部通过 |
+
+### 阶段 11 最终验收
+
+| 验收项 | 状态 |
+|--------|------|
+| UTF-16/字素安全分页、缓存、三窗口、locator | passed |
+| Continuous + None/Realistic/Cover/Smooth | passed |
+| Single/Double、窄窗降级、按钮/键盘/边缘翻页 | passed |
+| `pnpm.cmd check` | passed，core 6、desktop 129 |
+| Rust fmt/test | passed，36 tests |
+| Playwright | passed，12/12 |
+| Browser/IAB 与视觉复核 | passed，console clean、桌面/375px 无溢出 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，NSIS/MSI |
+| 包体 | passed，书架入口 67.10 kB gzip，ReaderShell 44.92 kB gzip |
 
 ## 大阶段 12：PDF 连续模式
 

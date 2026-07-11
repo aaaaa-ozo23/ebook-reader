@@ -1188,6 +1188,120 @@ describe("App", () => {
     );
   });
 
+  it("switches TXT between continuous and four peer pagination modes", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "reading-mode-txt",
+      title: "Reading Mode TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+
+    const readingModeGroup = screen.getByRole("radiogroup", {
+      name: "TXT reading mode",
+    });
+    expect(within(readingModeGroup).getAllByRole("radio")).toHaveLength(5);
+    expect(
+      within(readingModeGroup).getByRole("radio", { name: "Continuous" }),
+    ).toHaveAttribute("aria-checked", "true");
+
+    await user.click(within(readingModeGroup).getByRole("radio", { name: "None" }));
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        txt: { viewMode: "paginated", transition: "none" },
+      }),
+    );
+    expect(await screen.findByRole("group", { name: "TXT page view" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("navigates cached TXT pages with one progress commit per transaction", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "transition-txt",
+      title: "Transition TXT",
+      format: "txt",
+    });
+    const txtDocument = createTxtDocument(txtBook);
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(txtDocument);
+    getReaderExperiencePreferencesMock.mockResolvedValueOnce({
+      ...defaultReaderExperiencePreferences,
+      txt: { viewMode: "paginated", transition: "slide" },
+    });
+    getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
+      cacheKey === "txt_pagination_v1"
+        ? JSON.stringify({
+            version: 1,
+            charCount: txtDocument.charCount,
+            signature: {
+              devicePixelRatio: 1,
+              pageHeight: 588,
+              pageWidth: 732,
+              spreadMode: "single",
+              themeFingerprint: [
+                defaultReaderTheme.fontFamily,
+                defaultReaderTheme.fontSize,
+                defaultReaderTheme.lineHeight,
+                defaultReaderTheme.paragraphSpacing,
+                defaultReaderTheme.pageMargin,
+              ].join("|"),
+            },
+            boundaries: [
+              { startCharOffset: 0, endCharOffset: 13 },
+              { startCharOffset: 13, endCharOffset: txtDocument.charCount },
+            ],
+          })
+        : null,
+    );
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByText("Page 1 / 2")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Page 2 / 2")).toBeVisible();
+    await waitFor(() =>
+      expect(saveReadingProgressMock).toHaveBeenCalledWith(
+        "transition-txt",
+        expect.objectContaining({ kind: "txt", charOffset: 13 }),
+        expect.any(Number),
+      ),
+    );
+    expect(
+      saveReadingProgressMock.mock.calls.filter(
+        ([bookId, locator]) => bookId === "transition-txt" && locator.kind === "txt",
+      ),
+    ).toHaveLength(1);
+
+    const viewport = screen.getByLabelText("Transition TXT content");
+    vi.spyOn(viewport, "getBoundingClientRect").mockReturnValue({
+      bottom: 700,
+      height: 700,
+      left: 0,
+      right: 100,
+      top: 0,
+      width: 100,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.click(viewport, { clientX: 5 });
+    expect(await screen.findByText("Page 1 / 2")).toBeVisible();
+    fireEvent.keyDown(document, { key: "ArrowRight" });
+    expect(await screen.findByText("Page 2 / 2")).toBeVisible();
+  });
+
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({

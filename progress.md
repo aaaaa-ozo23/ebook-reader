@@ -1804,3 +1804,20 @@
 - **视觉验收：** `D:\tl-temp\ebook-reader-stage10x-{slide,cover,page-curl}-{25,50,75}.png` 九张均显示真实 Location 2 目标内容；正常播放与应用内浏览器无黑面。CDP 强制暂停后的 full-page capture 偶发把舞台外区域记录为黑色，已等待两帧提交并记录为截图路径限制；应用内浏览器页面 identity、非空、无 overlay、console clean 与 Grid→List 交互通过。
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 117）；Cargo fmt check 与 Rust 36 tests passed；Playwright 12/12 passed；视觉 Playwright 1/1 passed；`tauri:build` passed并生成 NSIS/MSI；`git diff --check` passed。
 - **包体：** 书架入口 67.09 kB gzip；ReaderShell JS 40.79 kB、CSS 7.79 kB，继续保持异步边界；未新增依赖、schema、格式或版本，未发布。
+## 2026-07-11 大阶段 11 实施
+
+- 已从最新 `codex/v0.2.0-integration` 的 `d763798` 创建 `codex/stage11-txt-paginator-measurement`，保留未跟踪 `AGENTS.md`。
+- 已新增可取消、可分批让出主线程的 TXT 分页算法和真实 DOM 测量器；长段落使用字素边界二分，页模型保存 UTF-16 `[startCharOffset, endCharOffset)`。
+- 已将路线图和 DEVELOPMENT 的旧三动画规格同步为 TXT 五项并列阅读方式、四动画与 single/double。
+- 首次定向测试发现空段 fixture 的测量阈值预期错误；已调整 fixture 阈值，未改变产品算法。
+- 11.1 门禁通过：desktop 13 files / 121 tests，`pnpm.cmd --filter @reader/desktop lint` 通过。
+- 11.2 已完成固定 `txt_pagination_v1` envelope、布局签名归一、损坏/失配拒绝、连续边界验证、缓存切片重建和 charOffset 页二分；desktop 123 tests、lint 通过。
+- 11.3 已完成 memoized TXT 三窗口组件；Single 挂载前/当前/后 3 页，Double 挂载 3 个 spread/最多 6 页，邻接窗口 `hidden` 且 `aria-hidden`，切片保留 selection/annotation 所需 charOffset 数据属性。
+- 11.4 已接入真实 TXT 阅读器：设置面板提供 Continuous/None/Realistic/Cover/Smooth 五项 radio，四项分页方式启动 DOM 测量与缓存；分页舞台提供 Single/Double、窄窗降级、页码状态和主题/尺寸/spread 重分页。
+- 11.4 门禁通过：core 6 tests、desktop 128 tests、desktop lint/build；书架入口 67.09 kB gzip，ReaderShell 44.22 kB gzip，EPUB/PDF runtime 仍未进入书架入口。
+- 11.5 已将目录、搜索、书签、批注和外部 locator 统一送入分页边界二分；分页滑杆使用 preview/commit 两阶段，Double 对齐 spread 起点，committed ref 防止 pointerup/blur 重复提交。门禁为 core 6、desktop 128、lint/build，书架入口 67.10 kB gzip。
+- 11.6 已复用 `PageTransitionController` 与 `PageTransitionLayer` 接入 TXT None/Smooth/Cover/Realistic；当前/目标 spread 使用只读 DOM clone，真实导航后等待一帧再捕获目标。Previous/Next、ArrowLeft/Right、左右 20% 边缘点击均进入同一事务，文本选择和控件点击不触发边缘翻页。
+- 11.6 门禁通过：desktop 129 tests、lint/build；书架入口 67.10 kB gzip，ReaderShell 44.90 kB gzip。
+- 11.7 Browser/IAB 完成页面 identity、非空、无 overlay、Grid/List 交互、console clean、桌面与 375×760 截图；真实 TXT 状态继续由项目 Playwright fixture 提供。
+- `view_image` 首轮发现 375px 顶栏与底栏拥挤，已修复为两行 topbar、完整宽度模式/导航按钮和稳定页码/滑杆；复拍通过。
+- 最终门禁：`pnpm.cmd check` passed（core 6、desktop 129）；Rust fmt + 36 tests passed；Playwright 12/12 passed；Tauri build passed并生成 NSIS/MSI；书架入口 67.10 kB gzip、ReaderShell 44.92 kB gzip。
