@@ -608,7 +608,7 @@ function TxtPaginatedReaderContent({
   const [isPaginating, setIsPaginating] = useState(true);
   const [requestedSpreadMode, setRequestedSpreadMode] =
     useState<TxtSpreadMode>("single");
-  const [viewportSize, setViewportSize] = useState({ height: 720, width: 780 });
+  const [viewportSize, setViewportSize] = useState({ height: 588, width: 780 });
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
   const renderedSpreadMode: TxtSpreadMode =
     requestedSpreadMode === "double" && viewportSize.width >= TXT_MIN_DOUBLE_WIDTH
@@ -626,7 +626,7 @@ function TxtPaginatedReaderContent({
       ? (viewportSize.width - 82) / 2
       : Math.min(780, viewportSize.width - 48),
   );
-  const pageHeight = Math.max(260, viewportSize.height - 132);
+  const pageHeight = Math.max(260, viewportSize.height);
   const layoutSignature = useMemo<TxtPaginationLayoutSignature>(
     () => ({
       devicePixelRatio: window.devicePixelRatio || 1,
@@ -659,7 +659,9 @@ function TxtPaginatedReaderContent({
     }
     const updateSize = () => {
       setViewportSize({
-        height: viewport.clientHeight || 720,
+        height:
+          frameRef.current?.clientHeight ||
+          Math.max(260, (viewport.clientHeight || 720) - 132),
         width: viewport.clientWidth || 780,
       });
     };

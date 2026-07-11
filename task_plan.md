@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 10.x 快照定位修复：complete；三种动画均展示真实上/下一分页，完整门禁与打包通过；未改版本、未发布。
+大阶段 11 TXT 分页：complete；连续滚动、charOffset 分页/缓存、五项阅读方式、Single/Double 与四种 EPUB 同款动画完成，完整门禁与打包通过；未改版本、未发布。
 
 ## 分支策略
 
@@ -444,7 +444,21 @@
 | 11.4 阅读模式切换 | complete | Continuous/None/Realistic/Cover/Smooth 五选一、缓存分页接入、Single/Double 窄窗降级和 UTF-16 block offset 完成；core 6、desktop 128、lint/build 通过 |
 | 11.5 定位与跳转 | complete | TOC/search/bookmark/annotation/jumpRequest 统一 charOffset 二分；分页滑杆预览、spread 对齐与单次进度提交完成；core 6、desktop 128、lint/build 通过 |
 | 11.6 分页动画 | complete | 复用事务控制器和隔离层完成 None/Smooth/Cover/Realistic；按钮、键盘、边缘点击、快速输入、reduced-motion、浮层阻断和单次 commit 接入；desktop 129、lint/build 通过 |
-| 11.7 阶段验收 | pending | - |
+| 11.7 阶段验收 | complete | core 6、desktop 129、Rust 36、Playwright 12/12、Browser/IAB、桌面/375px `view_image`、包体与 Tauri build 全部通过 |
+
+### 阶段 11 最终验收
+
+| 验收项 | 状态 |
+|--------|------|
+| UTF-16/字素安全分页、缓存、三窗口、locator | passed |
+| Continuous + None/Realistic/Cover/Smooth | passed |
+| Single/Double、窄窗降级、按钮/键盘/边缘翻页 | passed |
+| `pnpm.cmd check` | passed，core 6、desktop 129 |
+| Rust fmt/test | passed，36 tests |
+| Playwright | passed，12/12 |
+| Browser/IAB 与视觉复核 | passed，console clean、桌面/375px 无溢出 |
+| `pnpm.cmd --filter @reader/desktop tauri:build` | passed，NSIS/MSI |
+| 包体 | passed，书架入口 67.10 kB gzip，ReaderShell 44.92 kB gzip |
 
 ## 大阶段 12：PDF 连续模式
 

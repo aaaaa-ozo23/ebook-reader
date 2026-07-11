@@ -494,3 +494,5 @@
 - 分页滑杆必须把 `onChange` 限定为内存预览，在 pointer/key/blur commit 时才更新 locator；用 committed page ref 去重可避免 pointerup 后 blur 再次保存，也让快速输入读取最新页而不是闭包旧 state。
 - React state 导航后的目标 spread 快照必须至少等待一个 animation frame，确保 `data-window-state=current` 已指向目标页；controller 的 pending direction 继续提供“首个 + 最终方向”合并语义。
 - 视觉动画取消不等于回滚真实导航；布局、跳转或 slider 介入时先清空 TXT pending commit 再 cancel，可防止旧动画完成后覆盖更新后的 locator。
+- 375px 首轮真实截图暴露顶部 title/toolbar 同行挤压和底部 controls 竖排；移动端 topbar 改为两行、分页 controls 改为两列三行，并按 frame 实际高度测量后，正文和页码均无裁切。
+- 全量 Playwright 首轮只有 EPUB 强制暂停快照未等 target iframe ready；单独场景通过。验收测试增加 current/target `data-reader-snapshot-ready=true` 等待后，全量并行 12/12 稳定通过。
