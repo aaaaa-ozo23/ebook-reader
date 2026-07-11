@@ -1812,3 +1812,4 @@
 - 首次定向测试发现空段 fixture 的测量阈值预期错误；已调整 fixture 阈值，未改变产品算法。
 - 11.1 门禁通过：desktop 13 files / 121 tests，`pnpm.cmd --filter @reader/desktop lint` 通过。
 - 11.2 已完成固定 `txt_pagination_v1` envelope、布局签名归一、损坏/失配拒绝、连续边界验证、缓存切片重建和 charOffset 页二分；desktop 123 tests、lint 通过。
+- 11.3 已完成 memoized TXT 三窗口组件；Single 挂载前/当前/后 3 页，Double 挂载 3 个 spread/最多 6 页，邻接窗口 `hidden` 且 `aria-hidden`，切片保留 selection/annotation 所需 charOffset 数据属性。
