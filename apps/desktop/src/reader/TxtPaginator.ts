@@ -232,6 +232,14 @@ export function findTxtPageIndex(
   return Math.min(pages.length - 1, Math.max(0, low));
 }
 
+export function getTxtSpreadStart(
+  pageIndex: number,
+  spreadMode: TxtSpreadMode,
+): number {
+  const size = spreadMode === "double" ? 2 : 1;
+  return Math.max(0, Math.floor(Math.max(0, pageIndex) / size) * size);
+}
+
 export function validateTxtPaginationBoundaries(
   boundaries: readonly TxtPaginationBoundary[],
   charCount: number,
