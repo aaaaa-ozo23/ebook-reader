@@ -1818,3 +1818,6 @@
 - 11.5 已将目录、搜索、书签、批注和外部 locator 统一送入分页边界二分；分页滑杆使用 preview/commit 两阶段，Double 对齐 spread 起点，committed ref 防止 pointerup/blur 重复提交。门禁为 core 6、desktop 128、lint/build，书架入口 67.10 kB gzip。
 - 11.6 已复用 `PageTransitionController` 与 `PageTransitionLayer` 接入 TXT None/Smooth/Cover/Realistic；当前/目标 spread 使用只读 DOM clone，真实导航后等待一帧再捕获目标。Previous/Next、ArrowLeft/Right、左右 20% 边缘点击均进入同一事务，文本选择和控件点击不触发边缘翻页。
 - 11.6 门禁通过：desktop 129 tests、lint/build；书架入口 67.10 kB gzip，ReaderShell 44.90 kB gzip。
+- 11.7 Browser/IAB 完成页面 identity、非空、无 overlay、Grid/List 交互、console clean、桌面与 375×760 截图；真实 TXT 状态继续由项目 Playwright fixture 提供。
+- `view_image` 首轮发现 375px 顶栏与底栏拥挤，已修复为两行 topbar、完整宽度模式/导航按钮和稳定页码/滑杆；复拍通过。
+- 最终门禁：`pnpm.cmd check` passed（core 6、desktop 129）；Rust fmt + 36 tests passed；Playwright 12/12 passed；Tauri build passed并生成 NSIS/MSI；书架入口 67.10 kB gzip、ReaderShell 44.92 kB gzip。

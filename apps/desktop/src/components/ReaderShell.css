@@ -791,6 +791,11 @@
   min-height: 44px;
 }
 
+.reader-txt-pagination-controls .reader-epub-mode-toggle,
+.reader-txt-pagination-controls .reader-epub-mode-toggle button {
+  min-height: 44px;
+}
+
 .reader-txt-measure {
   position: absolute;
   top: 0;
@@ -1724,9 +1729,14 @@
   }
 
   .reader-topbar {
+    flex-direction: column;
     align-items: center;
     gap: 10px;
     padding: 10px 14px;
+  }
+
+  .reader-title-group {
+    width: 100%;
   }
 
   .reader-main {
@@ -1751,6 +1761,31 @@
     min-height: 38px;
     padding: 0 6px;
     font-size: 0.78rem;
+  }
+
+  .reader-txt-pagination-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(120px, 1fr);
+  }
+
+  .reader-txt-pagination-controls .reader-epub-mode-toggle,
+  .reader-txt-pagination-nav {
+    width: 100%;
+    grid-column: 1 / -1;
+  }
+
+  .reader-txt-pagination-controls .reader-epub-mode-toggle button,
+  .reader-txt-pagination-nav .reader-tool-button {
+    flex: 1;
+  }
+
+  .reader-txt-pagination-controls > span {
+    white-space: nowrap;
+  }
+
+  .reader-txt-progress__range {
+    width: 100%;
+    min-width: 0;
   }
 
   .reader-viewport {

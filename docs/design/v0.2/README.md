@@ -70,7 +70,7 @@
 
 ### 阅读器
 
-`Shelf`、`Back to shelf`、`Contents`、`Bookmarks`、`Notes`、`Search`、`Bookmark`、`Theme`、`Focus`、`Exit focus`、格式 reading、书名、章节/位置、`Previous`、`Next`、`Light`、`Sepia`、`Green`、`Dark`、`Font`、`Size`、`Line`、`Spacing`、`Margin`、`View`、`Page transition`。
+`Shelf`、`Back to shelf`、`Contents`、`Bookmarks`、`Notes`、`Search`、`Bookmark`、`Theme`、`Focus`、`Exit focus`、格式 reading、书名、章节/位置、`Previous`、`Next`、`Light`、`Sepia`、`Green`、`Dark`、`Font`、`Size`、`Line`、`Spacing`、`Margin`、`View`、`Page transition`、`Reading mode`、`Continuous`、`None`、`Realistic`、`Cover`、`Smooth`、`Single`、`Double`、`Page`、`Pages`。
 
 ### 图片查看器
 
@@ -82,7 +82,7 @@
 |------------|----------|
 | 书架出现 `MOBI` | 替换为 EPUB/TXT/PDF；MOBI/AZW3 不进入 v0.2 |
 | EPUB 设置出现 Auto/Scrolled/Paged | EPUB 仅 `paginated`；UI 只显示该格式能力允许的模式 |
-| 动效出现 Fade | 仅 `none`、`slide`、`page-curl` |
+| 动效出现 Fade | EPUB/TXT 分页仅 `none`、`slide`、`cover`、`page-curl` |
 | 阅读设置出现 Letter spacing/Reset defaults | 阶段 9 不新增；保留现有 Font/Size/Line/Spacing/Margin |
 | 桌面阅读器出现书架 rail + 阅读侧栏 | 只保留现有阅读侧栏，避免重复导航 |
 | 图片查看器背景为书架 | 实现必须覆盖 EPUB 阅读器，并在关闭后恢复触发点焦点 |
@@ -123,3 +123,5 @@
 - 最终使用 Browser/IAB 的 1280×800、640×640、375×760 截图与本目录概念图对照，并维护 fidelity ledger。
 
 阶段 9 最终五点对照、Browser/Playwright 证据、page-curl 决策和包体数据见 [`fidelity-ledger.md`](./fidelity-ledger.md)。
+
+阶段 11 TXT 分页、五项阅读方式、Single/Double、响应式修复和完整门禁见 [`stage11-txt-pagination-fidelity.md`](./stage11-txt-pagination-fidelity.md)。

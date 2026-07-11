@@ -97,6 +97,16 @@ async function readTransitionSnapshotOffsets(
 ): Promise<{ current: number; target: number }> {
   const layer = page.locator(`.reader-transition-layer[data-mode="${mode}"]`);
   await layer.waitFor({ state: "visible", timeout: 1200 });
+  await layer
+    .locator(
+      '.reader-transition-layer__frame--current .reader-transition-snapshot__frame[data-reader-snapshot-ready="true"]',
+    )
+    .waitFor({ state: "attached", timeout: 1200 });
+  await layer
+    .locator(
+      '.reader-transition-layer__frame--target .reader-transition-snapshot__frame[data-reader-snapshot-ready="true"]',
+    )
+    .waitFor({ state: "attached", timeout: 1200 });
 
   return page.evaluate(() => {
     const transitionLayer = document.querySelector<HTMLElement>(
@@ -292,7 +302,8 @@ test("removes a seeded book through the right-click actions menu", async ({ page
 
 test("opens a seeded TXT reader without rendering the whole document", async ({
   page,
-}) => {
+}, testInfo) => {
+  test.setTimeout(60_000);
   await page.addInitScript(() => {
     const book = {
       id: "e2e-long-txt",
@@ -446,6 +457,39 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "location",
   );
 
+  await page.getByRole("button", { name: "Theme" }).click();
+  const txtReadingModes = page.getByRole("radiogroup", { name: "TXT reading mode" });
+  await expect(txtReadingModes.getByRole("radio")).toHaveCount(5);
+  await txtReadingModes.getByRole("radio", { name: "None" }).click();
+  await expect(page.getByRole("group", { name: "TXT page view" })).toBeVisible();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("button", { name: "第一章 长文本" }).click();
+  await expect(page.getByText(/Page 1 \/ \d+/)).toBeVisible();
+  expect(
+    await page
+      .locator(".reader-txt-page-window")
+      .getAttribute("data-rendered-page-count"),
+  ).toBe("2");
+  await page.getByRole("button", { name: "Double" }).click();
+  await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
+  const doubleRenderedPages = Number(
+    await page
+      .locator(".reader-txt-page-window")
+      .getAttribute("data-rendered-page-count"),
+  );
+  expect(doubleRenderedPages).toBeGreaterThan(1);
+  expect(doubleRenderedPages).toBeLessThanOrEqual(6);
+  await page.screenshot({
+    path: testInfo.outputPath("txt-paginated-double.png"),
+  });
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(page.getByText(/Pages \d+-\d+ \/ \d+/)).toBeVisible();
+  await expectNoSeriousAccessibilityViolations(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+  await txtReadingModes.getByRole("radio", { name: "Continuous" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.locator(".reader-page--virtual")).toBeVisible();
+
   await page.setViewportSize({ width: 900, height: 640 });
   await expect(page.locator(".reader-sidebar")).toHaveCSS("width", "401px");
 
@@ -476,6 +520,37 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   expect(narrowLayout.sidebarWidth).toBeLessThanOrEqual(360);
   await page.locator(".reader-sidebar__close").click();
   await expect(page.locator(".reader-sidebar")).toBeHidden();
+  await page.getByRole("button", { name: "Theme" }).click();
+  const mobileTxtReadingModes = page.getByRole("radiogroup", {
+    name: "TXT reading mode",
+  });
+  await mobileTxtReadingModes.getByRole("radio", { name: "Cover" }).click();
+  const mobileModeHeights = await mobileTxtReadingModes
+    .getByRole("radio")
+    .evaluateAll((options) =>
+      options.map((option) => option.getBoundingClientRect().height),
+    );
+  expect(mobileModeHeights.every((height) => height >= 44)).toBe(true);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Double" }).click();
+  await expect(page.locator(".reader-txt-page-window--single")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  const mobileControls = await page.evaluate(() => ({
+    bodyClientWidth: document.body.clientWidth,
+    bodyScrollWidth: document.body.scrollWidth,
+    heights: Array.from(
+      document.querySelectorAll<HTMLElement>(".reader-txt-pagination-controls button"),
+    ).map((element) => element.getBoundingClientRect().height),
+  }));
+  expect(mobileControls.bodyScrollWidth).toBe(mobileControls.bodyClientWidth);
+  expect(mobileControls.heights.every((height) => height >= 44)).toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("txt-paginated-mobile-cover.png"),
+  });
+  await expectNoSeriousAccessibilityViolations(page);
   await page.getByRole("button", { name: "Contents" }).click();
   await expect(page.locator(".reader-sidebar")).toBeVisible();
 
