@@ -699,6 +699,93 @@
   position: relative;
 }
 
+.reader-viewport--txt-paginated {
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(16px, 3vh, 28px) clamp(16px, 3vw, 36px) 18px;
+}
+
+.reader-txt-paginated-frame {
+  position: relative;
+  flex: 1;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.reader-txt-page-window,
+.reader-txt-spread {
+  width: 100%;
+  height: 100%;
+}
+
+.reader-txt-spread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+.reader-txt-page-window--double .reader-txt-spread {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.reader-txt-page,
+.reader-page--txt-paginated {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--txt-reader-text, #25211d);
+  font-family: var(--txt-reader-font-family);
+  font-size: var(--txt-reader-font-size, 18px);
+  line-height: var(--txt-reader-line-height, 1.75);
+}
+
+.reader-txt-page {
+  height: 100%;
+  padding: 2px clamp(8px, 2vw, 24px);
+}
+
+.reader-txt-page-fragment.reader-virtual-row {
+  position: static;
+  width: auto;
+}
+
+.reader-txt-page-fragment--heading,
+.reader-txt-page-fragment.reader-virtual-row--heading {
+  margin: 0 0 28px;
+  color: var(--txt-reader-heading, var(--txt-reader-text, #25211d));
+  font-size: 1.48rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.reader-txt-page-fragment--paragraph,
+.reader-txt-page-fragment.reader-virtual-row--paragraph {
+  min-height: 1.4em;
+  margin: 0 0 var(--txt-reader-paragraph-spacing, 12px);
+  text-indent: 2em;
+}
+
+.reader-txt-pagination-controls {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--txt-reader-muted, #5f6870);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.reader-txt-measure {
+  position: absolute;
+  top: 0;
+  left: -100000px;
+  visibility: hidden;
+  pointer-events: none;
+  contain: layout style;
+}
+
 .reader-highlight {
   border-radius: 3px;
   background: color-mix(
@@ -1366,6 +1453,18 @@
     linear-gradient(105deg, rgba(44, 38, 30, 0.18), transparent 38%),
     var(--txt-reader-panel-background, #f7f1e3);
   box-shadow: -4px 0 8px rgba(28, 34, 35, 0.24);
+}
+
+.reader-transition-preview--continuous .reader-transition-preview__page--current {
+  transform: translateY(-12%);
+}
+
+.reader-transition-preview--continuous .reader-transition-preview__page--target {
+  transform: translateY(64%);
+}
+
+.reader-transition-preview--continuous .reader-transition-preview__fold {
+  display: none;
 }
 
 .reader-transition-preview--none .reader-transition-preview__page--target {

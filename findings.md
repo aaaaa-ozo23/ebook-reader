@@ -489,3 +489,5 @@
 - 现有字符串切片和 DOM Range 使用 UTF-16 offset；分页切点必须保持 UTF-16 数值，同时只落在字素边界，避免拆开 emoji、组合字符和代理对。
 - single/double 会改变单页可用宽度，因此 spread 渲染结果必须进入分页签名；double 的有限渲染窗口应按三个 spread 计，而不是强行限制为三个 DOM 页面。
 - 缓存只需保存连续边界；命中后可用 block 全局 UTF-16 范围与页边界求交，确定性重建标题/段落切片，不必缓存 DOM 或重复测量。
+- `splitChapterParagraphs` 旧实现用 `Array.from(line).length` 推进 offset，却用 JavaScript slice/Range 消费 offset；含 emoji 时两者不一致。阶段 11 已统一为 UTF-16 `line.length`，并补偿被 trim 的前导空白。
+- TXT spread 与 EPUB 一致默认 Single；请求 Double 时以 860px 为可渲染阈值，窄窗只改变 rendered spread，不覆盖 requested spread 或持久偏好。

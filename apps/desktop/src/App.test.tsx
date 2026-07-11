@@ -1188,6 +1188,42 @@ describe("App", () => {
     );
   });
 
+  it("switches TXT between continuous and four peer pagination modes", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "reading-mode-txt",
+      title: "Reading Mode TXT",
+      format: "txt",
+    });
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(createTxtDocument(txtBook));
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+
+    const readingModeGroup = screen.getByRole("radiogroup", {
+      name: "TXT reading mode",
+    });
+    expect(within(readingModeGroup).getAllByRole("radio")).toHaveLength(5);
+    expect(
+      within(readingModeGroup).getByRole("radio", { name: "Continuous" }),
+    ).toHaveAttribute("aria-checked", "true");
+
+    await user.click(within(readingModeGroup).getByRole("radio", { name: "None" }));
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        txt: { viewMode: "paginated", transition: "none" },
+      }),
+    );
+    expect(await screen.findByRole("group", { name: "TXT page view" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({
