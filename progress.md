@@ -1815,3 +1815,4 @@
 - 11.3 已完成 memoized TXT 三窗口组件；Single 挂载前/当前/后 3 页，Double 挂载 3 个 spread/最多 6 页，邻接窗口 `hidden` 且 `aria-hidden`，切片保留 selection/annotation 所需 charOffset 数据属性。
 - 11.4 已接入真实 TXT 阅读器：设置面板提供 Continuous/None/Realistic/Cover/Smooth 五项 radio，四项分页方式启动 DOM 测量与缓存；分页舞台提供 Single/Double、窄窗降级、页码状态和主题/尺寸/spread 重分页。
 - 11.4 门禁通过：core 6 tests、desktop 128 tests、desktop lint/build；书架入口 67.09 kB gzip，ReaderShell 44.22 kB gzip，EPUB/PDF runtime 仍未进入书架入口。
+- 11.5 已将目录、搜索、书签、批注和外部 locator 统一送入分页边界二分；分页滑杆使用 preview/commit 两阶段，Double 对齐 spread 起点，committed ref 防止 pointerup/blur 重复提交。门禁为 core 6、desktop 128、lint/build，书架入口 67.10 kB gzip。

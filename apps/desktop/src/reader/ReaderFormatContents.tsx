@@ -591,8 +591,10 @@ function TxtPaginatedReaderContent({
   const viewportRef = useRef<HTMLElement | null>(null);
   const paginationAbortRef = useRef<AbortController | null>(null);
   const currentAnchorRef = useRef(initialProgress?.locator.charOffset ?? 0);
+  const committedPageIndexRef = useRef(0);
   const [pages, setPages] = useState<TxtPage[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
+  const [previewPageIndex, setPreviewPageIndex] = useState<number | null>(null);
   const [paginationError, setPaginationError] = useState<string | null>(null);
   const [isPaginating, setIsPaginating] = useState(true);
   const [requestedSpreadMode, setRequestedSpreadMode] =
@@ -700,9 +702,12 @@ function TxtPaginatedReaderContent({
       }
       if (controller.signal.aborted) return;
       setPages(nextPages);
-      setActivePageIndex(
-        Math.max(0, findTxtPageIndex(nextPages, currentAnchorRef.current)),
+      const restoredPageIndex = Math.max(
+        0,
+        findTxtPageIndex(nextPages, currentAnchorRef.current),
       );
+      committedPageIndexRef.current = restoredPageIndex;
+      setActivePageIndex(restoredPageIndex);
       setIsPaginating(false);
     };
     void paginate().catch((paginationFailure: unknown) => {
@@ -717,44 +722,51 @@ function TxtPaginatedReaderContent({
     if (jumpRequest === null || pages.length === 0) return;
     currentAnchorRef.current = jumpRequest.locator.charOffset;
     const frame = window.requestAnimationFrame(() => {
-      setActivePageIndex(
-        Math.max(0, findTxtPageIndex(pages, jumpRequest.locator.charOffset)),
+      const targetPageIndex = Math.max(
+        0,
+        findTxtPageIndex(pages, jumpRequest.locator.charOffset),
       );
+      setPreviewPageIndex(null);
+      committedPageIndexRef.current = targetPageIndex;
+      setActivePageIndex(targetPageIndex);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [jumpRequest, pages]);
 
+  const commitPageIndex = useCallback(
+    (requestedIndex: number) => {
+      if (txtDocument === null || pages.length === 0) return;
+      const nextIndex = getTxtSpreadStart(
+        Math.min(pages.length - 1, Math.max(0, requestedIndex)),
+        renderedSpreadMode,
+      );
+      setPreviewPageIndex(null);
+      if (nextIndex === committedPageIndexRef.current) return;
+      const nextPage = pages[nextIndex];
+      if (nextPage === undefined) return;
+      committedPageIndexRef.current = nextIndex;
+      setActivePageIndex(nextIndex);
+      currentAnchorRef.current = nextPage.startCharOffset;
+      const firstFragment = nextPage.fragments[0];
+      if (firstFragment !== undefined) {
+        onActiveChapterChange(firstFragment.chapterId);
+      }
+      onProgressChange(
+        {
+          kind: "txt",
+          chapterId: firstFragment?.chapterId,
+          charOffset: nextPage.startCharOffset,
+        },
+        nextPage.startCharOffset / Math.max(txtDocument.charCount, 1),
+      );
+    },
+    [onActiveChapterChange, onProgressChange, pages, renderedSpreadMode, txtDocument],
+  );
   const movePage = useCallback(
     (direction: -1 | 1) => {
-      setActivePageIndex((currentIndex) => {
-        const nextIndex = Math.min(
-          Math.max(0, pages.length - 1),
-          Math.max(0, currentIndex + direction * spreadSize),
-        );
-        const nextPage = pages[nextIndex];
-        if (
-          txtDocument !== null &&
-          nextPage !== undefined &&
-          nextIndex !== currentIndex
-        ) {
-          currentAnchorRef.current = nextPage.startCharOffset;
-          const firstFragment = nextPage.fragments[0];
-          if (firstFragment !== undefined) {
-            onActiveChapterChange(firstFragment.chapterId);
-          }
-          onProgressChange(
-            {
-              kind: "txt",
-              chapterId: firstFragment?.chapterId,
-              charOffset: nextPage.startCharOffset,
-            },
-            nextPage.startCharOffset / Math.max(txtDocument.charCount, 1),
-          );
-        }
-        return nextIndex;
-      });
+      commitPageIndex(committedPageIndexRef.current + direction * spreadSize);
     },
-    [onActiveChapterChange, onProgressChange, pages, spreadSize, txtDocument],
+    [commitPageIndex, spreadSize],
   );
 
   useEffect(() => {
@@ -767,13 +779,13 @@ function TxtPaginatedReaderContent({
 
   const handleSpreadModeChange = useCallback(
     (mode: TxtSpreadMode) => {
-      const activePage = pages[activePageIndex];
+      const activePage = pages[committedPageIndexRef.current];
       if (activePage !== undefined) {
         currentAnchorRef.current = activePage.startCharOffset;
       }
       setRequestedSpreadMode(mode);
     },
-    [activePageIndex, pages],
+    [pages],
   );
   const handleTextSelection = useCallback(() => {
     onSelectionChange(captureTxtSelection());
@@ -814,7 +826,8 @@ function TxtPaginatedReaderContent({
   }
   if (txtDocument === null) return null;
 
-  const spreadStart = getTxtSpreadStart(activePageIndex, renderedSpreadMode);
+  const displayedPageIndex = previewPageIndex ?? activePageIndex;
+  const spreadStart = getTxtSpreadStart(displayedPageIndex, renderedSpreadMode);
   const spreadEnd = Math.min(pages.length, spreadStart + spreadSize);
   const spreadDescription =
     requestedSpreadMode === "double" && renderedSpreadMode === "single"
@@ -839,7 +852,7 @@ function TxtPaginatedReaderContent({
           </section>
         ) : (
           <TxtPageWindow
-            currentPageIndex={activePageIndex}
+            currentPageIndex={displayedPageIndex}
             pages={pages}
             renderFragment={renderFragment}
             spreadMode={renderedSpreadMode}
@@ -873,6 +886,24 @@ function TxtPaginatedReaderContent({
             ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pages.length}`
             : `Page ${spreadStart + 1} / ${pages.length}`}
         </span>
+        <input
+          aria-label="TXT reading progress"
+          className="reader-epub-progress__range reader-txt-progress__range"
+          disabled={pages.length <= 1}
+          min={0}
+          max={Math.max(0, pages.length - 1)}
+          step={spreadSize}
+          type="range"
+          value={spreadStart}
+          onBlur={(event) => commitPageIndex(Number(event.currentTarget.value))}
+          onChange={(event) =>
+            setPreviewPageIndex(
+              getTxtSpreadStart(Number(event.currentTarget.value), renderedSpreadMode),
+            )
+          }
+          onKeyUp={(event) => commitPageIndex(Number(event.currentTarget.value))}
+          onPointerUp={(event) => commitPageIndex(Number(event.currentTarget.value))}
+        />
       </div>
     </section>
   );
