@@ -124,4 +124,4 @@
 
 阶段 9 最终五点对照、Browser/Playwright 证据、page-curl 决策和包体数据见 [`fidelity-ledger.md`](./fidelity-ledger.md)。
 
-阶段 11 TXT 分页、五项阅读方式、Single/Double、响应式修复和完整门禁见 [`stage11-txt-pagination-fidelity.md`](./stage11-txt-pagination-fidelity.md)。
+阶段 11 TXT 分页、五项阅读方式、Single/Double、EPUB 同款底栏、11.8 性能/动画目标修复和完整门禁见 [`stage11-txt-pagination-fidelity.md`](./stage11-txt-pagination-fidelity.md)。

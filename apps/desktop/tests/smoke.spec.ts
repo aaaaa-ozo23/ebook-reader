@@ -464,7 +464,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(page.getByRole("group", { name: "TXT page view" })).toBeVisible();
   await page.getByRole("button", { name: "Theme" }).click();
   await page.getByRole("button", { name: "第一章 长文本" }).click();
-  await expect(page.getByText(/Page 1 \/ \d+/)).toBeVisible();
+  await expect(page.locator(".reader-epub-status strong")).toHaveText(/Page 1 \/ \d+/);
   expect(
     await page
       .locator(".reader-txt-page-window")
@@ -472,6 +472,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   ).toBe("2");
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
+  await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
   const doubleRenderedPages = Number(
     await page
       .locator(".reader-txt-page-window")
@@ -479,11 +480,83 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   );
   expect(doubleRenderedPages).toBeGreaterThan(1);
   expect(doubleRenderedPages).toBeLessThanOrEqual(6);
+  const doubleGeometry = await page
+    .locator('.reader-txt-spread[data-window-state="current"]')
+    .evaluate((spread) => {
+      const pages = Array.from(
+        spread.querySelectorAll<HTMLElement>(".reader-txt-page"),
+      );
+      return pages.map((readerPage) => {
+        const rect = readerPage.getBoundingClientRect();
+        return {
+          left: rect.left,
+          right: rect.right,
+          text: readerPage.textContent?.trim() ?? "",
+          width: rect.width,
+        };
+      });
+    });
+  expect(doubleGeometry).toHaveLength(2);
+  expect(doubleGeometry[0]?.width).toBeGreaterThanOrEqual(320);
+  expect(doubleGeometry[1]?.width).toBeGreaterThanOrEqual(320);
+  expect(doubleGeometry[1]?.left).toBeGreaterThanOrEqual(doubleGeometry[0]?.right ?? 0);
+  expect(doubleGeometry[0]?.text).not.toBe(doubleGeometry[1]?.text);
   await page.screenshot({
     path: testInfo.outputPath("txt-paginated-double.png"),
   });
+  await page.getByRole("button", { name: "Theme" }).click();
+  await txtReadingModes.getByRole("radio", { name: "Smooth" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  const expectedTargetStart =
+    Number(
+      await page
+        .locator('.reader-txt-spread[data-window-state="current"]')
+        .getAttribute("data-spread-start"),
+    ) + 2;
   await page.getByRole("button", { name: "Next" }).click();
-  await expect(page.getByText(/Pages \d+-\d+ \/ \d+/)).toBeVisible();
+  const transitionLayer = page.locator(".reader-transition-layer");
+  await expect(transitionLayer).toHaveAttribute("data-mode", "slide");
+  await expect(
+    transitionLayer.locator(".reader-transition-layer__frame--target"),
+  ).toContainText(`第`);
+  expect(
+    Number(
+      await transitionLayer
+        .locator(".reader-transition-layer__frame--target .reader-txt-spread")
+        .getAttribute("data-spread-start"),
+    ),
+  ).toBe(expectedTargetStart);
+  await expect(transitionLayer).toHaveCount(0);
+  await expect(
+    page.locator('.reader-txt-spread[data-window-state="current"]'),
+  ).toHaveAttribute("data-spread-start", String(expectedTargetStart));
+  await expect(page.locator(".reader-epub-status strong")).toHaveText(
+    /Pages \d+-\d+ \/ \d+/,
+  );
+  const totalTxtPages = Number(
+    await page.getByRole("spinbutton", { name: "TXT page number" }).getAttribute("max"),
+  );
+  const txtPageInput = page.getByRole("spinbutton", { name: "TXT page number" });
+  await txtPageInput.fill(String(totalTxtPages + 500));
+  await txtPageInput.press("Enter");
+  expect(Number(await txtPageInput.inputValue())).toBeLessThanOrEqual(totalTxtPages);
+  const txtProgress = page.getByRole("slider", { name: "TXT reading progress" });
+  await txtProgress.fill("0");
+  await txtProgress.dispatchEvent("pointerup");
+  await expect(page.locator(".reader-epub-status strong")).toHaveText(
+    new RegExp(`Pages? 1(?:-2)? / ${totalTxtPages}`),
+  );
+  await page.setViewportSize({ width: 640, height: 640 });
+  await expect(page.locator(".reader-txt-page-window--single")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(
+    page.getByText("Double view will resume when the window is wide enough."),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
   await page.getByRole("button", { name: "Theme" }).click();
   await txtReadingModes.getByRole("radio", { name: "Continuous" }).click();
@@ -525,6 +598,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     name: "TXT reading mode",
   });
   await mobileTxtReadingModes.getByRole("radio", { name: "Cover" }).click();
+  await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
   const mobileModeHeights = await mobileTxtReadingModes
     .getByRole("radio")
     .evaluateAll((options) =>
@@ -542,7 +616,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     bodyClientWidth: document.body.clientWidth,
     bodyScrollWidth: document.body.scrollWidth,
     heights: Array.from(
-      document.querySelectorAll<HTMLElement>(".reader-txt-pagination-controls button"),
+      document.querySelectorAll<HTMLElement>(
+        '.reader-epub-controls[aria-label="TXT navigation"] button',
+      ),
     ).map((element) => element.getBoundingClientRect().height),
   }));
   expect(mobileControls.bodyScrollWidth).toBe(mobileControls.bodyClientWidth);

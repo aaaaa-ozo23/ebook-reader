@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createTxtDomPageMeasurer,
   createTxtPaginationCacheEnvelope,
   findTxtPageIndex,
   getGraphemeBreakOffsets,
   paginateTxtBlocks,
   parseTxtPaginationCache,
   reconstructTxtPages,
+  TxtPaginationSessionCache,
   type TxtPageFragment,
   type TxtPaginationSourceBlock,
 } from "./TxtPaginator";
@@ -180,5 +182,82 @@ describe("TXT paginator", () => {
     expect(findTxtPageIndex(pages, 0)).toBe(0);
     expect(findTxtPageIndex(pages, 6)).toBe(1);
     expect(findTxtPageIndex(pages, 999)).toBe(1);
+  });
+
+  it("publishes complete page batches without exposing a partial cache", async () => {
+    const published: number[] = [];
+    const pages = await paginateTxtBlocks([paragraph("abcdefghijkl")], {
+      maxPageHeight: 2,
+      measurePage: measureCharacters,
+      onPages: (nextPages) => published.push(nextPages.length),
+      progressEveryPages: 2,
+      yieldToMain: async () => undefined,
+    });
+
+    expect(pages).toHaveLength(6);
+    expect(published).toEqual([1, 2, 4, 6, 6]);
+  });
+
+  it("reconstructs large cached books with a forward-only block cursor", () => {
+    const blockCount = 10_000;
+    const blocks = Array.from({ length: blockCount }, (_, index) =>
+      paragraph("x", index, `paragraph-${index}`),
+    );
+    const boundaries = Array.from({ length: blockCount }, (_, index) => ({
+      startCharOffset: index,
+      endCharOffset: index + 1,
+    }));
+
+    const startedAt = performance.now();
+    const pages = reconstructTxtPages(blocks, boundaries);
+
+    expect(performance.now() - startedAt).toBeLessThan(1_000);
+    expect(pages).toHaveLength(blockCount);
+    expect(pages[0]?.fragments[0]?.id).toBe("paragraph-0");
+    expect(pages.at(-1)?.fragments[0]?.id).toBe("paragraph-9999");
+  });
+
+  it("reuses measurement nodes while only the final fragment grows", () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const measurer = createTxtDomPageMeasurer(host, 640);
+    const first = paragraph("abcdefgh", 0, "first");
+    const second = paragraph("ijklmnop", 8, "second");
+    const firstCandidate: TxtPageFragment[] = [
+      { ...first, startInBlock: 0, endInBlock: 8 },
+      { ...second, startInBlock: 0, endInBlock: 2 },
+    ];
+
+    measurer.measurePage(firstCandidate);
+    const page = host.querySelector<HTMLElement>(".reader-txt-page");
+    const initialNodes = [...(page?.children ?? [])];
+    measurer.measurePage([
+      firstCandidate[0]!,
+      { ...firstCandidate[1]!, endInBlock: 5 },
+    ]);
+
+    expect(page?.children).toHaveLength(2);
+    expect(page?.children[0]).toBe(initialNodes[0]);
+    expect(page?.children[1]).toBe(initialNodes[1]);
+    expect(page?.children[1]?.textContent).toBe("ijklm");
+
+    measurer.dispose();
+    host.remove();
+  });
+
+  it("keeps only the two most recently used TXT layouts in memory", () => {
+    const cache = new TxtPaginationSessionCache(2);
+    const first = [{ startCharOffset: 0, endCharOffset: 1 }];
+    const second = [{ startCharOffset: 0, endCharOffset: 2 }];
+    const third = [{ startCharOffset: 0, endCharOffset: 3 }];
+
+    cache.set("single", first);
+    cache.set("double", second);
+    expect(cache.get("single")).toEqual(first);
+    cache.set("large-text", third);
+
+    expect(cache.get("double")).toBeNull();
+    expect(cache.get("single")).toEqual(first);
+    expect(cache.get("large-text")).toEqual(third);
   });
 });

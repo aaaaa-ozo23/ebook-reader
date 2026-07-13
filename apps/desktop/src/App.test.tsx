@@ -1164,7 +1164,7 @@ describe("App", () => {
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
-    await user.click(screen.getByRole("button", { name: "Theme" }));
+    await user.click(await screen.findByRole("button", { name: "Theme" }));
 
     const transitionGroup = screen.getByRole("radiogroup", {
       name: "EPUB page transition",
@@ -1201,7 +1201,7 @@ describe("App", () => {
 
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "Theme" }));
+    await user.click(await screen.findByRole("button", { name: "Theme" }));
 
     const readingModeGroup = screen.getByRole("radiogroup", {
       name: "TXT reading mode",
@@ -1247,7 +1247,7 @@ describe("App", () => {
             signature: {
               devicePixelRatio: 1,
               pageHeight: 588,
-              pageWidth: 732,
+              pageWidth: 780,
               spreadMode: "single",
               themeFingerprint: [
                 defaultReaderTheme.fontFamily,

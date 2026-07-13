@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 11 TXT 分页：complete；连续滚动、charOffset 分页/缓存、五项阅读方式、Single/Double 与四种 EPUB 同款动画完成，完整门禁与打包通过；未改版本、未发布。
+大阶段 11.8 TXT 分页修复与性能优化：complete；Double 实际布局、EPUB 同款底栏、精确动画目标页和大型 TXT 分页加载路径已完成并通过全量门禁；不改 locator/schema/version，不发布。
 
 ## 分支策略
 
@@ -433,6 +433,7 @@
 | 11.5 定位与跳转整合 | `codex/stage11-txt-locator-integrations` | 统一目录、搜索、书签、批注和进度滑杆到分页器 charOffset 路径 | 所有入口能定位正确页/滚动位置；数据库不保存临时页号 |
 | 11.6 TXT 分页动画 | `codex/stage11-txt-page-transitions` | 在 paginated 接入 none/slide/cover/page-curl；scroll 保持自然滚动 | 快速输入、选择文本、批注浮层、首末页、reduced-motion 和进度单次提交通过 |
 | 11.7 阶段 11 验收 | `codex/stage11-txt-acceptance` | 执行长文本性能、视觉、a11y、定位和三格式回归 | 既有 TXT 滚动性能不回退；全局门禁和 Tauri build 通过；合入 main 并同步集成分支 |
+| 11.8 TXT 分页修复与性能优化 | `codex/stage11-txt-pagination-polish` | 修复真实 Double 页槽、EPUB 同款页码/百分比/滑杆、精确目标 spread 快照，并优化缓存重建、字素切分和 DOM 测量 | DPR1/DPR2 下两页真实可见；页码/滑杆/动画目标一致；大型 TXT 冷分页明显加速、缓存/会话切换低于 1 秒；全量门禁通过 |
 
 ### 阶段 11 执行记录
 
@@ -445,6 +446,7 @@
 | 11.5 定位与跳转 | complete | TOC/search/bookmark/annotation/jumpRequest 统一 charOffset 二分；分页滑杆预览、spread 对齐与单次进度提交完成；core 6、desktop 128、lint/build 通过 |
 | 11.6 分页动画 | complete | 复用事务控制器和隔离层完成 None/Smooth/Cover/Realistic；按钮、键盘、边缘点击、快速输入、reduced-motion、浮层阻断和单次 commit 接入；desktop 129、lint/build 通过 |
 | 11.7 阶段验收 | complete | core 6、desktop 129、Rust 36、Playwright 12/12、Browser/IAB、桌面/375px `view_image`、包体与 Tauri build 全部通过 |
+| 11.8 分页修复与性能优化 | complete | frame 实测 Double、共享 EPUB/TXT 两层底栏、精确目标 spread 快照、线性缓存重建、延迟字素切分、增量 DOM 测量、渐进发布和两布局 LRU 完成；core 6、desktop 135、Rust 36、Playwright 13/13（含 seeded DPR2 TXT）、Browser/IAB、Tauri build 全部通过 |
 
 ### 阶段 11 最终验收
 
@@ -453,12 +455,12 @@
 | UTF-16/字素安全分页、缓存、三窗口、locator | passed |
 | Continuous + None/Realistic/Cover/Smooth | passed |
 | Single/Double、窄窗降级、按钮/键盘/边缘翻页 | passed |
-| `pnpm.cmd check` | passed，core 6、desktop 129 |
+| `pnpm.cmd check` | passed，core 6、desktop 135 |
 | Rust fmt/test | passed，36 tests |
-| Playwright | passed，12/12 |
+| Playwright | passed，13/13 |
 | Browser/IAB 与视觉复核 | passed，console clean、桌面/375px 无溢出 |
 | `pnpm.cmd --filter @reader/desktop tauri:build` | passed，NSIS/MSI |
-| 包体 | passed，书架入口 67.10 kB gzip，ReaderShell 44.92 kB gzip |
+| 包体 | passed，书架入口 67.10 kB gzip，ReaderShell 46.67 kB gzip |
 
 ## 大阶段 12：PDF 连续模式
 

@@ -31,6 +31,7 @@ export const TxtPageWindow = memo(function TxtPageWindow({
   return (
     <div
       className={`reader-txt-page-window reader-txt-page-window--${spreadMode}`}
+      data-rendered-spread-mode={spreadMode}
       data-rendered-page-count={spreadStarts.reduce(
         (count, start) => count + Math.min(spreadSize, pages.length - start),
         0,
@@ -65,7 +66,7 @@ export const TxtPageWindow = memo(function TxtPageWindow({
                   return (
                     <Tag
                       key={`${fragment.id}-${fragment.startInBlock}`}
-                      className={`reader-virtual-row reader-virtual-row--${fragment.kind} reader-txt-page-fragment`}
+                      className={`reader-virtual-row reader-virtual-row--${fragment.kind} reader-txt-page-fragment reader-txt-page-fragment--${fragment.kind}`}
                       data-chapter-id={fragment.chapterId}
                       data-char-offset={charOffset}
                       data-reader-block-text={text}
