@@ -1,6 +1,7 @@
 import type { PageTransitionMode } from "@reader/core";
 
 import type { PageDirection, PageTransitionFrames } from "./PageTransitionController";
+import type { TxtSpreadMode } from "../TxtPaginator";
 
 import "./PageTransitionLayer.css";
 
@@ -25,6 +26,43 @@ export function capturePageSnapshot(element: HTMLElement | null): PageSnapshot |
   }
 
   return { node: element.cloneNode(true) as HTMLElement };
+}
+
+export function captureTxtSpreadSnapshot(
+  host: HTMLElement | null,
+  spreadStart: number,
+  spreadMode: TxtSpreadMode,
+): PageSnapshot | null {
+  if (host === null) {
+    return null;
+  }
+
+  const sourceSpread = Array.from(
+    host.querySelectorAll<HTMLElement>(".reader-txt-spread[data-spread-start]"),
+  ).find((spread) => Number(spread.dataset.spreadStart) === spreadStart);
+  if (sourceSpread === undefined) {
+    return null;
+  }
+
+  const snapshot = document.createElement("div");
+  snapshot.className = `reader-txt-page-window reader-txt-page-window--${spreadMode} reader-txt-transition-snapshot`;
+  const spread = sourceSpread.cloneNode(true) as HTMLElement;
+  spread.hidden = false;
+  spread.removeAttribute("hidden");
+  spread.removeAttribute("aria-hidden");
+  spread.dataset.windowState = "current";
+  spread.querySelectorAll<HTMLElement>("[hidden]").forEach((element) => {
+    element.hidden = false;
+    element.removeAttribute("hidden");
+  });
+  spread.querySelectorAll<HTMLElement>("[aria-hidden]").forEach((element) => {
+    element.removeAttribute("aria-hidden");
+  });
+  spread.querySelectorAll<HTMLElement>("[id]").forEach((element) => {
+    element.removeAttribute("id");
+  });
+  snapshot.append(spread);
+  return { node: snapshot };
 }
 
 export function captureEpubRenditionSnapshot(

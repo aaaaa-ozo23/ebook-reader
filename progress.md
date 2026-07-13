@@ -1821,3 +1821,18 @@
 - 11.7 Browser/IAB 完成页面 identity、非空、无 overlay、Grid/List 交互、console clean、桌面与 375×760 截图；真实 TXT 状态继续由项目 Playwright fixture 提供。
 - `view_image` 首轮发现 375px 顶栏与底栏拥挤，已修复为两行 topbar、完整宽度模式/导航按钮和稳定页码/滑杆；复拍通过。
 - 最终门禁：`pnpm.cmd check` passed（core 6、desktop 129）；Rust fmt + 36 tests passed；Playwright 12/12 passed；Tauri build passed并生成 NSIS/MSI；书架入口 67.10 kB gzip、ReaderShell 44.92 kB gzip。
+
+## 2026-07-13 大阶段 11.8：TXT 分页修复与性能优化
+
+- **状态：** complete
+- **分支：** `codex/stage11-txt-pagination-polish`
+- **基线：** 从最新 `codex/v0.2.0-integration` `0ac8fd2` 创建；该提交与 `main` 的代码树一致；工作区仅保留用户未跟踪 `AGENTS.md`。
+- **目标：** 修复真实 Double 布局、复用 EPUB 底部导航、让三种动画精确使用目标 spread，并优化 10,000 页级 TXT 的冷分页与缓存命中路径。
+- **已确认测试缺口：** 现有全量 Playwright 12/12 可通过，但 TXT 只检查 double class/DOM 数量，不验证两个当前页的几何和内容，也没有覆盖 TXT 动画目标页关键帧。
+- **边界：** 保持 `TxtLocator`、数据库、`txt_pagination_v1` envelope、偏好结构和 EPUB/PDF 懒加载边界；不新增依赖、schema、版本或 Release。
+- **首轮门禁：** 定向 Vitest、desktop build 与 seeded TXT Playwright 已通过；首轮 `pnpm.cmd check` 仅命中新增 measurer 数组的 `prefer-const`，已改为 `const` 后继续全量验证。
+- **实现：** 使用 frame 真实内容宽高和一致 box model 重建 Double；新增 EPUB/TXT 共享两层分页底栏，TXT 支持页码输入钳制、0–1000 charOffset 滑杆预览/单次提交、Page(s)/百分比和窄窗反馈。
+- **动画：** 当前/目标使用同一精确 spread index，导航前从已挂载邻接窗口捕获 `data-spread-start` 快照；Double 以完整 spread 动画，快速输入进度提交合并到最终页。
+- **性能：** 缓存重建改为页/块双游标 `O(pages + blocks)`；短段整段优先、字素切分延迟；DOM measurer 复用节点；首个完整 spread 渐进显示，只有完整边界写磁盘；会话内 LRU 最多两个布局。
+- **视觉/浏览器：** Browser/IAB 页面 identity、无横向溢出和 console clean；Playwright seeded TXT 验证两页真实几何/相邻内容、动画 target identity、页码/滑杆和 375px 降级；`view_image` 复核桌面与移动最终截图通过。
+- **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 135）；Playwright 13/13（新增 seeded DPR2 TXT）；Rust fmt + 36 tests；Tauri NSIS/MSI build passed。书架入口 67.10 kB gzip、ReaderShell 46.67 kB gzip，EPUB/PDF runtime 未进入书架入口。

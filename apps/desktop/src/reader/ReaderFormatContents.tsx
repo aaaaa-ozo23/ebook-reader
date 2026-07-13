@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- format helpers stay with the isolated async reader chunk */
 import {
   memo,
+  startTransition,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -60,6 +61,7 @@ import {
   getLocatorLabel,
 } from "./readerAnnotationPresentation";
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
+import { PaginatedReaderControls } from "./PaginatedReaderControls";
 import { TxtPageWindow } from "./TxtPageWindow";
 import {
   createTxtDomPageMeasurer,
@@ -70,6 +72,7 @@ import {
   parseTxtPaginationCache,
   reconstructTxtPages,
   TXT_PAGINATION_CACHE_KEY,
+  TxtPaginationSessionCache,
   type TxtPage,
   type TxtPageFragment,
   type TxtPaginationLayoutSignature,
@@ -82,8 +85,8 @@ import {
 } from "./transitions/PageTransitionController";
 import {
   animateIsolatedPageTransition,
-  capturePageSnapshot,
   captureEpubRenditionSnapshotAfterLayout,
+  captureTxtSpreadSnapshot,
   type PageSnapshot,
 } from "./transitions/PageTransitionLayer";
 
@@ -91,6 +94,9 @@ const EPUB_LOCATIONS_CACHE_KEY = "epub_locations_v1";
 const EPUB_PAGE_LIST_CACHE_KEY = "epub_page_list_v1";
 const EPUB_TOC_CACHE_KEY = "epub_toc_v1";
 const PDF_TOC_CACHE_KEY = "pdf_toc_v1";
+const TXT_DOUBLE_MIN_PAGE_WIDTH = 320;
+const TXT_SPREAD_GAP = 18;
+const txtSessionPaginationCache = new TxtPaginationSessionCache(2);
 let pendingFocusTimerId: number | null = null;
 export interface ReaderBlock {
   chapter: TxtChapter;
@@ -571,8 +577,6 @@ function TxtScrollReaderContent({
   );
 }
 
-const TXT_MIN_DOUBLE_WIDTH = 860;
-
 function TxtPaginatedReaderContent({
   annotations,
   blocks,
@@ -599,37 +603,45 @@ function TxtPaginatedReaderContent({
     null,
   );
   const pendingTransitionPageRef = useRef<TxtPage | null>(null);
+  const pendingTargetSnapshotRef = useRef<PageSnapshot | null>(null);
+  const pendingProgressTimerRef = useRef<number | null>(null);
+  const scheduledProgressPageRef = useRef<TxtPage | null>(null);
+  const previewPageIndexRef = useRef<number | null>(null);
   const currentAnchorRef = useRef(initialProgress?.locator.charOffset ?? 0);
   const committedPageIndexRef = useRef(0);
   const [pages, setPages] = useState<TxtPage[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [previewPageIndex, setPreviewPageIndex] = useState<number | null>(null);
+  const [previewProgressValue, setPreviewProgressValue] = useState<number | null>(null);
+  const [pageInput, setPageInput] = useState("1");
+  const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [paginationError, setPaginationError] = useState<string | null>(null);
   const [isPaginating, setIsPaginating] = useState(true);
   const [requestedSpreadMode, setRequestedSpreadMode] =
     useState<TxtSpreadMode>("single");
-  const [viewportSize, setViewportSize] = useState({ height: 588, width: 780 });
+  const [frameSize, setFrameSize] = useState({ height: 588, width: 780 });
+  const [devicePixelRatio, setDevicePixelRatio] = useState(
+    () => window.devicePixelRatio || 1,
+  );
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
+  const canRenderDouble =
+    frameSize.width >= TXT_DOUBLE_MIN_PAGE_WIDTH * 2 + TXT_SPREAD_GAP;
   const renderedSpreadMode: TxtSpreadMode =
-    requestedSpreadMode === "double" && viewportSize.width >= TXT_MIN_DOUBLE_WIDTH
-      ? "double"
-      : "single";
+    requestedSpreadMode === "double" && canRenderDouble ? "double" : "single";
   const spreadSize = renderedSpreadMode === "double" ? 2 : 1;
   const pagesRef = useRef(pages);
   const renderedSpreadModeRef = useRef(renderedSpreadMode);
   const transitionModeRef = useRef(transition);
   const isPageCurlBlockedRef = useRef(isPageCurlBlocked);
   const documentRef = useRef(txtDocument);
-  const pageWidth = Math.max(
-    260,
+  const pageWidth =
     renderedSpreadMode === "double"
-      ? (viewportSize.width - 82) / 2
-      : Math.min(780, viewportSize.width - 48),
-  );
-  const pageHeight = Math.max(260, viewportSize.height);
+      ? Math.max(TXT_DOUBLE_MIN_PAGE_WIDTH, (frameSize.width - TXT_SPREAD_GAP) / 2)
+      : Math.max(1, Math.min(780, frameSize.width));
+  const pageHeight = Math.max(260, frameSize.height);
   const layoutSignature = useMemo<TxtPaginationLayoutSignature>(
     () => ({
-      devicePixelRatio: window.devicePixelRatio || 1,
+      devicePixelRatio,
       pageHeight,
       pageWidth,
       spreadMode: renderedSpreadMode,
@@ -641,7 +653,17 @@ function TxtPaginatedReaderContent({
         theme.pageMargin,
       ].join("|"),
     }),
-    [pageHeight, pageWidth, renderedSpreadMode, theme],
+    [devicePixelRatio, pageHeight, pageWidth, renderedSpreadMode, theme],
+  );
+  const sessionCacheKey = useMemo(
+    () =>
+      [
+        txtDocument?.book.id,
+        txtDocument?.book.fileHash,
+        txtDocument?.charCount,
+        JSON.stringify(layoutSignature),
+      ].join("|"),
+    [layoutSignature, txtDocument],
   );
 
   useEffect(() => {
@@ -653,26 +675,33 @@ function TxtPaginatedReaderContent({
   }, [isPageCurlBlocked, pages, renderedSpreadMode, transition, txtDocument]);
 
   useLayoutEffect(() => {
-    const viewport = viewportRef.current;
-    if (viewport === null) {
+    const frame = frameRef.current;
+    if (frame === null) {
       return;
     }
     const updateSize = () => {
-      setViewportSize({
-        height:
-          frameRef.current?.clientHeight ||
-          Math.max(260, (viewport.clientHeight || 720) - 132),
-        width: viewport.clientWidth || 780,
-      });
+      const nextSize = {
+        height: Math.max(260, frame.clientHeight || 588),
+        width: Math.max(1, frame.clientWidth || 780),
+      };
+      setDevicePixelRatio(window.devicePixelRatio || 1);
+      setFrameSize((currentSize) =>
+        currentSize.height === nextSize.height && currentSize.width === nextSize.width
+          ? currentSize
+          : nextSize,
+      );
     };
     updateSize();
+    window.addEventListener("resize", updateSize);
     if (typeof ResizeObserver !== "function") {
-      window.addEventListener("resize", updateSize);
       return () => window.removeEventListener("resize", updateSize);
     }
     const observer = new ResizeObserver(updateSize);
-    observer.observe(viewport);
-    return () => observer.disconnect();
+    observer.observe(frame);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateSize);
+    };
   }, []);
 
   useEffect(() => {
@@ -680,20 +709,61 @@ function TxtPaginatedReaderContent({
       return;
     }
     pendingTransitionPageRef.current = null;
+    pendingTargetSnapshotRef.current = null;
+    if (pendingProgressTimerRef.current !== null) {
+      window.clearTimeout(pendingProgressTimerRef.current);
+      pendingProgressTimerRef.current = null;
+      scheduledProgressPageRef.current = null;
+    }
     transitionControllerRef.current?.cancel();
     paginationAbortRef.current?.abort();
     const controller = new AbortController();
     paginationAbortRef.current = controller;
+    let hasPublishedPartialPages = false;
+    const restorePages = (nextPages: readonly TxtPage[], isComplete: boolean) => {
+      if (controller.signal.aborted || nextPages.length === 0) return;
+      const restoredPageIndex = getTxtSpreadStart(
+        Math.max(0, findTxtPageIndex(nextPages, currentAnchorRef.current)),
+        renderedSpreadMode,
+      );
+      if (
+        !isComplete &&
+        (nextPages.length < spreadSize ||
+          hasPublishedPartialPages ||
+          currentAnchorRef.current > (nextPages.at(-1)?.endCharOffset ?? 0))
+      ) {
+        return;
+      }
+      if (!isComplete) hasPublishedPartialPages = true;
+      committedPageIndexRef.current = restoredPageIndex;
+      startTransition(() => {
+        setPages([...nextPages]);
+        setActivePageIndex(restoredPageIndex);
+        setPageInput(String(restoredPageIndex + 1));
+      });
+    };
     const paginate = async () => {
       await Promise.resolve();
       if (controller.signal.aborted) return;
       setIsPaginating(true);
       setPaginationError(null);
-      if (document.fonts !== undefined) {
-        await document.fonts.ready;
+      setPages([]);
+      setPreviewPageIndex(null);
+      setPreviewProgressValue(null);
+
+      const sessionBoundaries = txtSessionPaginationCache.get(sessionCacheKey);
+      if (sessionBoundaries !== null) {
+        restorePages(reconstructTxtPages(virtualBlocks, sessionBoundaries), true);
+        setIsPaginating(false);
+        return;
       }
+
+      const [cachedValue] = await Promise.all([
+        getReaderCache(txtDocument.book, TXT_PAGINATION_CACHE_KEY).catch(() => null),
+        document.fonts?.ready ?? Promise.resolve(),
+      ]);
       const cached = parseTxtPaginationCache(
-        await getReaderCache(txtDocument.book, TXT_PAGINATION_CACHE_KEY),
+        cachedValue,
         layoutSignature,
         txtDocument.charCount,
       );
@@ -701,14 +771,16 @@ function TxtPaginatedReaderContent({
       let nextPages: TxtPage[];
       if (cached !== null) {
         nextPages = reconstructTxtPages(virtualBlocks, cached);
+        txtSessionPaginationCache.set(sessionCacheKey, cached);
       } else {
-        const viewport = viewportRef.current;
-        if (viewport === null) return;
-        const measurer = createTxtDomPageMeasurer(viewport, pageWidth);
+        const frame = frameRef.current;
+        if (frame === null) return;
+        const measurer = createTxtDomPageMeasurer(frame, pageWidth);
         try {
           const measuredPages = await paginateTxtBlocks(virtualBlocks, {
             maxPageHeight: pageHeight,
             measurePage: measurer.measurePage,
+            onPages: (partialPages) => restorePages(partialPages, false),
             signal: controller.signal,
           });
           const envelope = createTxtPaginationCacheEnvelope(
@@ -717,23 +789,22 @@ function TxtPaginatedReaderContent({
             txtDocument.charCount,
           );
           nextPages = reconstructTxtPages(virtualBlocks, envelope.boundaries);
-          await saveReaderCache(
+          txtSessionPaginationCache.set(sessionCacheKey, envelope.boundaries);
+          if (controller.signal.aborted) return;
+          restorePages(nextPages, true);
+          setIsPaginating(false);
+          void saveReaderCache(
             txtDocument.book,
             TXT_PAGINATION_CACHE_KEY,
             JSON.stringify(envelope),
-          );
+          ).catch(() => undefined);
+          return;
         } finally {
           measurer.dispose();
         }
       }
       if (controller.signal.aborted) return;
-      setPages(nextPages);
-      const restoredPageIndex = Math.max(
-        0,
-        findTxtPageIndex(nextPages, currentAnchorRef.current),
-      );
-      committedPageIndexRef.current = restoredPageIndex;
-      setActivePageIndex(restoredPageIndex);
+      restorePages(nextPages, true);
       setIsPaginating(false);
     };
     void paginate().catch((paginationFailure: unknown) => {
@@ -742,24 +813,42 @@ function TxtPaginatedReaderContent({
       setIsPaginating(false);
     });
     return () => controller.abort();
-  }, [isLoading, layoutSignature, pageHeight, pageWidth, txtDocument, virtualBlocks]);
+  }, [
+    isLoading,
+    layoutSignature,
+    pageHeight,
+    pageWidth,
+    renderedSpreadMode,
+    sessionCacheKey,
+    spreadSize,
+    txtDocument,
+    virtualBlocks,
+  ]);
 
   useEffect(() => {
     if (jumpRequest === null || pages.length === 0) return;
     pendingTransitionPageRef.current = null;
+    pendingTargetSnapshotRef.current = null;
+    if (pendingProgressTimerRef.current !== null) {
+      window.clearTimeout(pendingProgressTimerRef.current);
+      pendingProgressTimerRef.current = null;
+      scheduledProgressPageRef.current = null;
+    }
     transitionControllerRef.current?.cancel();
     currentAnchorRef.current = jumpRequest.locator.charOffset;
     const frame = window.requestAnimationFrame(() => {
-      const targetPageIndex = Math.max(
-        0,
-        findTxtPageIndex(pages, jumpRequest.locator.charOffset),
+      const targetPageIndex = getTxtSpreadStart(
+        Math.max(0, findTxtPageIndex(pages, jumpRequest.locator.charOffset)),
+        renderedSpreadMode,
       );
       setPreviewPageIndex(null);
+      setPreviewProgressValue(null);
       committedPageIndexRef.current = targetPageIndex;
       setActivePageIndex(targetPageIndex);
+      setPageInput(String(targetPageIndex + 1));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [jumpRequest, pages]);
+  }, [jumpRequest, pages, renderedSpreadMode]);
 
   const savePageProgress = useCallback(
     (page: TxtPage) => {
@@ -781,16 +870,52 @@ function TxtPaginatedReaderContent({
     },
     [onActiveChapterChange, onProgressChange],
   );
+  const schedulePageProgress = useCallback(
+    (page: TxtPage) => {
+      if (pendingProgressTimerRef.current !== null) {
+        window.clearTimeout(pendingProgressTimerRef.current);
+      }
+      scheduledProgressPageRef.current = page;
+      pendingProgressTimerRef.current = window.setTimeout(() => {
+        pendingProgressTimerRef.current = null;
+        scheduledProgressPageRef.current = null;
+        savePageProgress(page);
+      }, 0);
+    },
+    [savePageProgress],
+  );
+  useEffect(
+    () => () => {
+      if (pendingProgressTimerRef.current !== null) {
+        window.clearTimeout(pendingProgressTimerRef.current);
+      }
+      const pendingPage =
+        pendingTransitionPageRef.current ?? scheduledProgressPageRef.current;
+      scheduledProgressPageRef.current = null;
+      if (pendingPage !== null) savePageProgress(pendingPage);
+    },
+    [savePageProgress],
+  );
   const commitPageIndex = useCallback(
     (requestedIndex: number) => {
       if (txtDocument === null || pages.length === 0) return;
       pendingTransitionPageRef.current = null;
+      pendingTargetSnapshotRef.current = null;
+      if (pendingProgressTimerRef.current !== null) {
+        window.clearTimeout(pendingProgressTimerRef.current);
+        pendingProgressTimerRef.current = null;
+        scheduledProgressPageRef.current = null;
+      }
       transitionControllerRef.current?.cancel();
       const nextIndex = getTxtSpreadStart(
         Math.min(pages.length - 1, Math.max(0, requestedIndex)),
         renderedSpreadMode,
       );
       setPreviewPageIndex(null);
+      previewPageIndexRef.current = null;
+      setPreviewProgressValue(null);
+      setIsDraggingProgress(false);
+      setPageInput(String(nextIndex + 1));
       if (nextIndex === committedPageIndexRef.current) return;
       const nextPage = pages[nextIndex];
       if (nextPage === undefined) return;
@@ -810,21 +935,17 @@ function TxtPaginatedReaderContent({
           : animateIsolatedPageTransition(frame, frames, mode, signal);
       },
       captureCurrent: () =>
-        capturePageSnapshot(
-          frameRef.current?.querySelector<HTMLElement>(
-            '.reader-txt-spread[data-window-state="current"]',
-          ) ?? null,
+        captureTxtSpreadSnapshot(
+          frameRef.current,
+          committedPageIndexRef.current,
+          renderedSpreadModeRef.current,
         ),
-      captureTarget: () =>
-        capturePageSnapshot(
-          frameRef.current?.querySelector<HTMLElement>(
-            '.reader-txt-spread[data-window-state="current"]',
-          ) ?? null,
-        ),
+      captureTarget: () => pendingTargetSnapshotRef.current,
       commit: () => {
         const page = pendingTransitionPageRef.current;
         pendingTransitionPageRef.current = null;
-        if (page !== null) savePageProgress(page);
+        pendingTargetSnapshotRef.current = null;
+        if (page !== null) schedulePageProgress(page);
       },
       getMode: () =>
         resolvePageTransitionMode(
@@ -832,6 +953,11 @@ function TxtPaginatedReaderContent({
           isPageCurlBlockedRef.current,
         ),
       navigate: async (direction) => {
+        if (pendingProgressTimerRef.current !== null) {
+          window.clearTimeout(pendingProgressTimerRef.current);
+          pendingProgressTimerRef.current = null;
+          scheduledProgressPageRef.current = null;
+        }
         const activePages = pagesRef.current;
         const activeSpreadSize = renderedSpreadModeRef.current === "double" ? 2 : 1;
         const delta = direction === "next" ? activeSpreadSize : -activeSpreadSize;
@@ -844,14 +970,19 @@ function TxtPaginatedReaderContent({
         );
         const page = activePages[nextIndex];
         if (page === undefined || nextIndex === committedPageIndexRef.current) return;
+        pendingTargetSnapshotRef.current = captureTxtSpreadSnapshot(
+          frameRef.current,
+          nextIndex,
+          renderedSpreadModeRef.current,
+        );
         pendingTransitionPageRef.current = page;
         committedPageIndexRef.current = nextIndex;
         currentAnchorRef.current = page.startCharOffset;
         setPreviewPageIndex(null);
+        previewPageIndexRef.current = null;
+        setPreviewProgressValue(null);
+        setPageInput(String(nextIndex + 1));
         setActivePageIndex(nextIndex);
-        await new Promise<void>((resolve) =>
-          window.requestAnimationFrame(() => resolve()),
-        );
       },
       prefersReducedMotion: () =>
         window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
@@ -860,11 +991,17 @@ function TxtPaginatedReaderContent({
     return () => {
       controller.cancel();
       pendingTransitionPageRef.current = null;
+      pendingTargetSnapshotRef.current = null;
+      if (pendingProgressTimerRef.current !== null) {
+        window.clearTimeout(pendingProgressTimerRef.current);
+        pendingProgressTimerRef.current = null;
+        scheduledProgressPageRef.current = null;
+      }
       if (transitionControllerRef.current === controller) {
         transitionControllerRef.current = null;
       }
     };
-  }, [savePageProgress]);
+  }, [schedulePageProgress]);
 
   const movePage = useCallback(
     (direction: -1 | 1) => {
@@ -889,6 +1026,12 @@ function TxtPaginatedReaderContent({
   const handleSpreadModeChange = useCallback(
     (mode: TxtSpreadMode) => {
       pendingTransitionPageRef.current = null;
+      pendingTargetSnapshotRef.current = null;
+      if (pendingProgressTimerRef.current !== null) {
+        window.clearTimeout(pendingProgressTimerRef.current);
+        pendingProgressTimerRef.current = null;
+        scheduledProgressPageRef.current = null;
+      }
       transitionControllerRef.current?.cancel();
       const activePage = pages[committedPageIndexRef.current];
       if (activePage !== undefined) {
@@ -898,6 +1041,40 @@ function TxtPaginatedReaderContent({
     },
     [pages],
   );
+  const commitPageInput = useCallback(() => {
+    const pageNumber = Number.parseInt(pageInput, 10);
+    if (!Number.isFinite(pageNumber) || pages.length === 0 || isPaginating) {
+      setPageInput(String(committedPageIndexRef.current + 1));
+      return;
+    }
+    const normalizedPage = normalizeReaderPage(pageNumber, pages.length);
+    setPageInput(String(normalizedPage));
+    commitPageIndex(normalizedPage - 1);
+  }, [commitPageIndex, isPaginating, pageInput, pages.length]);
+  const handleProgressPreview = useCallback(
+    (value: string) => {
+      if (txtDocument === null || pages.length === 0 || isPaginating) return;
+      const numericValue = Number(value);
+      if (!Number.isFinite(numericValue)) return;
+      const normalizedValue = Math.min(1000, Math.max(0, numericValue));
+      const targetOffset = Math.round((normalizedValue / 1000) * txtDocument.charCount);
+      const targetPageIndex = getTxtSpreadStart(
+        findTxtPageIndex(pages, targetOffset),
+        renderedSpreadMode,
+      );
+      previewPageIndexRef.current = targetPageIndex;
+      setPreviewPageIndex(targetPageIndex);
+      setPreviewProgressValue(normalizedValue);
+      setIsDraggingProgress(true);
+    },
+    [isPaginating, pages, renderedSpreadMode, txtDocument],
+  );
+  const commitProgress = useCallback(() => {
+    const targetPageIndex = previewPageIndexRef.current;
+    setIsDraggingProgress(false);
+    if (targetPageIndex === null) return;
+    commitPageIndex(targetPageIndex);
+  }, [commitPageIndex]);
   const handleTextSelection = useCallback(() => {
     onSelectionChange(captureTxtSelection());
   }, [onSelectionChange]);
@@ -960,6 +1137,20 @@ function TxtPaginatedReaderContent({
   const displayedPageIndex = previewPageIndex ?? activePageIndex;
   const spreadStart = getTxtSpreadStart(displayedPageIndex, renderedSpreadMode);
   const spreadEnd = Math.min(pages.length, spreadStart + spreadSize);
+  const visiblePage = pages[spreadStart];
+  const activeChapterTitle =
+    visiblePage?.fragments[0]?.chapterTitle ?? txtDocument.book.title;
+  const progressValue =
+    previewProgressValue ??
+    Math.round(
+      ((visiblePage?.startCharOffset ?? 0) / Math.max(txtDocument.charCount, 1)) * 1000,
+    );
+  const progressPercent = Math.round(progressValue / 10);
+  const positionLabel = isPaginating
+    ? "Pages calculating"
+    : spreadSize === 2 && spreadEnd > spreadStart + 1
+      ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pages.length}`
+      : `Page ${spreadStart + 1} / ${pages.length}`;
   const spreadDescription =
     requestedSpreadMode === "double" && renderedSpreadMode === "single"
       ? "Double view will resume when the window is wide enough."
@@ -978,10 +1169,10 @@ function TxtPaginatedReaderContent({
       onClick={handlePageEdgeClick}
     >
       <div ref={frameRef} className="reader-txt-paginated-frame reader-transition-host">
-        {isPaginating ? (
+        {pages.length === 0 ? (
           <section className="reader-state" role="status" aria-live="polite">
             <div className="loading-line" aria-hidden="true" />
-            <p>Paginating TXT book...</p>
+            <p>Pages calculating</p>
           </section>
         ) : (
           <TxtPageWindow
@@ -991,75 +1182,45 @@ function TxtPaginatedReaderContent({
             spreadMode={renderedSpreadMode}
           />
         )}
+        {isPaginating && pages.length > 0 ? (
+          <span
+            className="reader-txt-pagination-pending"
+            role="status"
+            aria-live="polite"
+          >
+            Pages calculating
+          </span>
+        ) : null}
       </div>
-      <div className="reader-txt-pagination-controls">
-        <div
-          className="reader-epub-mode-toggle"
-          role="group"
-          aria-label="TXT page view"
-          title={spreadDescription}
-        >
-          <button
-            type="button"
-            aria-pressed={requestedSpreadMode === "single"}
-            onClick={() => handleSpreadModeChange("single")}
-          >
-            Single
-          </button>
-          <button
-            type="button"
-            aria-pressed={requestedSpreadMode === "double"}
-            onClick={() => handleSpreadModeChange("double")}
-          >
-            Double
-          </button>
-        </div>
-        <div
-          className="reader-txt-pagination-nav"
-          role="group"
-          aria-label="TXT page navigation"
-        >
-          <button
-            type="button"
-            className="reader-tool-button"
-            disabled={spreadStart === 0}
-            onClick={() => movePage(-1)}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="reader-tool-button"
-            disabled={spreadEnd >= pages.length}
-            onClick={() => movePage(1)}
-          >
-            Next
-          </button>
-        </div>
-        <span aria-live="polite">
-          {spreadSize === 2 && spreadEnd > spreadStart + 1
-            ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pages.length}`
-            : `Page ${spreadStart + 1} / ${pages.length}`}
-        </span>
-        <input
-          aria-label="TXT reading progress"
-          className="reader-epub-progress__range reader-txt-progress__range"
-          disabled={pages.length <= 1}
-          min={0}
-          max={Math.max(0, pages.length - 1)}
-          step={spreadSize}
-          type="range"
-          value={spreadStart}
-          onBlur={(event) => commitPageIndex(Number(event.currentTarget.value))}
-          onChange={(event) =>
-            setPreviewPageIndex(
-              getTxtSpreadStart(Number(event.currentTarget.value), renderedSpreadMode),
-            )
-          }
-          onKeyUp={(event) => commitPageIndex(Number(event.currentTarget.value))}
-          onPointerUp={(event) => commitPageIndex(Number(event.currentTarget.value))}
-        />
-      </div>
+      <PaginatedReaderControls
+        ariaLabel="TXT navigation"
+        chapterTitle={activeChapterTitle}
+        isDraggingProgress={isDraggingProgress}
+        nextDisabled={pages.length === 0 || spreadEnd >= pages.length}
+        onNext={() => movePage(1)}
+        onPageInputChange={setPageInput}
+        onPageInputCommit={commitPageInput}
+        onPrevious={() => movePage(-1)}
+        onProgressChange={handleProgressPreview}
+        onProgressCommit={commitProgress}
+        onProgressStart={() => setIsDraggingProgress(true)}
+        onSpreadModeChange={handleSpreadModeChange}
+        pageFieldLabel="Page"
+        pageInputAriaLabel="TXT page number"
+        pageInputDisabled={isPaginating || pages.length === 0}
+        pageInputMax={isPaginating ? null : pages.length}
+        pageInputValue={pageInput}
+        positionLabel={positionLabel}
+        previousDisabled={pages.length === 0 || spreadStart === 0}
+        progressAriaLabel="TXT reading progress"
+        progressDisabled={isPaginating || pages.length <= 1}
+        progressLabel={`${progressPercent}%`}
+        progressTooltip={`${positionLabel} · ${progressPercent}%`}
+        progressValue={progressValue}
+        requestedSpreadMode={requestedSpreadMode}
+        spreadAriaLabel="TXT page view"
+        spreadModeDescription={spreadDescription}
+      />
     </section>
   );
 }
@@ -1653,10 +1814,10 @@ export function EpubReaderContent({
   );
 
   const handleProgressChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
+    (value: string) => {
       isDraggingProgressRef.current = true;
       setIsDraggingProgress(true);
-      handleProgressPreview(event.currentTarget.value);
+      handleProgressPreview(value);
     },
     [handleProgressPreview],
   );
@@ -1713,15 +1874,6 @@ export function EpubReaderContent({
     });
   }, [locationInput]);
 
-  const handleLocationInputKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === "Enter") {
-        commitLocationInput();
-      }
-    },
-    [commitLocationInput],
-  );
-
   const activeProgress = previewPosition ?? position;
   const locationsReady =
     position?.locationsReady === true && position.totalLocations !== null;
@@ -1747,9 +1899,6 @@ export function EpubReaderContent({
     activeProgress !== null
       ? (findTocItemByHref(tocItems, activeProgress.locator.href)?.title ?? book.title)
       : book.title;
-  const progressControlStyle = {
-    "--epub-progress-percent": `${activeProgression * 100}%`,
-  } as CSSProperties;
   const spreadModeDescription =
     requestedSpreadMode === "double" && spreadState.rendered === "single"
       ? "Double view will resume when the window is wide enough."
@@ -1807,100 +1956,43 @@ export function EpubReaderContent({
             tabIndex={-1}
           />
         </div>
-        <div className="reader-epub-controls" aria-label="EPUB navigation">
-          <div className="reader-epub-control-row">
-            <button
-              type="button"
-              className="reader-tool-button"
-              onClick={handlePrevious}
-            >
-              Previous
-            </button>
-            <div className="reader-epub-status" aria-live="polite">
-              <span>{activeChapterTitle}</span>
-              <strong>{positionLabel}</strong>
-              <span>{progressLabel}</span>
-            </div>
-            <button type="button" className="reader-tool-button" onClick={handleNext}>
-              Next
-            </button>
-            <div
-              className="reader-epub-mode-toggle"
-              role="group"
-              aria-label="EPUB page view"
-              title={spreadModeDescription}
-            >
-              <button
-                type="button"
-                aria-pressed={requestedSpreadMode === "single"}
-                onClick={() => handleSpreadModeChange("single")}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                aria-pressed={requestedSpreadMode === "double"}
-                onClick={() => handleSpreadModeChange("double")}
-              >
-                Double
-              </button>
-            </div>
-          </div>
-          <div className="reader-epub-progress" style={progressControlStyle}>
-            <div className="reader-epub-progress__meta">
-              <span>{activeChapterTitle}</span>
-              <label className="reader-page-field reader-epub-page-field">
-                <span>Location</span>
-                <input
-                  aria-label="EPUB location number"
-                  disabled={!locationsReady}
-                  min={1}
-                  max={totalLocations ?? 1}
-                  type="number"
-                  value={locationInput}
-                  onBlur={commitLocationInput}
-                  onChange={(event) => setLocationInput(event.currentTarget.value)}
-                  onKeyDown={handleLocationInputKeyDown}
-                />
-                <span>/ {totalLocations ?? "-"}</span>
-              </label>
-            </div>
-            <div className="reader-epub-progress__track">
-              {locationsReady ? (
-                <span
-                  className={`reader-epub-progress__tooltip ${
-                    isDraggingProgress ? "reader-epub-progress__tooltip--visible" : ""
-                  }`}
-                  aria-hidden="true"
-                >
-                  {activeProgress?.publicationPageLabel === null ||
-                  activeProgress?.publicationPageLabel === undefined
-                    ? activeLocation === null
-                      ? locationLabel
-                      : `Location ${activeLocation}`
-                    : `Page ${activeProgress.publicationPageLabel}`}
-                </span>
-              ) : null}
-              <input
-                aria-label="EPUB reading progress"
-                className="reader-epub-progress__range"
-                disabled={!locationsReady}
-                max={1000}
-                min={0}
-                step={1}
-                type="range"
-                value={sliderValue}
-                onChange={handleProgressChange}
-                onKeyUp={commitProgress}
-                onPointerDown={() => {
-                  isDraggingProgressRef.current = true;
-                  setIsDraggingProgress(true);
-                }}
-                onPointerUp={commitProgress}
-              />
-            </div>
-          </div>
-        </div>
+        <PaginatedReaderControls
+          ariaLabel="EPUB navigation"
+          chapterTitle={activeChapterTitle}
+          isDraggingProgress={isDraggingProgress}
+          onNext={handleNext}
+          onPageInputChange={setLocationInput}
+          onPageInputCommit={commitLocationInput}
+          onPrevious={handlePrevious}
+          onProgressChange={handleProgressChange}
+          onProgressCommit={commitProgress}
+          onProgressStart={() => {
+            isDraggingProgressRef.current = true;
+            setIsDraggingProgress(true);
+          }}
+          onSpreadModeChange={handleSpreadModeChange}
+          pageFieldLabel="Location"
+          pageInputAriaLabel="EPUB location number"
+          pageInputDisabled={!locationsReady}
+          pageInputMax={totalLocations}
+          pageInputValue={locationInput}
+          positionLabel={positionLabel}
+          progressAriaLabel="EPUB reading progress"
+          progressDisabled={!locationsReady}
+          progressLabel={progressLabel}
+          progressTooltip={
+            activeProgress?.publicationPageLabel === null ||
+            activeProgress?.publicationPageLabel === undefined
+              ? activeLocation === null
+                ? locationLabel
+                : `Location ${activeLocation}`
+              : `Page ${activeProgress.publicationPageLabel}`
+          }
+          progressValue={sliderValue}
+          requestedSpreadMode={requestedSpreadMode}
+          spreadAriaLabel="EPUB page view"
+          spreadModeDescription={spreadModeDescription}
+        />
       </article>
       <EpubImageViewer
         key={activeImage?.sourceUrl ?? "closed"}

@@ -29,5 +29,15 @@ export default defineConfig({
         viewport: { width: 900, height: 640 },
       },
     },
+    {
+      name: "chromium-dpr2-txt",
+      grep: /opens a seeded TXT reader/,
+      testMatch: "smoke.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 2,
+        viewport: { width: 1280, height: 720 },
+      },
+    },
   ],
 });

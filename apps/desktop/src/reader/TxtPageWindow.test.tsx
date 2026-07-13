@@ -56,11 +56,21 @@ describe("TXT page window", () => {
       "data-rendered-page-count",
       "6",
     );
+    expect(container.querySelector(".reader-txt-page-window")).toHaveAttribute(
+      "data-rendered-spread-mode",
+      "double",
+    );
     expect(container.querySelectorAll(".reader-txt-spread")).toHaveLength(3);
     expect(container.querySelectorAll(".reader-txt-page")).toHaveLength(6);
     expect(container.querySelector('[data-spread-start="4"]')).not.toHaveAttribute(
       "hidden",
     );
+    const currentPages = container.querySelectorAll(
+      '[data-spread-start="4"] .reader-txt-page',
+    );
+    expect(currentPages).toHaveLength(2);
+    expect(currentPages[0]).toHaveTextContent("page-4");
+    expect(currentPages[1]).toHaveTextContent("page-5");
     expect(renderFragment).toHaveBeenCalledTimes(6);
   });
 
