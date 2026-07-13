@@ -46,13 +46,41 @@ export interface TxtPaginationCacheEnvelope {
 export interface TxtPaginationOptions {
   maxPageHeight: number;
   measurePage: (fragments: readonly TxtPageFragment[]) => number;
+  onPages?: (pages: readonly TxtPage[]) => void;
+  progressEveryPages?: number;
   signal?: AbortSignal;
   yieldEvery?: number;
   yieldToMain?: () => Promise<void>;
 }
 
 const DEFAULT_YIELD_EVERY = 24;
+const DEFAULT_PROGRESS_EVERY_PAGES = 64;
 export const TXT_PAGINATION_CACHE_KEY = "txt_pagination_v1";
+let graphemeSegmenter: Intl.Segmenter | null | undefined;
+
+export class TxtPaginationSessionCache {
+  private readonly entries = new Map<string, TxtPaginationBoundary[]>();
+
+  constructor(private readonly limit = 2) {}
+
+  get(key: string): readonly TxtPaginationBoundary[] | null {
+    const boundaries = this.entries.get(key);
+    if (boundaries === undefined) return null;
+    this.entries.delete(key);
+    this.entries.set(key, boundaries);
+    return boundaries;
+  }
+
+  set(key: string, boundaries: readonly TxtPaginationBoundary[]): void {
+    this.entries.delete(key);
+    this.entries.set(key, [...boundaries]);
+    while (this.entries.size > Math.max(1, this.limit)) {
+      const oldestKey = this.entries.keys().next().value as string | undefined;
+      if (oldestKey === undefined) break;
+      this.entries.delete(oldestKey);
+    }
+  }
+}
 
 export async function paginateTxtBlocks(
   blocks: readonly TxtPaginationSourceBlock[],
@@ -63,6 +91,10 @@ export async function paginateTxtBlocks(
   let operations = 0;
   const yieldEvery = Math.max(1, options.yieldEvery ?? DEFAULT_YIELD_EVERY);
   const yieldToMain = options.yieldToMain ?? defaultYieldToMain;
+  const progressEveryPages = Math.max(
+    1,
+    options.progressEveryPages ?? DEFAULT_PROGRESS_EVERY_PAGES,
+  );
 
   const checkpoint = async () => {
     throwIfAborted(options.signal);
@@ -79,6 +111,9 @@ export async function paginateTxtBlocks(
     }
     pages.push(createPage(pages.length, fragments));
     fragments = [];
+    if (pages.length <= 2 || pages.length % progressEveryPages === 0) {
+      options.onPages?.([...pages]);
+    }
   };
 
   for (const block of blocks) {
@@ -95,11 +130,11 @@ export async function paginateTxtBlocks(
       continue;
     }
 
-    const breakOffsets = getGraphemeBreakOffsets(block.text);
+    let breakOffsets: number[] | null = null;
     let startBreakIndex = 0;
-    while (startBreakIndex < breakOffsets.length - 1) {
+    while (breakOffsets === null || startBreakIndex < breakOffsets.length - 1) {
       await checkpoint();
-      const startInBlock = breakOffsets[startBreakIndex] ?? 0;
+      const startInBlock = breakOffsets?.[startBreakIndex] ?? 0;
       const wholeFragment = createFragment(block, startInBlock, block.text.length);
 
       if (options.measurePage([...fragments, wholeFragment]) <= options.maxPageHeight) {
@@ -112,6 +147,7 @@ export async function paginateTxtBlocks(
         continue;
       }
 
+      breakOffsets ??= getGraphemeBreakOffsets(block.text);
       const endBreakIndex = findLargestFittingBreakIndex(
         block,
         breakOffsets,
@@ -135,7 +171,9 @@ export async function paginateTxtBlocks(
   }
 
   finishPage();
-  return normalizePageRanges(pages, blocks);
+  const normalizedPages = normalizePageRanges(pages, blocks);
+  options.onPages?.(normalizedPages);
+  return normalizedPages;
 }
 
 export function createTxtPaginationCacheEnvelope(
@@ -196,13 +234,59 @@ export function reconstructTxtPages(
   blocks: readonly TxtPaginationSourceBlock[],
   boundaries: readonly TxtPaginationBoundary[],
 ): TxtPage[] {
-  return boundaries.map((boundary, index) => ({
-    ...boundary,
-    fragments: blocks.flatMap((block) =>
-      createFragmentsForBoundary(block, boundary, index === boundaries.length - 1),
-    ),
-    index,
-  }));
+  const pages: TxtPage[] = [];
+  let blockIndex = 0;
+
+  for (const [pageIndex, boundary] of boundaries.entries()) {
+    const fragments: TxtPageFragment[] = [];
+    const isLastPage = pageIndex === boundaries.length - 1;
+
+    while (blockIndex < blocks.length) {
+      const block = blocks[blockIndex];
+      if (block === undefined) break;
+
+      if (block.kind === "heading" || block.text.length === 0) {
+        if (block.charOffset < boundary.startCharOffset) {
+          blockIndex += 1;
+          continue;
+        }
+        if (
+          block.charOffset >= boundary.endCharOffset &&
+          !(isLastPage && block.charOffset === boundary.endCharOffset)
+        ) {
+          break;
+        }
+        fragments.push(createFragment(block, 0, block.text.length));
+        blockIndex += 1;
+        continue;
+      }
+
+      const blockEnd = block.charOffset + block.text.length;
+      if (blockEnd <= boundary.startCharOffset) {
+        blockIndex += 1;
+        continue;
+      }
+      if (block.charOffset >= boundary.endCharOffset) break;
+
+      const startInBlock = Math.max(0, boundary.startCharOffset - block.charOffset);
+      const endInBlock = Math.min(
+        block.text.length,
+        boundary.endCharOffset - block.charOffset,
+      );
+      if (endInBlock > startInBlock) {
+        fragments.push(createFragment(block, startInBlock, endInBlock));
+      }
+      if (blockEnd <= boundary.endCharOffset) {
+        blockIndex += 1;
+      } else {
+        break;
+      }
+    }
+
+    pages.push({ ...boundary, fragments, index: pageIndex });
+  }
+
+  return pages;
 }
 
 export function findTxtPageIndex(
@@ -268,8 +352,8 @@ export function getGraphemeBreakOffsets(text: string): number[] {
   const Segmenter = Intl.Segmenter;
 
   if (typeof Segmenter === "function") {
-    const segmenter = new Segmenter(undefined, { granularity: "grapheme" });
-    for (const segment of segmenter.segment(text)) {
+    graphemeSegmenter ??= new Segmenter(undefined, { granularity: "grapheme" });
+    for (const segment of graphemeSegmenter.segment(text)) {
       if (segment.index > 0) {
         offsets.push(segment.index);
       }
@@ -300,14 +384,54 @@ export function createTxtDomPageMeasurer(
   container.setAttribute("aria-hidden", "true");
   container.style.width = `${Math.max(1, pageWidth)}px`;
   const page = document.createElement("article");
-  page.className = "reader-page reader-page--txt-paginated";
+  page.className = "reader-txt-page";
+  page.style.height = "auto";
+  page.style.width = "100%";
   container.append(page);
   host.append(container);
+  let measuredFragments: TxtPageFragment[] = [];
+  const measuredNodes: HTMLElement[] = [];
 
   return {
     dispose: () => container.remove(),
     measurePage: (fragments) => {
-      page.replaceChildren(...fragments.map(createMeasurementNode));
+      let commonLength = 0;
+      while (
+        commonLength < measuredFragments.length &&
+        commonLength < fragments.length &&
+        fragmentsEqual(measuredFragments[commonLength], fragments[commonLength])
+      ) {
+        commonLength += 1;
+      }
+
+      const previous = measuredFragments[commonLength];
+      const next = fragments[commonLength];
+      if (
+        previous !== undefined &&
+        next !== undefined &&
+        fragmentIdentityMatches(previous, next)
+      ) {
+        const node = measuredNodes[commonLength];
+        if (node !== undefined) {
+          node.textContent = next.text.slice(next.startInBlock, next.endInBlock);
+          commonLength += 1;
+        }
+      }
+
+      for (let index = measuredNodes.length - 1; index >= commonLength; index -= 1) {
+        measuredNodes[index]?.remove();
+      }
+      measuredNodes.length = commonLength;
+
+      for (let index = commonLength; index < fragments.length; index += 1) {
+        const fragment = fragments[index];
+        if (fragment === undefined) continue;
+        const node = createMeasurementNode(fragment);
+        page.append(node);
+        measuredNodes.push(node);
+      }
+
+      measuredFragments = [...fragments];
       return page.scrollHeight;
     },
   };
@@ -315,9 +439,28 @@ export function createTxtDomPageMeasurer(
 
 function createMeasurementNode(fragment: TxtPageFragment): HTMLElement {
   const node = document.createElement(fragment.kind === "heading" ? "h2" : "p");
-  node.className = `reader-txt-page-fragment reader-txt-page-fragment--${fragment.kind}`;
+  node.className = `reader-virtual-row reader-virtual-row--${fragment.kind} reader-txt-page-fragment reader-txt-page-fragment--${fragment.kind}`;
   node.textContent = fragment.text.slice(fragment.startInBlock, fragment.endInBlock);
   return node;
+}
+
+function fragmentIdentityMatches(
+  first: TxtPageFragment,
+  second: TxtPageFragment,
+): boolean {
+  return (
+    first.id === second.id &&
+    first.kind === second.kind &&
+    first.startInBlock === second.startInBlock
+  );
+}
+
+function fragmentsEqual(first: TxtPageFragment, second: TxtPageFragment): boolean {
+  return (
+    fragmentIdentityMatches(first, second) &&
+    first.endInBlock === second.endInBlock &&
+    first.text === second.text
+  );
 }
 
 function createFragment(
@@ -364,31 +507,6 @@ function normalizePageRanges(
       pages[index + 1]?.startCharOffset ?? Math.max(page.endCharOffset, contentEnd),
     startCharOffset: index === 0 ? 0 : page.startCharOffset,
   }));
-}
-
-function createFragmentsForBoundary(
-  block: TxtPaginationSourceBlock,
-  boundary: TxtPaginationBoundary,
-  isLastPage: boolean,
-): TxtPageFragment[] {
-  if (block.kind === "heading" || block.text.length === 0) {
-    const belongsToPage =
-      block.charOffset >= boundary.startCharOffset &&
-      (block.charOffset < boundary.endCharOffset ||
-        (isLastPage && block.charOffset === boundary.endCharOffset));
-    return belongsToPage ? [createFragment(block, 0, block.text.length)] : [];
-  }
-  const blockEnd = block.charOffset + block.text.length;
-  const startInBlock = Math.max(0, boundary.startCharOffset - block.charOffset);
-  const endInBlock = Math.min(
-    block.text.length,
-    boundary.endCharOffset - block.charOffset,
-  );
-  return blockEnd > boundary.startCharOffset &&
-    block.charOffset < boundary.endCharOffset &&
-    endInBlock > startInBlock
-    ? [createFragment(block, startInBlock, endInBlock)]
-    : [];
 }
 
 function normalizeLayoutSignature(

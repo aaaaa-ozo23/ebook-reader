@@ -5,6 +5,7 @@ import {
   captureEpubRenditionSnapshot,
   captureEpubRenditionSnapshotAfterLayout,
   capturePageSnapshot,
+  captureTxtSpreadSnapshot,
   PAGE_TRANSITION_DURATIONS,
   serializeSanitizedDocument,
 } from "./PageTransitionLayer";
@@ -27,6 +28,33 @@ describe("isolated page transition layer", () => {
     expect(snapshot?.node).not.toBe(livePage);
     expect(snapshot?.node.textContent).toBe("Live selectable page");
     expect(livePage.parentElement).toBeNull();
+  });
+
+  it("captures the exact TXT target spread with its single or double context", () => {
+    const host = document.createElement("div");
+    host.innerHTML = `
+      <div class="reader-txt-page-window reader-txt-page-window--double">
+        <section class="reader-txt-spread" data-spread-start="2" hidden aria-hidden="true">
+          <article class="reader-txt-page" data-page-index="2">target-left</article>
+          <article class="reader-txt-page" data-page-index="3"><span id="live-note">target-right</span></article>
+        </section>
+        <section class="reader-txt-spread" data-spread-start="4" data-window-state="current">
+          <article class="reader-txt-page" data-page-index="4">wrong-page</article>
+        </section>
+      </div>`;
+
+    const snapshot = captureTxtSpreadSnapshot(host, 2, "double");
+
+    expect(snapshot?.node).toHaveClass("reader-txt-page-window--double");
+    expect(snapshot?.node.textContent).toContain("target-left");
+    expect(snapshot?.node.textContent).toContain("target-right");
+    expect(snapshot?.node.textContent).not.toContain("wrong-page");
+    expect(snapshot?.node.querySelector(".reader-txt-spread")).not.toHaveAttribute(
+      "hidden",
+    );
+    expect(snapshot?.node.querySelector("[aria-hidden]")).toBeNull();
+    expect(snapshot?.node.querySelector("#live-note")).toBeNull();
+    expect(host.querySelector("#live-note")).not.toBeNull();
   });
 
   it("animates smooth as a full-width two-page movement", async () => {

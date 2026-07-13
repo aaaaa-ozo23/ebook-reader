@@ -496,3 +496,15 @@
 - 视觉动画取消不等于回滚真实导航；布局、跳转或 slider 介入时先清空 TXT pending commit 再 cancel，可防止旧动画完成后覆盖更新后的 locator。
 - 375px 首轮真实截图暴露顶部 title/toolbar 同行挤压和底部 controls 竖排；移动端 topbar 改为两行、分页 controls 改为两列三行，并按 frame 实际高度测量后，正文和页码均无裁切。
 - 全量 Playwright 首轮只有 EPUB 强制暂停快照未等 target iframe ready；单独场景通过。验收测试增加 current/target `data-reader-snapshot-ready=true` 等待后，全量并行 12/12 稳定通过。
+
+## 2026-07-13 大阶段 11.8：TXT 分页修复与性能优化
+
+- 用户实际 Tauri 截图显示 Double 请求已选中但正文仍为单列；现有 Playwright 只断言 `.reader-txt-page-window--double` 和挂载数量，没有断言两个当前页的矩形、可见性或相邻内容，因此旧门禁可以漏过该问题。
+- TXT 用 `viewport.clientWidth` 推导 pageWidth，但实际页面位于带 padding/gap 的 frame；离屏测量节点也缺少 `.reader-txt-page` 的真实 padding，测量与渲染 box model 不一致。
+- TXT 底栏目前是单行 flex，只显示按钮、Page 文本和原始 page-index range；没有 EPUB 的状态行、数字输入、百分比、拖动 tooltip 或 `--epub-progress-percent` 填充变量。
+- TXT 动画在真实导航后等待一帧，再查询新的 `data-window-state=current`；目标页依赖 React commit 时序。相邻 spread 已经挂载，按确定的 `data-spread-start` 在导航前捕获更可靠，并能保留 Double 父布局。
+- `reconstructTxtPages` 当前对每个 boundary 扫描全部 blocks，复杂度为 `O(pages × blocks)`；10,000 页书即使缓存命中也会产生高成本。分页器还在确认整段能否放下之前为每个普通段落生成全部 grapheme offsets，并在每次测量中重建整页 DOM。
+- Browser/IAB 可用于基础页面 identity、console 和视觉检查，但隔离环境没有 seeded 书籍；真实 TXT Double、页码、动画与性能继续由项目 Playwright fixture 验证。
+- 11.8 修复后 Double 阈值按 `2 × 320px + 18px` 真实页槽计算；默认桌面 seeded fixture 的两个当前页宽度均不低于 320px、左右不重叠且正文来自相邻页，375px 保留 requested Double 并明确提示 rendered Single。
+- `reconstructTxtPages` 的 10,000 页合成用例现在在测试中要求低于 1 秒；页/块双游标将旧路径的理论 100,000,000 次页块配对降为线性遍历。短段不创建字素分段表，DOM measurer 只更新变化的末尾文本节点。
+- 动画事务在 React 状态变化前按目标 `data-spread-start` 捕获相邻窗口；单元测试验证精确 Double target clone，Playwright 验证 Smooth 隔离层 target spread 与最终 current spread 完全一致。
