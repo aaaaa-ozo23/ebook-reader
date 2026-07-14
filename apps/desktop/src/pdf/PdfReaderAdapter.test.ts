@@ -18,6 +18,20 @@ const getDestinationMock = vi.hoisted(() =>
     return null;
   }),
 );
+const getPageMock = vi.hoisted(() =>
+  vi.fn(async (pageNumber: number) => ({
+    pageNumber,
+    getViewport: vi.fn(({ scale }: { scale: number }) => ({
+      width: 600 * scale,
+      height: 800 * scale,
+      rotation: 0,
+    })),
+    render: vi.fn(() => ({
+      cancel: vi.fn(),
+      promise: Promise.resolve(),
+    })),
+  })),
+);
 const getDocumentMock = vi.hoisted(() =>
   vi.fn(() => ({
     destroy: destroyMock,
@@ -25,17 +39,7 @@ const getDocumentMock = vi.hoisted(() =>
       numPages: 12,
       getDestination: getDestinationMock,
       getOutline: getOutlineMock,
-      getPage: vi.fn(async (pageNumber: number) => ({
-        pageNumber,
-        getViewport: vi.fn(({ scale }: { scale: number }) => ({
-          width: 600 * scale,
-          height: 800 * scale,
-        })),
-        render: vi.fn(() => ({
-          cancel: vi.fn(),
-          promise: Promise.resolve(),
-        })),
-      })),
+      getPage: getPageMock,
       getPageIndex: getPageIndexMock,
     }),
   })),
@@ -73,6 +77,7 @@ describe("PdfReaderAdapter", () => {
     getDocumentMock.mockClear();
     getOutlineMock.mockReset();
     getPageIndexMock.mockReset();
+    getPageMock.mockClear();
     destroyMock.mockClear();
     getDestinationMock.mockResolvedValue(null);
     getOutlineMock.mockResolvedValue(null);
@@ -348,6 +353,37 @@ describe("PdfReaderAdapter", () => {
       page: 4,
       pageOffsetRatio: 1,
     });
+  });
+
+  it("loads and caches page metrics without walking the document", async () => {
+    const adapter = new PdfReaderAdapter({
+      bookId: "pdf-book",
+      sourceUrl: "blob:pdf-book",
+      theme: {
+        mode: "light",
+        fontFamily: "serif",
+        fontSize: 18,
+        lineHeight: 1.7,
+        paragraphSpacing: 12,
+        pageMargin: 32,
+        backgroundColor: "#ffffff",
+        textColor: "#111111",
+      },
+    });
+    await adapter.open("pdf-book");
+    getPageMock.mockClear();
+
+    await expect(adapter.getPageMetrics(7)).resolves.toEqual({
+      pageNumber: 7,
+      width: 600,
+      height: 800,
+      rotation: 0,
+    });
+    await adapter.getPageMetrics(7);
+
+    expect(getPageMock).toHaveBeenCalledTimes(1);
+    expect(getPageMock).toHaveBeenCalledWith(7);
+    expect(adapter.getCachedPageMetrics(7)?.height).toBe(800);
   });
 
   it("restores and reports a continuous in-page locator", async () => {

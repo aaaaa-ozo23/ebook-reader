@@ -56,6 +56,7 @@ import {
   type PdfPosition,
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
+import { PdfContinuousView } from "../pdf/PdfContinuousView";
 
 import {
   DEFAULT_HIGHLIGHT_COLOR,
@@ -2107,12 +2108,14 @@ export function PdfReaderContent({
   const [isLoading, setIsLoading] = useState(true);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [pageInput, setPageInput] = useState("1");
+  const [frameWidth, setFrameWidth] = useState(1000);
+  const [pdfNavigationVersion, setPdfNavigationVersion] = useState(0);
+  const [pdfAdapter, setPdfAdapter] = useState<PdfReaderAdapter | null>(null);
   const [pdfHighlightRectsByPage, setPdfHighlightRectsByPage] = useState<
     Record<number, PdfRenderedHighlight[]>
   >({});
   const [position, setPosition] = useState<PdfPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<PdfPosition | null>(null);
-  const [requestedViewMode, setRequestedViewMode] = useState<PdfViewMode>(viewMode);
 
   useEffect(() => {
     tocItemsRef.current = tocItems;
@@ -2131,7 +2134,6 @@ export function PdfReaderContent({
   }, [isDraggingProgress]);
 
   useEffect(() => {
-    setRequestedViewMode(viewMode);
     requestedViewModeRef.current = viewMode;
 
     const adapter = adapterRef.current;
@@ -2422,7 +2424,7 @@ export function PdfReaderContent({
       setPreviewPosition(null);
       setIsDraggingProgress(false);
       setPageInput("1");
-      setRequestedViewMode(requestedViewModeRef.current);
+      setPdfAdapter(null);
       onTocChange([]);
 
       try {
@@ -2453,6 +2455,7 @@ export function PdfReaderContent({
         }
 
         adapterRef.current = adapter;
+        setPdfAdapter(adapter);
         onSearchProviderChange(
           (searchQuery) =>
             adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
@@ -2529,12 +2532,14 @@ export function PdfReaderContent({
       }
 
       try {
+        setFrameWidth(Math.max(1, frame.clientWidth));
         const nextPosition = adapter.setViewMode(
           requestedViewModeRef.current,
           frame.clientWidth,
         );
         positionRef.current = nextPosition;
         setPosition(nextPosition);
+        setPdfNavigationVersion((version) => version + 1);
         void renderVisiblePages();
       } catch (resizeError) {
         if (adapterRef.current === adapter) {
@@ -2563,7 +2568,10 @@ export function PdfReaderContent({
 
     void adapter
       .goTo(jumpRequest.locator)
-      .then(renderVisiblePages)
+      .then(() => {
+        setPdfNavigationVersion((version) => version + 1);
+        return renderVisiblePages();
+      })
       .catch((jumpError: unknown) => {
         setError(getErrorMessage(jumpError));
       });
@@ -2578,7 +2586,10 @@ export function PdfReaderContent({
       }
 
       void Promise.resolve(action(adapter))
-        .then(renderVisiblePages)
+        .then(() => {
+          setPdfNavigationVersion((version) => version + 1);
+          return renderVisiblePages();
+        })
         .catch((actionError: unknown) => {
           setError(getErrorMessage(actionError));
         });
@@ -2607,7 +2618,6 @@ export function PdfReaderContent({
 
   const handleViewModeChange = useCallback(
     (mode: PdfPaginatedViewMode) => {
-      setRequestedViewMode(mode);
       requestedViewModeRef.current = mode;
       onPaginatedViewModeChange(mode);
       runPdfAction((adapter) =>
@@ -2705,7 +2715,10 @@ export function PdfReaderContent({
 
     void adapter
       .goToProgress(nextProgression)
-      .then(renderVisiblePages)
+      .then(() => {
+        setPdfNavigationVersion((version) => version + 1);
+        return renderVisiblePages();
+      })
       .catch((progressError: unknown) => {
         setPreviewPosition(null);
         setError(getErrorMessage(progressError));
@@ -2731,7 +2744,7 @@ export function PdfReaderContent({
     "--epub-progress-percent": `${(activeProgress?.progression ?? 0) * 100}%`,
   } as CSSProperties;
   const renderedModeDescription =
-    requestedViewMode === "double" && position?.renderedMode === "single"
+    viewMode === "double" && position?.renderedMode === "single"
       ? "Double view will resume when the window is wide enough."
       : undefined;
 
@@ -2785,39 +2798,50 @@ export function PdfReaderContent({
               </div>
             </section>
           ) : null}
-          <div
-            className={`reader-pdf-stage reader-pdf-stage--${position?.renderedMode ?? "single"}`}
-            aria-hidden={error !== null}
-          >
-            {[0, 1].map((index) => (
-              <div
-                key={index}
-                className="reader-pdf-sheet"
-                hidden={visiblePageNumbers[index] === undefined}
-                onKeyUp={capturePdfSelection}
-                onMouseUp={capturePdfSelection}
-              >
-                <canvas
-                  ref={(canvas) => {
-                    canvasRefs.current[index] = canvas;
-                  }}
-                  className="reader-pdf-canvas"
-                  aria-label={
-                    visiblePageNumbers[index] === undefined
-                      ? undefined
-                      : `PDF page ${visiblePageNumbers[index]}`
-                  }
-                />
+          {position?.renderedMode === "continuous" && pdfAdapter !== null ? (
+            <PdfContinuousView
+              adapter={pdfAdapter}
+              availableWidth={frameWidth}
+              frameRef={frameRef}
+              navigationVersion={pdfNavigationVersion}
+              onSelectionEnd={capturePdfSelection}
+              position={position}
+            />
+          ) : (
+            <div
+              className={`reader-pdf-stage reader-pdf-stage--${position?.renderedMode ?? "single"}`}
+              aria-hidden={error !== null}
+            >
+              {[0, 1].map((index) => (
                 <div
-                  ref={(textLayer) => {
-                    textLayerRefs.current[index] = textLayer;
-                  }}
-                  className="reader-pdf-text-layer"
-                  aria-hidden="true"
-                />
-                <div className="reader-pdf-highlight-layer">
-                  {(pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []).map(
-                    (highlight) => {
+                  key={index}
+                  className="reader-pdf-sheet"
+                  hidden={visiblePageNumbers[index] === undefined}
+                  onKeyUp={capturePdfSelection}
+                  onMouseUp={capturePdfSelection}
+                >
+                  <canvas
+                    ref={(canvas) => {
+                      canvasRefs.current[index] = canvas;
+                    }}
+                    className="reader-pdf-canvas"
+                    aria-label={
+                      visiblePageNumbers[index] === undefined
+                        ? undefined
+                        : `PDF page ${visiblePageNumbers[index]}`
+                    }
+                  />
+                  <div
+                    ref={(textLayer) => {
+                      textLayerRefs.current[index] = textLayer;
+                    }}
+                    className="reader-pdf-text-layer"
+                    aria-hidden="true"
+                  />
+                  <div className="reader-pdf-highlight-layer">
+                    {(
+                      pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []
+                    ).map((highlight) => {
                       const className = `reader-pdf-highlight-rect ${
                         highlight.hasHighlight
                           ? "reader-pdf-highlight-rect--highlight"
@@ -2873,12 +2897,12 @@ export function PdfReaderContent({
                           style={style}
                         />
                       );
-                    },
-                  )}
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
         <div
           className="reader-epub-controls reader-pdf-controls"
@@ -2909,7 +2933,7 @@ export function PdfReaderContent({
               <button
                 type="button"
                 aria-pressed={
-                  requestedViewMode !== "continuous" && paginatedViewMode === "single"
+                  viewMode !== "continuous" && paginatedViewMode === "single"
                 }
                 onClick={() => handleViewModeChange("single")}
               >
@@ -2918,7 +2942,7 @@ export function PdfReaderContent({
               <button
                 type="button"
                 aria-pressed={
-                  requestedViewMode !== "continuous" && paginatedViewMode === "double"
+                  viewMode !== "continuous" && paginatedViewMode === "double"
                 }
                 onClick={() => handleViewModeChange("double")}
               >

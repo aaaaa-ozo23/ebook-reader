@@ -531,3 +531,6 @@
 - 12.1 首轮 TypeScript 门禁发现 `normalizePdfLocator` 作为运行时函数被误放入 `import type`；Vitest 表现为 `ReferenceError`，tsc 提供 TS1361。修正为值导入即可，不需要改变 locator 设计。
 - v1 偏好兼容不能只给新增字段固定默认值：旧记录若已保存 PDF `viewMode=double`，归一化时应先用旧 viewMode 推导 `paginatedViewMode=double`，避免升级后丢失用户的分页选择。
 - Continuous 的百分比不能复用 `(page-1)/(total-1)`；按 `(page-1+pageOffsetRatio)/totalPages` 才能让页内位置连续，并把最后一页底部精确映射到 100%。
+- TanStack Virtual 的 PDF 估算只需要默认纸张比例和已访问页的轻量 metrics；目标页挂载后 `measureElement` 修正总高度，因此无需为 500 页先调用 `getPage()`。
+- Continuous Fit width 必须由每页原始宽度单独求有效 scale；把当前页的 fit scale 套到不同尺寸页面会让页面宽度和虚拟行高度同时漂移。
+- 12.2 首轮 lint 阻止在 render 中读取 `adapterRef.current`，也阻止 effect 同步镜像 `viewMode` 到 state；渲染改用 adapter state 和父级 viewMode prop，ref 仅保留给异步命令，避免虚拟列表拿到不可追踪的旧实例。
