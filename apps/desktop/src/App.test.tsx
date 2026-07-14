@@ -308,11 +308,12 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
   PdfReaderAdapter: vi.fn(function MockPdfReaderAdapter(options: {
     initialLocator?: PdfLocator;
     onPositionChange?: (position: PdfPosition) => void;
+    viewMode?: "single" | "double" | "continuous";
   }) {
     let page = options.initialLocator?.page ?? 1;
     let scale = options.initialLocator?.scale ?? 1;
-    let viewMode: "single" | "double" | "continuous" = "single";
-    let renderedMode: "single" | "double" = "single";
+    let viewMode: "single" | "double" | "continuous" = options.viewMode ?? "single";
+    let renderedMode: "single" | "double" | "continuous" = viewMode;
     let zoomMode: "fit-width" | "custom" = options.initialLocator?.zoomMode ?? "custom";
     const totalPages = 3;
     const clampPage = (nextPage: number) => Math.min(Math.max(nextPage, 1), totalPages);
@@ -352,7 +353,11 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
       getToc: pdfAdapterGetTocMock,
       getVisiblePages: () => {
         const visiblePages =
-          renderedMode === "double" && page < totalPages ? [page, page + 1] : [page];
+          renderedMode === "continuous"
+            ? []
+            : renderedMode === "double" && page < totalPages
+              ? [page, page + 1]
+              : [page];
         pdfAdapterVisiblePagesMock();
 
         return visiblePages;
@@ -402,7 +407,11 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
         pdfAdapterSetViewModeMock(mode, availableWidth);
         viewMode = mode;
         renderedMode =
-          mode === "double" && (availableWidth ?? 1000) >= 920 ? "double" : "single";
+          mode === "continuous"
+            ? "continuous"
+            : mode === "double" && (availableWidth ?? 1000) >= 920
+              ? "double"
+              : "single";
         reportPosition();
 
         return createPosition();

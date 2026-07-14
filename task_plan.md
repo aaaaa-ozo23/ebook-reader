@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 11.8 TXT 分页修复与性能优化：complete；Double 实际布局、EPUB 同款底栏、精确动画目标页和大型 TXT 分页加载路径已完成并通过全量门禁；不改 locator/schema/version，不发布。
+大阶段 12.1 PDF 连续模式与 locator：complete；下一步从已合并 12.1 的 `codex/v0.2.0-integration` 建立 12.2 分支，实现按需尺寸缓存、虚拟连续页面和共享 PDF 底栏；不新增 schema、版本或 Release。
 
 ## 分支策略
 

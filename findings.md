@@ -520,3 +520,14 @@
 - 最终实现只在真实 frame 已挂载并完成尺寸读取后启动分页；缓存命中不再等待 `document.fonts.ready`，会话 LRU 可直接恢复当前布局。冷分页每 4 页（Double 每 8 页）发布一次完整批次，已发布页可用 Previous/Next、页码输入和原有动画继续阅读。
 - 渐进发布使用交互版本防止后台新批次把用户拉回旧 anchor；若用户尚未操作，则在已计算边界首次覆盖保存的 charOffset 时自动恢复。完整边界验证后才更新会话/磁盘缓存，取消任务不会写入部分结果。
 - Playwright 实测同一会话从非首页回书架再进入低于 1 秒，恢复页范围覆盖保存的 UTF-16 charOffset；桌面当前页末段无溢出，底部剩余空间低于页高 20%。
+
+## 2026-07-14 大阶段 12：PDF 连续模式
+
+- `PdfViewMode` 和 `PdfLocator.pageOffsetRatio` 已存在，但当前 PDF UI 打开时强制 Single，`resolveRenderedMode` 也把 Continuous 降级为 Single，因此类型预留尚未形成真实连续阅读。
+- PDF 当前只维护一个全局 Canvas `RenderTask`；连续虚拟列表会并发渲染多个页面，必须改为按挂载页面独立取消 Canvas 与 `TextLayer`，卸载时清空 backing store。
+- 当前 PDF Single/Double 只挂载当前一到两页，无法在动画前可靠取得准确目标页；阶段 12 将使用 previous/current/next 三 spread Canvas 窗口，并按 `data-spread-start` 捕获像素快照。
+- 普通 `cloneNode()` 不复制 Canvas 像素；PDF 动画必须显式 `drawImage` 到隔离 Canvas，且只能在准确目标 spread 已就绪时播放，否则无动画导航。
+- `ReaderExperiencePreferences.pdf` 目前只保存 `viewMode + transition`；为满足 Continuous 返回后跨重启恢复 Single/Double，需要增加向后兼容的 `paginatedViewMode`，继续使用 v1 JSON envelope而不迁移数据库。
+- 12.1 首轮 TypeScript 门禁发现 `normalizePdfLocator` 作为运行时函数被误放入 `import type`；Vitest 表现为 `ReferenceError`，tsc 提供 TS1361。修正为值导入即可，不需要改变 locator 设计。
+- v1 偏好兼容不能只给新增字段固定默认值：旧记录若已保存 PDF `viewMode=double`，归一化时应先用旧 viewMode 推导 `paginatedViewMode=double`，避免升级后丢失用户的分页选择。
+- Continuous 的百分比不能复用 `(page-1)/(total-1)`；按 `(page-1+pageOffsetRatio)/totalPages` 才能让页内位置连续，并把最后一页底部精确映射到 100%。

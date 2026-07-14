@@ -16,6 +16,7 @@ import {
   type EpubLocator,
   type Locator,
   type PdfLocator,
+  type PdfPaginatedViewMode,
   type PageTransitionMode,
   type ReaderExperiencePreferences,
   type ReaderProgress,
@@ -72,7 +73,11 @@ import {
   MemoizedReaderSidebar,
   type ReaderSidebarTab,
 } from "./ReaderSidebar";
-import { ReaderThemePanel, type TxtReadingModeOption } from "./ReaderThemePanel";
+import {
+  ReaderThemePanel,
+  type PdfReadingModeOption,
+  type TxtReadingModeOption,
+} from "./ReaderThemePanel";
 import {
   DEFAULT_HIGHLIGHT_COLOR,
   getLocatorLabel,
@@ -502,6 +507,52 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           viewMode: mode === "continuous" ? "scroll" : "paginated",
           transition:
             mode === "continuous" ? readerExperiencePreferences.txt.transition : mode,
+        },
+      };
+      setReaderExperiencePreferences(nextPreferences);
+      setReaderExperienceError(null);
+      void saveReaderExperiencePreferences(nextPreferences).catch(
+        (experienceSaveError: unknown) => {
+          setReaderExperienceError(getErrorMessage(experienceSaveError));
+        },
+      );
+    },
+    [readerExperiencePreferences],
+  );
+
+  const handlePdfReadingModeChange = useCallback(
+    (mode: PdfReadingModeOption) => {
+      const nextPreferences: ReaderExperiencePreferences = {
+        ...readerExperiencePreferences,
+        pdf: {
+          ...readerExperiencePreferences.pdf,
+          viewMode:
+            mode === "continuous"
+              ? "continuous"
+              : readerExperiencePreferences.pdf.paginatedViewMode,
+          transition:
+            mode === "continuous" ? readerExperiencePreferences.pdf.transition : mode,
+        },
+      };
+      setReaderExperiencePreferences(nextPreferences);
+      setReaderExperienceError(null);
+      void saveReaderExperiencePreferences(nextPreferences).catch(
+        (experienceSaveError: unknown) => {
+          setReaderExperienceError(getErrorMessage(experienceSaveError));
+        },
+      );
+    },
+    [readerExperiencePreferences],
+  );
+
+  const handlePdfPaginatedViewModeChange = useCallback(
+    (paginatedViewMode: PdfPaginatedViewMode) => {
+      const nextPreferences: ReaderExperiencePreferences = {
+        ...readerExperiencePreferences,
+        pdf: {
+          ...readerExperiencePreferences.pdf,
+          paginatedViewMode,
+          viewMode: paginatedViewMode,
         },
       };
       setReaderExperiencePreferences(nextPreferences);
@@ -1378,14 +1429,24 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           <MemoizedPdfReaderContent
             annotations={visibleAnnotations}
             book={book}
+            isPageCurlBlocked={
+              isFormatOverlayOpen ||
+              selectionSnapshot !== null ||
+              noteEditor !== null ||
+              notePopover !== null
+            }
             jumpRequest={pdfJumpRequest}
+            paginatedViewMode={readerExperiencePreferences.pdf.paginatedViewMode}
             theme={theme}
             tocItems={tocItems}
+            transition={readerExperiencePreferences.pdf.transition}
+            viewMode={readerExperiencePreferences.pdf.viewMode}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onNavigationActionsChange={handleNavigationActionsChange}
+            onPaginatedViewModeChange={handlePdfPaginatedViewModeChange}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
@@ -1402,6 +1463,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           pageTransitionModes={["none", "page-curl", "cover", "slide"]}
           theme={theme}
           themeError={themeError}
+          pdfReadingMode={
+            book.format === "pdf"
+              ? readerExperiencePreferences.pdf.viewMode === "continuous"
+                ? "continuous"
+                : readerExperiencePreferences.pdf.transition
+              : undefined
+          }
+          pdfReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           txtReadingMode={
             book.format === "txt"
               ? readerExperiencePreferences.txt.viewMode === "scroll"
@@ -1411,6 +1480,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           }
           txtReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           onPageTransitionChange={handleEpubTransitionChange}
+          onPdfReadingModeChange={handlePdfReadingModeChange}
           onThemeChange={handleThemeChange}
           onTxtReadingModeChange={handleTxtReadingModeChange}
         />

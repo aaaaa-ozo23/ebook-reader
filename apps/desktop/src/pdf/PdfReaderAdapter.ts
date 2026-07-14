@@ -1,10 +1,11 @@
-import type {
-  PdfLocator,
-  PdfViewMode,
-  ReaderAdapter,
-  ReaderTheme,
-  SearchHit,
-  TocItem,
+import {
+  normalizePdfLocator,
+  type PdfLocator,
+  type PdfViewMode,
+  type ReaderAdapter,
+  type ReaderTheme,
+  type SearchHit,
+  type TocItem,
 } from "@reader/core";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 
@@ -20,7 +21,7 @@ export interface PdfPosition {
   zoomMode: "fit-width" | "custom";
   progression: number;
   viewMode: PdfViewMode;
-  renderedMode: Exclude<PdfViewMode, "continuous">;
+  renderedMode: PdfViewMode;
 }
 
 export interface PdfPageRenderResult {
@@ -66,10 +67,11 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private document: PDFDocumentProxy | null = null;
   private loadingTask: PDFDocumentLoadingTask | null = null;
   private renderTask: RenderTask | null = null;
+  private pageOffsetRatio: number | undefined;
   private scale = PDF_DEFAULT_SCALE;
   private theme: ReaderTheme;
   private viewMode: PdfViewMode = "single";
-  private renderedMode: Exclude<PdfViewMode, "continuous"> = "single";
+  private renderedMode: PdfViewMode = "single";
 
   constructor(options: PdfReaderAdapterOptions) {
     this.bookId = options.bookId;
@@ -79,6 +81,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     this.viewMode = options.viewMode ?? "single";
     this.onPositionChange = options.onPositionChange;
     this.currentPage = normalizePdfPage(options.initialLocator?.page ?? 1, 1);
+    this.pageOffsetRatio = normalizePdfLocator(
+      options.initialLocator ?? { kind: "pdf", page: 1 },
+    ).pageOffsetRatio;
     this.scale = normalizePdfScale(options.initialLocator?.scale ?? PDF_DEFAULT_SCALE);
   }
 
@@ -105,6 +110,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       this.initialLocator?.page ?? 1,
       document.numPages,
     );
+    this.pageOffsetRatio = normalizePdfLocator(
+      this.initialLocator ?? { kind: "pdf", page: 1 },
+    ).pageOffsetRatio;
     this.scale = normalizePdfScale(this.initialLocator?.scale ?? PDF_DEFAULT_SCALE);
     this.renderedMode = this.resolveRenderedMode(this.viewMode);
     this.reportPosition();
@@ -146,6 +154,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     const document = this.requireDocument();
 
     this.currentPage = normalizePdfPage(locator.page, document.numPages);
+    this.pageOffsetRatio = normalizePdfLocator(locator).pageOffsetRatio;
 
     if (locator.scale !== undefined) {
       this.scale = normalizePdfScale(locator.scale);
@@ -217,6 +226,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     const document = this.requireDocument();
     const step = this.renderedMode === "double" ? 2 : 1;
     this.currentPage = normalizePdfPage(this.currentPage - step, document.numPages);
+    this.pageOffsetRatio = 0;
     this.reportPosition();
   }
 
@@ -224,20 +234,46 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     const document = this.requireDocument();
     const step = this.renderedMode === "double" ? 2 : 1;
     this.currentPage = normalizePdfPage(this.currentPage + step, document.numPages);
+    this.pageOffsetRatio = 0;
     this.reportPosition();
   }
 
   previewProgress(progression: number): PdfPosition {
     const document = this.requireDocument();
-    const page = progressToPdfPage(progression, document.numPages);
+    const target =
+      this.renderedMode === "continuous"
+        ? progressToPdfContinuousPosition(progression, document.numPages)
+        : {
+            page: progressToPdfPage(progression, document.numPages),
+            pageOffsetRatio: 0,
+          };
 
-    return this.createPosition(page);
+    return this.createPosition(target.page, "custom", target.pageOffsetRatio);
   }
 
   async goToProgress(progression: number): Promise<void> {
     const document = this.requireDocument();
-    this.currentPage = progressToPdfPage(progression, document.numPages);
+    if (this.renderedMode === "continuous") {
+      const target = progressToPdfContinuousPosition(progression, document.numPages);
+      this.currentPage = target.page;
+      this.pageOffsetRatio = target.pageOffsetRatio;
+    } else {
+      this.currentPage = progressToPdfPage(progression, document.numPages);
+      this.pageOffsetRatio = 0;
+    }
     this.reportPosition();
+  }
+
+  setContinuousPosition(page: number, pageOffsetRatio: number): PdfPosition {
+    const document = this.requireDocument();
+    this.currentPage = normalizePdfPage(page, document.numPages);
+    this.pageOffsetRatio = normalizePdfLocator({
+      kind: "pdf",
+      page: this.currentPage,
+      pageOffsetRatio,
+    }).pageOffsetRatio;
+    this.reportPosition();
+    return this.getPosition();
   }
 
   setZoom(scale: number): PdfPosition {
@@ -276,6 +312,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private createPosition(
     page: number,
     zoomMode: "fit-width" | "custom" = "custom",
+    pageOffsetRatio = this.pageOffsetRatio,
   ): PdfPosition {
     const totalPages = this.requireDocument().numPages;
     const normalizedPage = normalizePdfPage(page, totalPages);
@@ -285,6 +322,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       locator: {
         kind: "pdf",
         page: normalizedPage,
+        ...(pageOffsetRatio === undefined ? {} : { pageOffsetRatio }),
         scale,
         zoomMode,
       },
@@ -292,7 +330,14 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       totalPages,
       scale,
       zoomMode,
-      progression: pageToProgress(normalizedPage, totalPages),
+      progression:
+        this.renderedMode === "continuous"
+          ? pdfContinuousPositionToProgress(
+              normalizedPage,
+              pageOffsetRatio ?? 0,
+              totalPages,
+            )
+          : pageToProgress(normalizedPage, totalPages),
       viewMode: this.viewMode,
       renderedMode: this.renderedMode,
     };
@@ -300,6 +345,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
   getVisiblePages(): number[] {
     const document = this.requireDocument();
+
+    if (this.renderedMode === "continuous") {
+      return [];
+    }
 
     if (this.renderedMode === "single") {
       return [this.currentPage];
@@ -473,7 +522,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private resolveRenderedMode(
     mode: PdfViewMode,
     availableWidth = Number.POSITIVE_INFINITY,
-  ): Exclude<PdfViewMode, "continuous"> {
+  ): PdfViewMode {
+    if (mode === "continuous") {
+      return "continuous";
+    }
     if (mode === "double" && availableWidth >= PDF_DOUBLE_VIEW_MIN_WIDTH) {
       return "double";
     }
@@ -488,6 +540,48 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
     return this.document;
   }
+}
+
+export function pdfContinuousPositionToProgress(
+  page: number,
+  pageOffsetRatio: number,
+  totalPages: number,
+): number {
+  const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
+  const normalizedPage = normalizePdfPage(page, normalizedTotalPages);
+  const normalizedRatio =
+    normalizePdfLocator({
+      kind: "pdf",
+      page: normalizedPage,
+      pageOffsetRatio,
+    }).pageOffsetRatio ?? 0;
+
+  return Math.min(
+    1,
+    Math.max(0, (normalizedPage - 1 + normalizedRatio) / normalizedTotalPages),
+  );
+}
+
+export function progressToPdfContinuousPosition(
+  progression: number,
+  totalPages: number,
+): { page: number; pageOffsetRatio: number } {
+  const normalizedTotalPages = Math.max(1, Math.floor(totalPages));
+  const clampedProgression = Number.isFinite(progression)
+    ? Math.min(1, Math.max(0, progression))
+    : 0;
+
+  if (clampedProgression === 1) {
+    return { page: normalizedTotalPages, pageOffsetRatio: 1 };
+  }
+
+  const scaledPosition = clampedProgression * normalizedTotalPages;
+  const pageIndex = Math.floor(scaledPosition);
+
+  return {
+    page: normalizePdfPage(pageIndex + 1, normalizedTotalPages),
+    pageOffsetRatio: scaledPosition - pageIndex,
+  };
 }
 
 async function loadPdfjs(): Promise<PdfjsModule> {
