@@ -536,3 +536,5 @@
 - 12.2 首轮 lint 阻止在 render 中读取 `adapterRef.current`，也阻止 effect 同步镜像 `viewMode` 到 state；渲染改用 adapter state 和父级 viewMode prop，ref 仅保留给异步命令，避免虚拟列表拿到不可追踪的旧实例。
 - 每页 render sequence 必须先取消旧任务再分配新 identity；若新 identity 分配后复用会递增 sequence 的通用 cancel，刚创建的正常任务会在完成时被误判为 stale。
 - 页面尺寸缓存可以贯穿文档会话，但 `PDFPageProxy` 只应保留到 surface release；否则用户滚过 500 页后会把 500 个 page proxy 都留在 adapter 内。关闭文档还需用 document identity 拒绝迟到的 `getPage()` promise。
+- Double 若只按 `currentPage + 1` 组合，会让直接跳到奇数页后的 spread 与 Previous/Next 产生不同配对；统一为封面 1、随后偶数起始 spread 才能让进度、动画 identity 和窄窗恢复共享同一规则。
+- Continuous 中虚拟行高度包含页间 gap，但 locator 比例只能除以真实页面内容高度；否则滚到页尾会把 gap 计入比例，缩放恢复后锚点产生可见漂移。

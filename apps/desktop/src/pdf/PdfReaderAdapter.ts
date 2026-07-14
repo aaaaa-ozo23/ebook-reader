@@ -155,6 +155,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     ).pageOffsetRatio;
     this.scale = normalizePdfScale(this.initialLocator?.scale ?? PDF_DEFAULT_SCALE);
     this.renderedMode = this.resolveRenderedMode(this.viewMode);
+    this.currentPage = this.normalizePageForRenderedMode(this.currentPage);
     this.reportPosition();
   }
 
@@ -201,9 +202,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   }
 
   async goTo(locator: PdfLocator): Promise<void> {
-    const document = this.requireDocument();
+    this.requireDocument();
 
-    this.currentPage = normalizePdfPage(locator.page, document.numPages);
+    this.currentPage = this.normalizePageForRenderedMode(locator.page);
     this.pageOffsetRatio = normalizePdfLocator(locator).pageOffsetRatio;
 
     if (locator.scale !== undefined) {
@@ -275,16 +276,20 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
   async previous(): Promise<void> {
     const document = this.requireDocument();
-    const step = this.renderedMode === "double" ? 2 : 1;
-    this.currentPage = normalizePdfPage(this.currentPage - step, document.numPages);
+    this.currentPage =
+      this.renderedMode === "double"
+        ? previousPdfSpreadStart(this.currentPage, document.numPages)
+        : normalizePdfPage(this.currentPage - 1, document.numPages);
     this.pageOffsetRatio = 0;
     this.reportPosition();
   }
 
   async next(): Promise<void> {
     const document = this.requireDocument();
-    const step = this.renderedMode === "double" ? 2 : 1;
-    this.currentPage = normalizePdfPage(this.currentPage + step, document.numPages);
+    this.currentPage =
+      this.renderedMode === "double"
+        ? nextPdfSpreadStart(this.currentPage, document.numPages)
+        : normalizePdfPage(this.currentPage + 1, document.numPages);
     this.pageOffsetRatio = 0;
     this.reportPosition();
   }
@@ -309,7 +314,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       this.currentPage = target.page;
       this.pageOffsetRatio = target.pageOffsetRatio;
     } else {
-      this.currentPage = progressToPdfPage(progression, document.numPages);
+      this.currentPage = this.normalizePageForRenderedMode(
+        progressToPdfPage(progression, document.numPages),
+      );
       this.pageOffsetRatio = 0;
     }
     this.reportPosition();
@@ -347,6 +354,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   setViewMode(mode: PdfViewMode, availableWidth?: number): PdfPosition {
     this.viewMode = mode;
     this.renderedMode = this.resolveRenderedMode(mode, availableWidth);
+    this.currentPage = this.normalizePageForRenderedMode(this.currentPage);
     this.reportPosition();
 
     return this.getPosition();
@@ -787,6 +795,12 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     return "single";
   }
 
+  private normalizePageForRenderedMode(pageNumber: number): number {
+    return this.renderedMode === "double"
+      ? getPdfSpreadStart(pageNumber, this.totalPages)
+      : normalizePdfPage(pageNumber, this.totalPages);
+  }
+
   private requireDocument(): PDFDocumentProxy {
     if (this.document === null) {
       throw new Error("PDF document is not open.");
@@ -836,6 +850,24 @@ export function progressToPdfContinuousPosition(
     page: normalizePdfPage(pageIndex + 1, normalizedTotalPages),
     pageOffsetRatio: scaledPosition - pageIndex,
   };
+}
+
+export function getPdfSpreadStart(page: number, totalPages: number): number {
+  const normalizedPage = normalizePdfPage(page, totalPages);
+  if (normalizedPage <= 1) {
+    return 1;
+  }
+  return normalizedPage % 2 === 0 ? normalizedPage : normalizedPage - 1;
+}
+
+export function nextPdfSpreadStart(page: number, totalPages: number): number {
+  const spreadStart = getPdfSpreadStart(page, totalPages);
+  return normalizePdfPage(spreadStart === 1 ? 2 : spreadStart + 2, totalPages);
+}
+
+export function previousPdfSpreadStart(page: number, totalPages: number): number {
+  const spreadStart = getPdfSpreadStart(page, totalPages);
+  return spreadStart <= 2 ? 1 : normalizePdfPage(spreadStart - 2, totalPages);
 }
 
 function createRenderingCancelledError(): Error {
