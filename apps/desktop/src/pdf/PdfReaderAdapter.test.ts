@@ -4,6 +4,8 @@ import {
   normalizePdfPage,
   normalizePdfScale,
   pageToProgress,
+  pdfContinuousPositionToProgress,
+  progressToPdfContinuousPosition,
   progressToPdfPage,
   PdfReaderAdapter,
 } from "./PdfReaderAdapter";
@@ -332,5 +334,62 @@ describe("PdfReaderAdapter", () => {
       }),
     );
     expect(positions.at(-1)).toBe(7);
+  });
+
+  it("maps continuous progress to a page and a clamped in-page offset", () => {
+    expect(pdfContinuousPositionToProgress(2, 0.5, 4)).toBe(0.375);
+    expect(pdfContinuousPositionToProgress(2, -10, 4)).toBe(0.25);
+    expect(pdfContinuousPositionToProgress(2, 10, 4)).toBe(0.5);
+    expect(progressToPdfContinuousPosition(0.375, 4)).toEqual({
+      page: 2,
+      pageOffsetRatio: 0.5,
+    });
+    expect(progressToPdfContinuousPosition(1, 4)).toEqual({
+      page: 4,
+      pageOffsetRatio: 1,
+    });
+  });
+
+  it("restores and reports a continuous in-page locator", async () => {
+    const adapter = new PdfReaderAdapter({
+      bookId: "pdf-book",
+      sourceUrl: "blob:pdf-book",
+      viewMode: "continuous",
+      initialLocator: {
+        kind: "pdf",
+        page: 3,
+        pageOffsetRatio: 0.75,
+      },
+      theme: {
+        mode: "light",
+        fontFamily: "serif",
+        fontSize: 18,
+        lineHeight: 1.7,
+        paragraphSpacing: 12,
+        pageMargin: 32,
+        backgroundColor: "#ffffff",
+        textColor: "#111111",
+      },
+    });
+
+    await adapter.open("pdf-book");
+
+    expect(adapter.getPosition()).toEqual(
+      expect.objectContaining({
+        page: 3,
+        progression: 2.75 / 12,
+        renderedMode: "continuous",
+        locator: expect.objectContaining({ pageOffsetRatio: 0.75 }),
+      }),
+    );
+
+    await adapter.goToProgress(0.5);
+    expect(adapter.getPosition()).toEqual(
+      expect.objectContaining({
+        page: 7,
+        progression: 0.5,
+        locator: expect.objectContaining({ pageOffsetRatio: 0 }),
+      }),
+    );
   });
 });

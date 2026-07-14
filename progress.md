@@ -1855,3 +1855,16 @@
 - **视觉验收：** `view_image` 复核 DPR2 桌面 Double 与 375×760；正文不再只占上半页，移动计算提示不遮挡标题，完整布局截图无横向溢出，按钮保持 44px。Browser 插件初始化失败原因已记录，真实交互由 Playwright 补齐。
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 136）；Playwright 13/13 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
 - **包体：** 书架入口 67.10 kB gzip（低于 70 kB）；ReaderShell 46.93 kB gzip、CSS 8.13 kB gzip，EPUB/PDF runtime 继续保持异步加载；未新增依赖、schema、格式、版本或 Release。
+
+## 2026-07-14 大阶段 12：PDF 连续模式
+
+- **状态：** 12.1 complete
+- **当前分支：** `codex/stage12-pdf-continuous-locator`
+- **基线：** 从最新 `codex/v0.2.0-integration` `be9a5cf` 创建；该提交与 `main` 的代码树一致；工作区仅保留用户未跟踪 `AGENTS.md`。
+- **基线门禁：** `pnpm.cmd check` passed（core 6、desktop 136）；书架入口 67.10 kB gzip，ReaderShell 46.93 kB gzip。
+- **目标：** 完成 PDF Continuous 虚拟滚动、`pageOffsetRatio` 恢复、统一跳转、按页渲染生命周期、Single/Double 四种 TXT/EPUB 同款动画和完整视觉/性能验收。
+- **边界：** 复用现有 TanStack Virtual、PDF.js display layer、`PageTransitionController`、`PageTransitionLayer` 和已批准 UI；不新增依赖、格式、数据库 schema、版本或 Release。
+- **12.1 首轮定向门禁：** core 7 tests 与 Rust reader-experience 2 tests 通过；desktop 测试/构建因 `normalizePdfLocator` 被放在 type-only import 中失败，属于导入分类错误，已改为值导入后重跑。
+- **12.1 实现：** PDF 设置提供 Continuous/None/Realistic/Cover/Smooth；`paginatedViewMode` 在 TypeScript/Rust v1 envelope 中向后兼容并默认 Single；Continuous 不覆盖保存动画，底栏 Single/Double 退出 Continuous 并持久化选择。
+- **12.1 locator：** adapter 保留并钳制 `pageOffsetRatio`，Continuous 进度按整书页内位置换算，100% 映射末页底部；旧 locator 缺少比例时保持页首回退。
+- **12.1 门禁：** core 7、desktop 139、Rust reader-experience 2 tests、desktop build、Cargo fmt check 与 `git diff --check` passed；书架入口 67.20 kB gzip、ReaderShell 47.37 kB gzip。

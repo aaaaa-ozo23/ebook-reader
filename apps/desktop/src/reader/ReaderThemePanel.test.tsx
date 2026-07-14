@@ -59,6 +59,26 @@ describe("ReaderThemePanel page transitions", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Cover" }));
     expect(onTxtReadingModeChange).toHaveBeenCalledWith("cover");
   });
+
+  it("presents continuous and four paginated PDF modes as peers", () => {
+    const onPdfReadingModeChange = vi.fn();
+    render(
+      <ReaderThemePanel
+        isOpen
+        pdfReadingMode="continuous"
+        pdfReadingModeOptions={["continuous", ...MODES]}
+        theme={defaultReaderTheme}
+        themeError={null}
+        onPdfReadingModeChange={onPdfReadingModeChange}
+        onThemeChange={vi.fn()}
+      />,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "PDF reading mode" });
+    expect(group.querySelectorAll('[role="radio"]')).toHaveLength(5);
+    fireEvent.click(screen.getByRole("radio", { name: "Realistic" }));
+    expect(onPdfReadingModeChange).toHaveBeenCalledWith("page-curl");
+  });
 });
 
 function renderPanel(

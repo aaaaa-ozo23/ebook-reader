@@ -21,6 +21,7 @@ import {
   type EpubLocator,
   type Locator,
   type PdfLocator,
+  type PdfPaginatedViewMode,
   type PageTransitionMode,
   type ReaderProgress,
   type ReaderTheme,
@@ -2049,14 +2050,19 @@ export function EpubReaderContent({
 export interface PdfReaderContentProps {
   annotations: Annotation[];
   book: Book;
+  isPageCurlBlocked: boolean;
   jumpRequest: PdfJumpRequest | null;
+  paginatedViewMode: PdfPaginatedViewMode;
   theme: ReaderTheme;
   tocItems: TocItem[];
+  transition: PageTransitionMode;
+  viewMode: PdfViewMode;
   onActiveTocItemChange: (tocItemId: string | null) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
+  onPaginatedViewModeChange: (mode: PdfPaginatedViewMode) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
@@ -2065,14 +2071,19 @@ export interface PdfReaderContentProps {
 export function PdfReaderContent({
   annotations,
   book,
+  isPageCurlBlocked,
   jumpRequest,
+  paginatedViewMode,
   theme,
   tocItems,
+  transition,
+  viewMode,
   onActiveTocItemChange,
   onAnnotationActivate,
   onBackToLibrary,
   onCurrentLocatorChange,
   onNavigationActionsChange,
+  onPaginatedViewModeChange,
   onSelectionChange,
   onSearchProviderChange,
   onTocChange,
@@ -2087,7 +2098,7 @@ export function PdfReaderContent({
   const previewPositionRef = useRef<PdfPosition | null>(null);
   const progressIdleTimerRef = useRef<number | null>(null);
   const renderSequenceRef = useRef(0);
-  const requestedViewModeRef = useRef<PdfViewMode>("single");
+  const requestedViewModeRef = useRef<PdfViewMode>(viewMode);
   const annotationsRef = useRef(annotations);
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
@@ -2101,7 +2112,7 @@ export function PdfReaderContent({
   >({});
   const [position, setPosition] = useState<PdfPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<PdfPosition | null>(null);
-  const [requestedViewMode, setRequestedViewMode] = useState<PdfViewMode>("single");
+  const [requestedViewMode, setRequestedViewMode] = useState<PdfViewMode>(viewMode);
 
   useEffect(() => {
     tocItemsRef.current = tocItems;
@@ -2118,6 +2129,16 @@ export function PdfReaderContent({
   useEffect(() => {
     isDraggingProgressRef.current = isDraggingProgress;
   }, [isDraggingProgress]);
+
+  useEffect(() => {
+    setRequestedViewMode(viewMode);
+    requestedViewModeRef.current = viewMode;
+
+    const adapter = adapterRef.current;
+    if (adapter !== null) {
+      adapter.setViewMode(viewMode, frameRef.current?.clientWidth);
+    }
+  }, [viewMode]);
 
   const flushPendingProgress = useCallback(() => {
     const pendingProgress = pendingProgressRef.current;
@@ -2401,8 +2422,7 @@ export function PdfReaderContent({
       setPreviewPosition(null);
       setIsDraggingProgress(false);
       setPageInput("1");
-      setRequestedViewMode("single");
-      requestedViewModeRef.current = "single";
+      setRequestedViewMode(requestedViewModeRef.current);
       onTocChange([]);
 
       try {
@@ -2586,14 +2606,15 @@ export function PdfReaderContent({
   }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
   const handleViewModeChange = useCallback(
-    (mode: PdfViewMode) => {
+    (mode: PdfPaginatedViewMode) => {
       setRequestedViewMode(mode);
       requestedViewModeRef.current = mode;
+      onPaginatedViewModeChange(mode);
       runPdfAction((adapter) =>
         adapter.setViewMode(mode, frameRef.current?.clientWidth),
       );
     },
-    [runPdfAction],
+    [onPaginatedViewModeChange, runPdfAction],
   );
 
   const handleZoomOut = useCallback(() => {
@@ -2718,6 +2739,8 @@ export function PdfReaderContent({
     <section
       className="reader-viewport reader-viewport--pdf"
       aria-label={`${book.title} content`}
+      data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
+      data-page-transition={transition}
     >
       <article className="reader-page reader-page--pdf">
         <div
@@ -2885,14 +2908,18 @@ export function PdfReaderContent({
             >
               <button
                 type="button"
-                aria-pressed={requestedViewMode === "single"}
+                aria-pressed={
+                  requestedViewMode !== "continuous" && paginatedViewMode === "single"
+                }
                 onClick={() => handleViewModeChange("single")}
               >
                 Single
               </button>
               <button
                 type="button"
-                aria-pressed={requestedViewMode === "double"}
+                aria-pressed={
+                  requestedViewMode !== "continuous" && paginatedViewMode === "double"
+                }
                 onClick={() => handleViewModeChange("double")}
               >
                 Double
