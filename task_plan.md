@@ -637,3 +637,11 @@ pnpm.cmd --filter @reader/desktop tauri:build
 | 5.x EPUB 显示修复 | `codex/stage5-epub-annotation-render-fix` | 使用当前可见 rendition Range 计算选区主窗口坐标；把 epub.js note 标记从虚线矩形修正为与 TXT 一致的单条虚线下划线 | complete，全量验收通过 |
 
 验收结果：`pnpm.cmd install`、core build、desktop lint/test/build、27 个 Rust 测试、5 个 Playwright smoke、桌面局部视觉检查和 `tauri:build` 均通过；Vitest 共 50 tests。首次 Tauri build 因旧 release 进程锁定 exe 失败，结束 PID 27020 后重跑通过。
+
+## 阶段 11.9：TXT 分页持续阅读与渐进加载
+
+| 小阶段 | 分支 | 工作内容 | 当前状态 |
+|--------|------|----------|----------|
+| 11.9 | `codex/stage11-txt-pagination-followup` | 使用真实挂载后的 page frame 尺寸提高正文利用率；恢复并持久化分页 charOffset；缓存快速恢复；分页计算中持续发布可翻阅页面 | 完成，全量验收通过 |
+
+本轮保持 `TxtLocator`、数据库 schema、`txt_pagination_v1` envelope、阅读偏好和 EPUB/PDF 懒加载边界不变；不新增依赖、版本、格式或 Release。验收必须覆盖重新打开恢复进度、计算中 Next/Previous、Single/Double 正文利用率、缓存命中、三档视口和无横向溢出。

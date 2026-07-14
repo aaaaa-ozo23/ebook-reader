@@ -19,6 +19,7 @@ export interface PaginatedReaderControlsProps {
   pageInputAriaLabel: string;
   pageInputDisabled: boolean;
   pageInputMax: number | null;
+  pageInputTotalLabel?: string;
   pageInputValue: string;
   positionLabel: string;
   previousDisabled?: boolean;
@@ -49,6 +50,7 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
   pageInputAriaLabel,
   pageInputDisabled,
   pageInputMax,
+  pageInputTotalLabel,
   pageInputValue,
   positionLabel,
   previousDisabled = false,
@@ -137,7 +139,7 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
                 }
               }}
             />
-            <span>/ {pageInputMax ?? "-"}</span>
+            <span>/ {pageInputTotalLabel ?? pageInputMax ?? "-"}</span>
           </label>
         </div>
         <div className="reader-epub-progress__track">
