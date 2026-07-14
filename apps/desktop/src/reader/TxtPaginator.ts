@@ -112,7 +112,7 @@ export async function paginateTxtBlocks(
     pages.push(createPage(pages.length, fragments));
     fragments = [];
     if (pages.length <= 2 || pages.length % progressEveryPages === 0) {
-      options.onPages?.([...pages]);
+      options.onPages?.(pages);
     }
   };
 

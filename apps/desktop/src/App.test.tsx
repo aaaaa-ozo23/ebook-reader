@@ -1302,6 +1302,68 @@ describe("App", () => {
     expect(await screen.findByText("Page 2 / 2")).toBeVisible();
   });
 
+  it("restores paginated TXT from an asynchronously loaded charOffset", async () => {
+    const user = userEvent.setup();
+    const txtBook = createBook({
+      id: "restored-paginated-txt",
+      title: "Restored Paginated TXT",
+      format: "txt",
+    });
+    const txtDocument = createTxtDocument(txtBook);
+    listBooksMock.mockResolvedValueOnce([txtBook]);
+    markBookOpenedMock.mockResolvedValueOnce(txtBook);
+    openTxtBookMock.mockResolvedValueOnce(txtDocument);
+    getReadingProgressMock.mockResolvedValueOnce({
+      bookId: txtBook.id,
+      locator: {
+        kind: "txt",
+        chapterId: "chapter-2-13",
+        charOffset: 13,
+      },
+      progress: 0.5,
+      updatedAt: "2026-07-14T03:00:00.000Z",
+    });
+    getReaderExperiencePreferencesMock.mockResolvedValueOnce({
+      ...defaultReaderExperiencePreferences,
+      txt: { viewMode: "paginated", transition: "none" },
+    });
+    getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
+      cacheKey === "txt_pagination_v1"
+        ? JSON.stringify({
+            version: 1,
+            charCount: txtDocument.charCount,
+            signature: {
+              devicePixelRatio: 1,
+              pageHeight: 588,
+              pageWidth: 780,
+              spreadMode: "single",
+              themeFingerprint: [
+                defaultReaderTheme.fontFamily,
+                defaultReaderTheme.fontSize,
+                defaultReaderTheme.lineHeight,
+                defaultReaderTheme.paragraphSpacing,
+                defaultReaderTheme.pageMargin,
+              ].join("|"),
+            },
+            boundaries: [
+              { startCharOffset: 0, endCharOffset: 13 },
+              { startCharOffset: 13, endCharOffset: txtDocument.charCount },
+            ],
+          })
+        : null,
+    );
+
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("Page 2 / 2")).toBeVisible();
+    expect(screen.getByRole("spinbutton", { name: "TXT page number" })).toHaveValue(2);
+    expect(screen.getByRole("button", { name: "第二章 风起" })).toHaveAttribute(
+      "aria-current",
+      "location",
+    );
+  });
+
   it("creates and jumps to a TXT bookmark from the reader sidebar", async () => {
     const user = userEvent.setup();
     const txtBook = createBook({

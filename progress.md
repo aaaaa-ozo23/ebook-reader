@@ -1836,3 +1836,22 @@
 - **性能：** 缓存重建改为页/块双游标 `O(pages + blocks)`；短段整段优先、字素切分延迟；DOM measurer 复用节点；首个完整 spread 渐进显示，只有完整边界写磁盘；会话内 LRU 最多两个布局。
 - **视觉/浏览器：** Browser/IAB 页面 identity、无横向溢出和 console clean；Playwright seeded TXT 验证两页真实几何/相邻内容、动画 target identity、页码/滑杆和 375px 降级；`view_image` 复核桌面与移动最终截图通过。
 - **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 135）；Playwright 13/13（新增 seeded DPR2 TXT）；Rust fmt + 36 tests；Tauri NSIS/MSI build passed。书架入口 67.10 kB gzip、ReaderShell 46.67 kB gzip，EPUB/PDF runtime 未进入书架入口。
+
+## 2026-07-14 大阶段 11.9：TXT 分页持续阅读与渐进加载
+
+- **状态：** complete
+- **分支：** `codex/stage11-txt-pagination-followup`
+- **基线：** 从最新 `codex/v0.2.0-integration` `eaf657e` 创建；工作区仅保留用户未跟踪 `AGENTS.md`。
+- **已定位：** 异步 TXT 加载令一次性 frame 测量错过真实 DOM，分页长期沿用 588px 兜底高度；渐进回调只发布首个 spread；分页进度需要继续追踪异步 `initialProgress` 与退出提交链路。
+- **边界：** 不改 locator、数据库、缓存 envelope、阅读偏好、版本、依赖或格式；完成后执行完整 Web/Rust/Tauri 门禁并按 `--no-ff` 合回 integration/main。
+- **首轮回归：** Vitest 136/136 通过；定向 Playwright 的渐进 Next 与进度恢复路径已运行到布局断言。新增 resize 断言最初在 ResizeObserver 启动前读取到旧 `ready`，随后 DOM 已进入 `Pages calculating`，属于测试等待竞态；改为明确等待 `calculating → ready` 后再测正文填充和窗口数量。
+- **第二轮回归：** 真实正文填充断言已通过；Double 切换后的旧验收立即读取 page max 并启动动画，而新行为允许计算中输入/翻页，读到了仍增长的临时总数。已把需要“完整总页数”的旧动画/slider 段明确等待 Double `calculating → ready`，渐进可翻阅另由前置断言独立覆盖。
+- **定向通过：** seeded TXT 在 Chromium DPR 1 与 DPR 2 分别通过；正文末段不溢出且底部空白低于页面高度 20%，计算中 Next 能移动到已发布页，Double 等待完整布局后目标动画稳定。
+- **视觉回退：** Browser 插件初始化因 `Cannot redefine property: process` 不可用，已记录并改用项目 Playwright + `view_image`。桌面 Double 正文填充和底栏比例通过；首张移动计算态截图暴露提示胶囊遮住标题，现移除正文浮层并把 `Calculating` 合入底栏状态，等待完整布局后复拍。
+- **移动复拍调整：** 请求 Double 后窄窗说明会增加底栏高度并触发一次新的 frame 测量；截图若立即执行会落在该重分页的空白首帧。验收现等待这次布局完成后再截图，计算中可读行为仍由独立交互断言覆盖。
+- **门禁问题：** 首轮 `pnpm.cmd check` 的 lint 已通过，format check 仅发现最后补充的零页面状态条件尚未执行 Prettier；已格式化 `ReaderFormatContents.tsx` 后重跑，不涉及行为修改。
+- **最终实现：** 异步载入后重新绑定真实 frame ResizeObserver，消除 588px 兜底高度造成的页面留白/裁切；同步异步 `initialProgress.charOffset`；缓存命中先于字体等待恢复；分页批次持续发布并保留计算中的用户导航；输入框可跳到已加载页，总数以 `n+ · Calculating` 表示。
+- **持久化/性能：** seeded TXT 从非首页回书架再进入可恢复到包含保存 charOffset 的页面，同会话缓存路径低于 1 秒；只有完整分页写入 `txt_pagination_v1`，数据库仍只保存 `chapterId + charOffset`。
+- **视觉验收：** `view_image` 复核 DPR2 桌面 Double 与 375×760；正文不再只占上半页，移动计算提示不遮挡标题，完整布局截图无横向溢出，按钮保持 44px。Browser 插件初始化失败原因已记录，真实交互由 Playwright 补齐。
+- **最终门禁：** `pnpm.cmd check` passed（core 6、desktop 136）；Playwright 13/13 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
+- **包体：** 书架入口 67.10 kB gzip（低于 70 kB）；ReaderShell 46.93 kB gzip、CSS 8.13 kB gzip，EPUB/PDF runtime 继续保持异步加载；未新增依赖、schema、格式、版本或 Release。
