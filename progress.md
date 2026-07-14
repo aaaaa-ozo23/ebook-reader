@@ -1868,3 +1868,9 @@
 - **12.1 实现：** PDF 设置提供 Continuous/None/Realistic/Cover/Smooth；`paginatedViewMode` 在 TypeScript/Rust v1 envelope 中向后兼容并默认 Single；Continuous 不覆盖保存动画，底栏 Single/Double 退出 Continuous 并持久化选择。
 - **12.1 locator：** adapter 保留并钳制 `pageOffsetRatio`，Continuous 进度按整书页内位置换算，100% 映射末页底部；旧 locator 缺少比例时保持页首回退。
 - **12.1 门禁：** core 7、desktop 139、Rust reader-experience 2 tests、desktop build、Cargo fmt check 与 `git diff --check` passed；书架入口 67.20 kB gzip、ReaderShell 47.37 kB gzip。
+- **12.2 分支：** `codex/stage12-pdf-virtual-pages` 从已合并 12.1 的集成分支创建。
+- **12.2 实现：** 新增 TanStack Virtual 单列 PDF 连续视图，overscan 固定为前后 1 页；初始/远距离跳转只请求目标页尺寸，按估算定位后在目标页挂载测量并精确应用页内锚点。
+- **12.2 页面：** 抽取 `PdfPageSurface`，可见页立即渲染、overscan 下一帧渲染；`getPageMetrics(page)` 按需缓存轻量宽高，不遍历整书。Fit width 按每页真实宽度计算，宽页面只在 PDF frame 内横向滚动。
+- **12.2 UI：** Continuous 复用现有 PDF Previous/Next、页码输入、Page/Pages、百分比、0–1000 slider 和独立缩放/Fit width 行；虚拟滚动以视口中心线更新页码与页内比例。
+- **12.2 首轮门禁：** desktop 140 tests 与 build passed；lint 发现 viewMode effect 同步 setState、render 读取 adapter ref，以及 metrics callback 冗余依赖，已改为 prop 驱动 viewMode、adapter state 和显式 metrics 版本读取后重跑。
+- **12.2 最终门禁：** desktop lint、140 tests、desktop build 与 `git diff --check` passed；书架入口保持 67.20 kB gzip，ReaderShell 49.09 kB gzip，PDF runtime 继续懒加载。
