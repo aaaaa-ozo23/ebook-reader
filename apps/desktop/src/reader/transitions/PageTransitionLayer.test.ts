@@ -164,7 +164,10 @@ describe("isolated page transition layer", () => {
     expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
     expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(100%, 0, 0)");
     expect(animate.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS.slide }),
+      expect.objectContaining({
+        duration: PAGE_TRANSITION_DURATIONS.slide,
+        easing: "cubic-bezier(0.33, 0, 0.67, 1)",
+      }),
     );
     expect(host.querySelector(".reader-transition-layer")).toBeNull();
   });
@@ -191,7 +194,10 @@ describe("isolated page transition layer", () => {
     expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
     expect(JSON.stringify(animate.mock.calls)).toContain("translate3d(0px, 0, 0)");
     expect(animate.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS.cover }),
+      expect.objectContaining({
+        duration: PAGE_TRANSITION_DURATIONS.cover,
+        easing: "cubic-bezier(0.37, 0, 0.63, 1)",
+      }),
     );
   });
 
@@ -251,7 +257,10 @@ describe("isolated page transition layer", () => {
     expect(JSON.stringify(animate.mock.calls)).toContain('"width":"0px"');
     expect(JSON.stringify(animate.mock.calls)).not.toContain("clipPath");
     expect(animate.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({ duration: PAGE_TRANSITION_DURATIONS["page-curl"] }),
+      expect.objectContaining({
+        duration: PAGE_TRANSITION_DURATIONS["page-curl"],
+        easing: "cubic-bezier(0.45, 0, 0.55, 1)",
+      }),
     );
 
     finishAnimation();

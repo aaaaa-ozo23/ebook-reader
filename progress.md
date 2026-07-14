@@ -1928,3 +1928,16 @@
 - **自动化：** core 8 tests、desktop 152 tests、Rust 36 tests passed；500 页 PDF 在 Chromium/DPR2 逐项验证 Smooth/Cover/Realistic 的 current 10–11、target 12–13 与最终 spread，seeded TXT 验证 Double → Continuous → Smooth 仍为 Double；全量 Playwright 15/15 passed。
 - **Browser/视觉：** 应用内 Browser 成功连接本地 Vite，书架首屏语义结构正常且 console warning/error 为 0；复杂 seeded TXT/PDF 继续由仓库 Playwright fixture 验证。
 - **最终门禁：** `pnpm.cmd check`、Cargo fmt check、Rust 36 tests、Playwright 15/15、`git diff --check`、Tauri NSIS/MSI build 全部通过。书架入口 67.21 kB gzip、ReaderShell 51.63 kB gzip，PDF runtime 继续懒加载；未新增依赖、schema、格式、版本或 Release。
+
+## 2026-07-14 大阶段 12.9：PDF Double 动画视觉修复
+
+- **状态：** complete
+- **分支：** `codex/stage12-pdf-double-animation-visual-fix`，从已推送的 `main` `930efbd` 创建；继续保留用户未跟踪 `AGENTS.md`。
+- **用户复现：** PDF 分页 Double 中 Smooth/Cover/Realistic 依旧没有可见动画；上一轮自动化只断言 transition layer、mode 和 Canvas identity，未证明中间帧发生实际位移、揭示或卷页变形。
+- **本轮门禁：** 先捕获并量化 Double 动画 25%/50%/75% 的 frame geometry/transform/clip，再做最小修复；真实浏览器与 Playwright 必须验证视觉运动，不再以展示层存在替代动画效果。
+- **根因：** 旧共享 easing 高度前置；50% 时间点 Smooth/Cover/Realistic 的 current 宽度只剩 5.39%/7.15%/10.91%，截图几乎已经是目标页，视觉等同 None。PDF frame 同时缺少 TXT/EPUB 使用的 `reader-transition-host` 隔离层。
+- **修复：** 三种共享动画改用中点对称 easing，时长仍为 280/320/650ms，PDF/TXT/EPUB 继续复用同一效果；PDF frame 接入 transition-host。E2E 新增 50% frame 宽度、target transform、Cover edge 与 Realistic sheet 的真实几何断言。
+- **定向验证：** Chromium/DPR2 500 页 PDF 均通过；`view_image` 确认 Smooth 同屏显示 page 10→12、Cover 有移动边缘、Realistic 有卷页背面/阴影。desktop 152 tests passed，并锁定三条新 easing。
+- **Browser：** 修复前后本地书架页面身份/首屏/console 均正常；首次修复后截图遇到一次 `Page.captureScreenshot` 超时，按 Browser 故障指南换新 tab 后复核成功，console warning/error 0。隔离会话无 seeded PDF，目标动画由项目 fixture 验证。
+- **全量门禁：** `pnpm.cmd check` passed（core 8、desktop 152）；Playwright 15/15 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
+- **包体/边界：** 书架入口 67.21 kB gzip、ReaderShell 51.66 kB gzip，PDF runtime 继续懒加载；未新增依赖、schema、格式、版本或 Release。
