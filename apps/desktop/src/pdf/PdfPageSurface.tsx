@@ -86,18 +86,19 @@ export const PdfPageSurface = memo(function PdfPageSurface({
     setIsReady(false);
     setRenderError(null);
 
+    let renderHandle: ReturnType<PdfReaderAdapter["createPageSurfaceRender"]> | null =
+      null;
     const renderSurface = async () => {
       try {
         canvas.dataset.pageNumber = String(pageNumber);
-        await adapter.renderPage(canvas, pageNumber, effectiveScale);
-
-        if (!isCurrent || renderIdentityRef.current !== renderIdentity) {
-          return;
-        }
-
-        if (renderTextLayer && textLayer !== null) {
-          await adapter.renderTextLayer(textLayer, pageNumber, effectiveScale);
-        }
+        renderHandle = adapter.createPageSurfaceRender({
+          canvas,
+          pageNumber,
+          renderTextLayer,
+          scale: effectiveScale,
+          textLayer,
+        });
+        await renderHandle.ready;
 
         if (isCurrent && renderIdentityRef.current === renderIdentity) {
           setIsReady(true);
@@ -128,7 +129,10 @@ export const PdfPageSurface = memo(function PdfPageSurface({
       if (frameHandle !== null) {
         window.cancelAnimationFrame(frameHandle);
       }
-      adapter.releasePageSurface(pageNumber, canvas, textLayer);
+      renderHandle?.release();
+      if (renderHandle === null) {
+        adapter.releasePageSurface(pageNumber, canvas, textLayer);
+      }
       window.getSelection()?.removeAllRanges();
     };
   }, [

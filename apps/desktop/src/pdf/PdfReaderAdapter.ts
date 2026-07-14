@@ -43,6 +43,25 @@ export interface PdfPageMetrics {
   rotation: number;
 }
 
+export interface PdfPageSurfaceRenderHandle {
+  cancel: () => void;
+  pageNumber: number;
+  ready: Promise<PdfPageRenderResult>;
+  release: () => void;
+}
+
+export interface PdfRenderLifecycleSnapshot {
+  activePages: number;
+  activeRenderTasks: number;
+  activeTextLayers: number;
+  cachedPageMetrics: number;
+}
+
+interface CancellableTextLayer {
+  cancel: () => void;
+  render: () => Promise<void>;
+}
+
 interface PdfReaderAdapterOptions {
   bookId: string;
   sourceUrl: string;
@@ -77,10 +96,15 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private readonly sourceUrl: string;
   private currentPage = 1;
   private document: PDFDocumentProxy | null = null;
+  private documentIdentity = 0;
   private loadingTask: PDFDocumentLoadingTask | null = null;
   private readonly pageMetrics = new Map<number, PdfPageMetrics>();
+  private readonly activePages = new Map<number, PDFPageProxy>();
   private readonly pagePromises = new Map<number, Promise<PDFPageProxy>>();
   private readonly renderTasks = new Map<number, RenderTask>();
+  private readonly renderSequences = new Map<number, number>();
+  private readonly textLayers = new Map<number, CancellableTextLayer>();
+  private readonly textLayerSequences = new Map<number, number>();
   private pageOffsetRatio: number | undefined;
   private scale = PDF_DEFAULT_SCALE;
   private theme: ReaderTheme;
@@ -135,9 +159,17 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   }
 
   async close(): Promise<void> {
+    this.documentIdentity += 1;
     this.cancelAllPageRenders();
+    this.cancelAllTextLayers();
+    for (const page of this.activePages.values()) {
+      page.cleanup();
+    }
+    this.activePages.clear();
     this.pageMetrics.clear();
     this.pagePromises.clear();
+    this.renderSequences.clear();
+    this.textLayerSequences.clear();
 
     if (this.loadingTask !== null) {
       await this.loadingTask.destroy();
@@ -408,7 +440,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   ): Promise<PdfPageRenderResult> {
     const document = this.requireDocument();
     const normalizedPage = normalizePdfPage(pageNumber, document.numPages);
+    this.cancelPageRender(normalizedPage, false);
+    const renderSequence = this.nextSequence(this.renderSequences, normalizedPage);
     const page = await this.getPage(normalizedPage);
+    this.assertCurrentSequence(this.renderSequences, normalizedPage, renderSequence);
     const renderScale = normalizePdfScale(scale);
     const outputScale = getOutputScale();
     const viewport = page.getViewport({ scale: renderScale });
@@ -418,7 +453,6 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       throw new Error("PDF canvas 2D context is unavailable.");
     }
 
-    this.cancelPageRender(normalizedPage);
     canvas.width = Math.floor(viewport.width * outputScale);
     canvas.height = Math.floor(viewport.height * outputScale);
     canvas.style.width = `${Math.floor(viewport.width)}px`;
@@ -435,6 +469,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     this.renderTasks.set(normalizedPage, renderTask);
     try {
       await renderTask.promise;
+      this.assertCurrentSequence(this.renderSequences, normalizedPage, renderSequence);
     } finally {
       if (this.renderTasks.get(normalizedPage) === renderTask) {
         this.renderTasks.delete(normalizedPage);
@@ -456,7 +491,18 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   ): Promise<PdfPageRenderResult> {
     const pdfjs = await loadPdfjs();
     const document = this.requireDocument();
-    const page = await this.getPage(normalizePdfPage(pageNumber, document.numPages));
+    const normalizedPage = normalizePdfPage(pageNumber, document.numPages);
+    const textLayerSequence = this.nextSequence(
+      this.textLayerSequences,
+      normalizedPage,
+    );
+    this.cancelTextLayer(normalizedPage, false);
+    const page = await this.getPage(normalizedPage);
+    this.assertCurrentSequence(
+      this.textLayerSequences,
+      normalizedPage,
+      textLayerSequence,
+    );
     const renderScale = normalizePdfScale(scale);
     const viewport = page.getViewport({ scale: renderScale });
     const textContent = await page.getTextContent();
@@ -472,7 +518,19 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       viewport,
     });
 
-    await textLayer.render();
+    this.textLayers.set(normalizedPage, textLayer);
+    try {
+      await textLayer.render();
+      this.assertCurrentSequence(
+        this.textLayerSequences,
+        normalizedPage,
+        textLayerSequence,
+      );
+    } finally {
+      if (this.textLayers.get(normalizedPage) === textLayer) {
+        this.textLayers.delete(normalizedPage);
+      }
+    }
 
     return {
       pageNumber: page.pageNumber,
@@ -549,14 +607,75 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     return this.requireDocument().numPages;
   }
 
-  cancelPageRender(pageNumber: number): void {
-    const normalizedPage = normalizePdfPage(pageNumber, this.totalPages);
+  cancelPageRender(pageNumber: number, invalidate = true): void {
+    const normalizedPage = this.normalizeLifecyclePage(pageNumber);
     const renderTask = this.renderTasks.get(normalizedPage);
 
     if (renderTask !== undefined) {
       renderTask.cancel();
       this.renderTasks.delete(normalizedPage);
     }
+    if (invalidate) {
+      this.nextSequence(this.renderSequences, normalizedPage);
+    }
+  }
+
+  cancelTextLayer(pageNumber: number, invalidate = true): void {
+    const normalizedPage = this.normalizeLifecyclePage(pageNumber);
+    const textLayer = this.textLayers.get(normalizedPage);
+    textLayer?.cancel();
+    this.textLayers.delete(normalizedPage);
+    if (invalidate) {
+      this.nextSequence(this.textLayerSequences, normalizedPage);
+    }
+  }
+
+  createPageSurfaceRender(options: {
+    canvas: HTMLCanvasElement;
+    pageNumber: number;
+    renderTextLayer: boolean;
+    scale: number;
+    textLayer?: HTMLElement | null;
+  }): PdfPageSurfaceRenderHandle {
+    const pageNumber = normalizePdfPage(options.pageNumber, this.totalPages);
+    let isReleased = false;
+    const ready = this.renderPage(options.canvas, pageNumber, options.scale).then(
+      async (result) => {
+        if (
+          options.renderTextLayer &&
+          options.textLayer !== null &&
+          options.textLayer
+        ) {
+          await this.renderTextLayer(options.textLayer, pageNumber, options.scale);
+        }
+        return result;
+      },
+    );
+
+    return {
+      pageNumber,
+      ready,
+      cancel: () => {
+        this.cancelPageRender(pageNumber);
+        this.cancelTextLayer(pageNumber);
+      },
+      release: () => {
+        if (isReleased) {
+          return;
+        }
+        isReleased = true;
+        this.releasePageSurface(pageNumber, options.canvas, options.textLayer);
+      },
+    };
+  }
+
+  getRenderLifecycleSnapshot(): PdfRenderLifecycleSnapshot {
+    return {
+      activePages: this.activePages.size,
+      activeRenderTasks: this.renderTasks.size,
+      activeTextLayers: this.textLayers.size,
+      cachedPageMetrics: this.pageMetrics.size,
+    };
   }
 
   releasePageSurface(
@@ -565,6 +684,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     textLayer?: HTMLElement | null,
   ): void {
     this.cancelPageRender(pageNumber);
+    this.cancelTextLayer(pageNumber);
     textLayer?.replaceChildren();
     textLayer?.removeAttribute("data-page-number");
 
@@ -573,6 +693,11 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       canvas.height = 0;
       canvas.removeAttribute("data-page-number");
     }
+
+    const normalizedPage = this.normalizeLifecyclePage(pageNumber);
+    this.activePages.get(normalizedPage)?.cleanup();
+    this.activePages.delete(normalizedPage);
+    this.pagePromises.delete(normalizedPage);
   }
 
   private cancelAllPageRenders(): void {
@@ -582,15 +707,36 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     this.renderTasks.clear();
   }
 
+  private cancelAllTextLayers(): void {
+    for (const textLayer of this.textLayers.values()) {
+      textLayer.cancel();
+    }
+    this.textLayers.clear();
+  }
+
   private getPage(pageNumber: number): Promise<PDFPageProxy> {
     const normalizedPage = normalizePdfPage(pageNumber, this.totalPages);
+    const activePage = this.activePages.get(normalizedPage);
+    if (activePage !== undefined) {
+      return Promise.resolve(activePage);
+    }
     const cachedPromise = this.pagePromises.get(normalizedPage);
 
     if (cachedPromise !== undefined) {
       return cachedPromise;
     }
 
-    const pagePromise = this.requireDocument().getPage(normalizedPage);
+    const document = this.requireDocument();
+    const documentIdentity = this.documentIdentity;
+    const pagePromise = document.getPage(normalizedPage).then((page) => {
+      if (this.document !== document || this.documentIdentity !== documentIdentity) {
+        page.cleanup();
+        throw createRenderingCancelledError();
+      }
+      this.activePages.set(normalizedPage, page);
+      this.pagePromises.delete(normalizedPage);
+      return page;
+    });
     this.pagePromises.set(normalizedPage, pagePromise);
     void pagePromise.catch(() => {
       if (this.pagePromises.get(normalizedPage) === pagePromise) {
@@ -598,6 +744,29 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       }
     });
     return pagePromise;
+  }
+
+  private normalizeLifecyclePage(pageNumber: number): number {
+    return normalizePdfPage(
+      pageNumber,
+      this.document?.numPages ?? Math.max(1, Math.floor(pageNumber) || 1),
+    );
+  }
+
+  private nextSequence(sequences: Map<number, number>, pageNumber: number): number {
+    const nextSequence = (sequences.get(pageNumber) ?? 0) + 1;
+    sequences.set(pageNumber, nextSequence);
+    return nextSequence;
+  }
+
+  private assertCurrentSequence(
+    sequences: Map<number, number>,
+    pageNumber: number,
+    sequence: number,
+  ): void {
+    if (sequences.get(pageNumber) !== sequence) {
+      throw createRenderingCancelledError();
+    }
   }
 
   private reportPosition(zoomMode: "fit-width" | "custom" = this.zoomMode): void {
@@ -667,6 +836,12 @@ export function progressToPdfContinuousPosition(
     page: normalizePdfPage(pageIndex + 1, normalizedTotalPages),
     pageOffsetRatio: scaledPosition - pageIndex,
   };
+}
+
+function createRenderingCancelledError(): Error {
+  const error = new Error("Rendering cancelled because the page surface changed.");
+  error.name = "RenderingCancelledException";
+  return error;
 }
 
 async function loadPdfjs(): Promise<PdfjsModule> {

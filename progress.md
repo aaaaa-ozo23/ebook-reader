@@ -1874,3 +1874,9 @@
 - **12.2 UI：** Continuous 复用现有 PDF Previous/Next、页码输入、Page/Pages、百分比、0–1000 slider 和独立缩放/Fit width 行；虚拟滚动以视口中心线更新页码与页内比例。
 - **12.2 首轮门禁：** desktop 140 tests 与 build passed；lint 发现 viewMode effect 同步 setState、render 读取 adapter ref，以及 metrics callback 冗余依赖，已改为 prop 驱动 viewMode、adapter state 和显式 metrics 版本读取后重跑。
 - **12.2 最终门禁：** desktop lint、140 tests、desktop build 与 `git diff --check` passed；书架入口保持 67.20 kB gzip，ReaderShell 49.09 kB gzip，PDF runtime 继续懒加载。
+- **12.3 分支：** `codex/stage12-pdf-render-lifecycle` 从已合并 12.2 的集成分支创建。
+- **12.3 实现：** adapter 提供独立 `PdfPageSurfaceRenderHandle`，每页分别管理 Canvas RenderTask、TextLayer、序列 identity 与 release；并发页互不取消，旧任务不能覆盖新 surface。
+- **12.3 清理：** 页面离开窗口时取消 Canvas/TextLayer、清空文本层、Canvas backing width/height 归零、移除交互选区并调用 `PDFPageProxy.cleanup()`；关闭文档统一释放所有活动页面和待处理任务。
+- **12.3 错误：** `RenderingCancelledException` 静默忽略；其他单页错误只在对应 surface 显示 Retry，不关闭整本 PDF。可见页立即渲染，overscan 页下一 animation frame 渲染。
+- **12.3 首轮测试：** 新并发测试发现 render sequence 在任务启动后被同页 cancel 例程再次递增，导致正常 page 2 也被识别为旧任务；已把旧任务取消移到新 sequence 分配之前并增加可选 invalidate。
+- **12.3 门禁：** desktop 142 tests、lint 与 build passed，覆盖并发渲染、单页取消、句柄释放、Canvas 归零和 TextLayer 清理。
