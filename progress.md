@@ -1891,3 +1891,10 @@
 - **12.5 rect：** 目标页虚拟挂载后按实际 scale 把首个 PDF rect 转为 viewport rect，并滚到 frame 上部可读区域；Continuous 页面 surface 自行重放已挂载页高亮/笔记按钮。
 - **12.5 交互：** 跳转前清除跨页 selection/menu；只有挂载页 TextLayer 可选择，surface release 同时移除选区、文本 DOM 与可聚焦笔记按钮。直接跳转不经过分页 transition 控制器。
 - **12.5 门禁：** desktop lint、147 tests、build 与 `git diff --check` passed；新增 rect > ratio > page-top 优先级测试，slider 验证 preview 不提交且 commit 只走统一 locator 一次。
+- **12.6 分支：** `codex/stage12-pdf-page-transitions` 从已合并 12.5 的集成分支创建。
+- **12.6 窗口：** 分页视图维护 previous/current/next 三 spread；Single 最多 3 Canvas，Double 最多 6 Canvas，封面和最后单页自动减少。邻接 spread 只渲染 Canvas，当前 spread 才挂 TextLayer 与批注交互。
+- **12.6 快照：** `capturePdfSpreadSnapshot` 按准确 `data-spread-start` 与 `data-page-number` 建立快照，并逐 Canvas `drawImage` 复制 backing pixels；任一 surface 未 ready、Canvas 为 0、identity 不符或复制失败即返回 null 并无动画导航。
+- **12.6 动画：** 按钮、ArrowLeft/Right 和非交互左右 20% 边缘点击统一进入 `PageTransitionController`；复用 Smooth 280ms、Cover 320ms、Realistic 650ms。None/reduced motion/快照失败直接导航，动画期间禁用 live spread 交互。
+- **12.6 生命周期修正：** 邻接 Canvas 晋升为 current 时不再清零重渲染；Canvas 与 TextLayer effect 分离，晋升只挂文本/批注，确保动画结束后 live 目标页已经是正确像素。
+- **12.6 首轮门禁：** 新三窗口组件令 App adapter mock 缺少 metrics/render-handle/release API，6 个 PDF 组件测试卸载时报错；补齐真实接口形状后只剩 mock 缺少 spread helper export，随后修正。产品代码未回退到旧全局 Canvas。
+- **12.6 门禁：** desktop lint、151 tests、build 与 `git diff --check` passed；测试覆盖 30 次快速输入合并、Single/Double 窗口上限、封面/末页、准确 PDF Canvas identity/pixel copy、目标未 ready 回退及三种共享时长。

@@ -540,3 +540,5 @@
 - Continuous 中虚拟行高度包含页间 gap，但 locator 比例只能除以真实页面内容高度；否则滚到页尾会把 gap 计入比例，缩放恢复后锚点产生可见漂移。
 - PDF slider 若在 commit 时再次走独立 progression API，就会绕开 rect/ratio/page-top 的统一优先级和后续动画抑制；应把 preview 生成的完整 locator 交给同一个 `goToPdfLocator`。
 - 批注 rect 跳转不能只在 adapter 中修改 page：连续目标页尚未挂载。可靠顺序是 locator 导航、虚拟目标页挂载、按该页实际 scale 转换 rect、再把首个 rect 放到 frame 上部并由 surface 重放高亮。
+- PDF Canvas 的 DOM clone 会保留 width/height 属性却不保留像素；动画快照必须逐个校验源/目标 `data-page-number`，设置 backing size 后 `drawImage(sourceCanvas, 0, 0)`，任何失败都应回退无动画。
+- 邻接 spread 晋升 current 时若把 `isVisible/renderTextLayer` 放在同一个 Canvas effect 依赖中，effect cleanup 会先把已预渲染目标 Canvas 归零。Canvas 生命周期与当前页 TextLayer 生命周期必须分离，晋升只增加交互层。

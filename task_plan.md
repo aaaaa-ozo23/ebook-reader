@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.5 PDF 跳转整合：complete；下一步从已合并 12.5 的 `codex/v0.2.0-integration` 建立 12.6 分支，实现 Single/Double 三 spread 像素快照与 TXT/EPUB 同款分页动画；不新增 schema、版本或 Release。
+大阶段 12.6 PDF 分页动画：complete；下一步从已合并 12.6 的 `codex/v0.2.0-integration` 建立 12.7 验收分支，生成 500 页 fixture 并完成性能、视觉、响应式、无障碍、全量门禁、main 合并和推送；不新增 schema、版本或 Release。
 
 ## 分支策略
 

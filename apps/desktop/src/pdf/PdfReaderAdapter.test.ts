@@ -372,7 +372,7 @@ describe("PdfReaderAdapter", () => {
     await adapter.open("pdf-book");
     expect(adapter.getVisiblePages()).toEqual([2, 3]);
     await adapter.previous();
-    expect(adapter.getVisiblePages()).toEqual([1, 2]);
+    expect(adapter.getVisiblePages()).toEqual([1]);
     await adapter.next();
     expect(adapter.getVisiblePages()).toEqual([2, 3]);
   });

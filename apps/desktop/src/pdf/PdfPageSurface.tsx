@@ -47,6 +47,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const renderIdentityRef = useRef(0);
+  const renderImmediatelyRef = useRef(isVisible);
   const [metrics, setMetrics] = useState<PdfPageMetrics | null>(
     () => adapter.getCachedPageMetrics(pageNumber) ?? null,
   );
@@ -114,7 +115,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
         renderHandle = adapter.createPageSurfaceRender({
           canvas,
           pageNumber,
-          renderTextLayer,
+          renderTextLayer: false,
           scale: effectiveScale,
           textLayer,
         });
@@ -134,7 +135,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
       }
     };
 
-    if (isVisible) {
+    if (renderImmediatelyRef.current) {
       void renderSurface();
     } else {
       frameHandle = window.requestAnimationFrame(() => {
@@ -155,16 +156,31 @@ export const PdfPageSurface = memo(function PdfPageSurface({
       }
       window.getSelection()?.removeAllRanges();
     };
-  }, [
-    adapter,
-    effectiveScale,
-    isVisible,
-    metrics,
-    pageNumber,
-    renderTextLayer,
-    renderVersion,
-    retryVersion,
-  ]);
+  }, [adapter, effectiveScale, metrics, pageNumber, renderVersion, retryVersion]);
+
+  useEffect(() => {
+    const textLayer = textLayerRef.current;
+    if (textLayer === null || !renderTextLayer || !isReady) {
+      textLayer?.replaceChildren();
+      return;
+    }
+
+    let isCurrent = true;
+    void adapter
+      .renderTextLayer(textLayer, pageNumber, effectiveScale)
+      .catch((error: unknown) => {
+        if (isCurrent && !isPdfRenderingCancelled(error)) {
+          setRenderError(getPdfSurfaceErrorMessage(error));
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+      adapter.cancelTextLayer(pageNumber);
+      textLayer.replaceChildren();
+      window.getSelection()?.removeAllRanges();
+    };
+  }, [adapter, effectiveScale, isReady, pageNumber, renderTextLayer]);
 
   useEffect(() => {
     let isCurrent = true;
