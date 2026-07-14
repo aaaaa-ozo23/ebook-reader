@@ -7,6 +7,7 @@ import {
   type MouseEvent,
   type RefObject,
 } from "react";
+import type { Annotation } from "@reader/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { PdfPageSurface } from "./PdfPageSurface";
@@ -19,9 +20,11 @@ import { resolvePdfContinuousAnchor } from "./PdfContinuousPosition";
 
 export interface PdfContinuousViewProps {
   adapter: PdfReaderAdapter;
+  annotations: Annotation[];
   availableWidth: number;
   frameRef: RefObject<HTMLDivElement | null>;
   navigationVersion: number;
+  onAnnotationActivate: (annotation: Annotation, element: HTMLElement) => void;
   onSelectionEnd: (
     event: KeyboardEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>,
   ) => void;
@@ -35,9 +38,11 @@ const PDF_PAGE_GAP = 28;
 
 export function PdfContinuousView({
   adapter,
+  annotations,
   availableWidth,
   frameRef,
   navigationVersion,
+  onAnnotationActivate,
   onSelectionEnd,
   position,
   renderVersion,
@@ -206,9 +211,11 @@ export function PdfContinuousView({
           >
             <PdfPageSurface
               adapter={adapter}
+              annotations={annotations}
               availableWidth={pageContentWidth}
               isVisible={isVisible}
               onMetrics={handleMetrics}
+              onAnnotationActivate={onAnnotationActivate}
               onSelectionEnd={onSelectionEnd}
               pageNumber={pageNumber}
               renderVersion={renderVersion}

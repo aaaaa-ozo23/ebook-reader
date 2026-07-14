@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePdfContinuousAnchor } from "./PdfContinuousPosition";
+import {
+  resolvePdfContinuousAnchor,
+  resolvePdfLocatorAnchorKind,
+} from "./PdfContinuousPosition";
 
 describe("resolvePdfContinuousAnchor", () => {
   const items = [
@@ -24,5 +27,22 @@ describe("resolvePdfContinuousAnchor", () => {
 
   it("returns null when no virtual page is mounted", () => {
     expect(resolvePdfContinuousAnchor([], 100, () => 800)).toBeNull();
+  });
+});
+
+describe("resolvePdfLocatorAnchorKind", () => {
+  it("prioritizes rects, then an in-page ratio, then the page top", () => {
+    expect(
+      resolvePdfLocatorAnchorKind({
+        kind: "pdf",
+        page: 2,
+        pageOffsetRatio: 0.4,
+        rects: [{ x: 1, y: 2, width: 3, height: 4 }],
+      }),
+    ).toBe("rect");
+    expect(
+      resolvePdfLocatorAnchorKind({ kind: "pdf", page: 2, pageOffsetRatio: 0.4 }),
+    ).toBe("page-offset");
+    expect(resolvePdfLocatorAnchorKind({ kind: "pdf", page: 2 })).toBe("page-top");
   });
 });

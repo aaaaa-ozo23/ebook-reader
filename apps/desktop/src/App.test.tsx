@@ -2760,7 +2760,15 @@ describe("App", () => {
 
     fireEvent.pointerUp(progressSlider);
 
-    await waitFor(() => expect(pdfAdapterGoToProgressMock).toHaveBeenCalledWith(1));
+    await waitFor(() =>
+      expect(pdfAdapterGoToMock).toHaveBeenCalledWith({
+        kind: "pdf",
+        page: 3,
+        scale: 1,
+        zoomMode: "custom",
+      }),
+    );
+    expect(pdfAdapterGoToProgressMock).not.toHaveBeenCalled();
 
     await user.click(within(reader).getByRole("button", { name: "+" }));
     expect(pdfAdapterSetZoomMock.mock.calls.at(-1)?.[0]).toBeCloseTo(1.1, 3);

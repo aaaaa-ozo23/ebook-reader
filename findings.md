@@ -538,3 +538,5 @@
 - 页面尺寸缓存可以贯穿文档会话，但 `PDFPageProxy` 只应保留到 surface release；否则用户滚过 500 页后会把 500 个 page proxy 都留在 adapter 内。关闭文档还需用 document identity 拒绝迟到的 `getPage()` promise。
 - Double 若只按 `currentPage + 1` 组合，会让直接跳到奇数页后的 spread 与 Previous/Next 产生不同配对；统一为封面 1、随后偶数起始 spread 才能让进度、动画 identity 和窄窗恢复共享同一规则。
 - Continuous 中虚拟行高度包含页间 gap，但 locator 比例只能除以真实页面内容高度；否则滚到页尾会把 gap 计入比例，缩放恢复后锚点产生可见漂移。
+- PDF slider 若在 commit 时再次走独立 progression API，就会绕开 rect/ratio/page-top 的统一优先级和后续动画抑制；应把 preview 生成的完整 locator 交给同一个 `goToPdfLocator`。
+- 批注 rect 跳转不能只在 adapter 中修改 page：连续目标页尚未挂载。可靠顺序是 locator 导航、虚拟目标页挂载、按该页实际 scale 转换 rect、再把首个 rect 放到 frame 上部并由 surface 重放高亮。

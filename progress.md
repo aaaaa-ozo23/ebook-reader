@@ -1886,3 +1886,8 @@
 - **12.4 Double：** spread 统一为封面 1、2–3、4–5…；目录/页码落到 spread 内任一页时对齐其起始页。窄窗只把 rendered mode 降为 Single，requested Double 不变，宽度恢复后自动回到 Double。
 - **12.4 首轮门禁：** 旧测试仍预期非对齐的 3–4/5–6 spread，且 helper 与 component 同文件触发 fast-refresh warning；已更新为统一 spread 规则，并把纯锚点函数移到独立模块。
 - **12.4 门禁：** desktop lint、146 tests 与 build passed；新增中心锚点、页间 gap、封面/奇偶/末页 spread 测试。
+- **12.5 首轮门禁：** lint/build passed；旧 App 测试仍断言 slider commit 调用独立 `goToProgress(1)`，而新实现已按统一管线把 preview locator 传入 `goToPdfLocator`。已更新断言为准确 page 3 locator，并保留 preview 不提交的检查。
+- **12.5 实现：** 目录、搜索、书签、批注通过 ReaderShell 既有 locator 入口，页码输入和 slider commit 也统一进入 `goToPdfLocator`；优先级固定为首个 rect、`pageOffsetRatio`、页首。
+- **12.5 rect：** 目标页虚拟挂载后按实际 scale 把首个 PDF rect 转为 viewport rect，并滚到 frame 上部可读区域；Continuous 页面 surface 自行重放已挂载页高亮/笔记按钮。
+- **12.5 交互：** 跳转前清除跨页 selection/menu；只有挂载页 TextLayer 可选择，surface release 同时移除选区、文本 DOM 与可聚焦笔记按钮。直接跳转不经过分页 transition 控制器。
+- **12.5 门禁：** desktop lint、147 tests、build 与 `git diff --check` passed；新增 rect > ratio > page-top 优先级测试，slider 验证 preview 不提交且 commit 只走统一 locator 一次。

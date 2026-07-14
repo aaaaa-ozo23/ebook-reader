@@ -5,15 +5,21 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
+  type CSSProperties,
 } from "react";
+import type { Annotation } from "@reader/core";
+
+import { DEFAULT_HIGHLIGHT_COLOR } from "../reader/readerAnnotationPresentation";
 
 import { type PdfPageMetrics, type PdfReaderAdapter } from "./PdfReaderAdapter";
 
 export interface PdfPageSurfaceProps {
   adapter: PdfReaderAdapter;
+  annotations?: Annotation[];
   availableWidth: number;
   isVisible: boolean;
   onMetrics: (metrics: PdfPageMetrics) => void;
+  onAnnotationActivate?: (annotation: Annotation, element: HTMLElement) => void;
   onSelectionEnd: (
     event: KeyboardEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>,
   ) => void;
@@ -26,9 +32,11 @@ export interface PdfPageSurfaceProps {
 
 export const PdfPageSurface = memo(function PdfPageSurface({
   adapter,
+  annotations = [],
   availableWidth,
   isVisible,
   onMetrics,
+  onAnnotationActivate,
   onSelectionEnd,
   pageNumber,
   renderTextLayer = true,
@@ -45,6 +53,16 @@ export const PdfPageSurface = memo(function PdfPageSurface({
   const [renderError, setRenderError] = useState<string | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
   const [isReady, setIsReady] = useState(false);
+  const [highlightRects, setHighlightRects] = useState<
+    Array<{
+      annotation: Annotation;
+      height: number;
+      id: string;
+      width: number;
+      x: number;
+      y: number;
+    }>
+  >([]);
   const effectiveScale =
     zoomMode === "fit-width" && metrics !== null
       ? Math.max(0.1, availableWidth / Math.max(metrics.width, 1))
@@ -148,6 +166,50 @@ export const PdfPageSurface = memo(function PdfPageSurface({
     retryVersion,
   ]);
 
+  useEffect(() => {
+    let isCurrent = true;
+    const pageAnnotations = annotations.filter(
+      (annotation) =>
+        annotation.locator.kind === "pdf" &&
+        annotation.locator.page === pageNumber &&
+        annotation.locator.rects !== undefined &&
+        annotation.locator.rects.length > 0,
+    );
+
+    if (!isReady || pageAnnotations.length === 0) {
+      setHighlightRects([]);
+      return;
+    }
+
+    void Promise.all(
+      pageAnnotations.map(async (annotation) => ({
+        annotation,
+        rects: await adapter.pdfRectsToViewportRects(
+          pageNumber,
+          annotation.locator.kind === "pdf" ? (annotation.locator.rects ?? []) : [],
+          effectiveScale,
+        ),
+      })),
+    ).then((results) => {
+      if (!isCurrent) {
+        return;
+      }
+      setHighlightRects(
+        results.flatMap(({ annotation, rects }) =>
+          rects.map((rect, index) => ({
+            annotation,
+            id: `${annotation.id}-${index}`,
+            ...rect,
+          })),
+        ),
+      );
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [adapter, annotations, effectiveScale, isReady, pageNumber]);
+
   const estimatedWidth = (metrics?.width ?? 612) * effectiveScale;
   const estimatedHeight = (metrics?.height ?? 792) * effectiveScale;
 
@@ -173,6 +235,60 @@ export const PdfPageSurface = memo(function PdfPageSurface({
         className="reader-pdf-text-layer"
         data-page-number={pageNumber}
       />
+      <div className="reader-pdf-highlight-layer">
+        {highlightRects.map((highlight) => {
+          const hasHighlight = highlight.annotation.type === "highlight";
+          const hasNote =
+            highlight.annotation.note?.trim() !== "" &&
+            highlight.annotation.note !== undefined;
+          const className = `reader-pdf-highlight-rect ${
+            hasHighlight ? "reader-pdf-highlight-rect--highlight" : ""
+          } ${hasNote ? "reader-pdf-highlight-rect--note" : ""}`;
+          const style = {
+            "--reader-highlight-color":
+              highlight.annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
+            height: `${highlight.height}px`,
+            left: `${highlight.x}px`,
+            top: `${highlight.y}px`,
+            width: `${highlight.width}px`,
+          } as CSSProperties;
+
+          if (!hasNote || onAnnotationActivate === undefined) {
+            return (
+              <span
+                key={highlight.id}
+                aria-hidden="true"
+                className={className}
+                style={style}
+              />
+            );
+          }
+
+          return (
+            <span
+              key={highlight.id}
+              aria-label={`Edit note for ${
+                highlight.annotation.selectedText ??
+                highlight.annotation.locator.selectedText ??
+                `page ${pageNumber}`
+              }`}
+              className={className}
+              role="button"
+              style={style}
+              tabIndex={0}
+              onClick={(event) =>
+                onAnnotationActivate(highlight.annotation, event.currentTarget)
+              }
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onAnnotationActivate(highlight.annotation, event.currentTarget);
+                }
+              }}
+            />
+          );
+        })}
+      </div>
       {renderError !== null ? (
         <div className="reader-pdf-page-error" role="alert">
           <span>Page {pageNumber} could not be rendered.</span>
