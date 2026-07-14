@@ -26,6 +26,7 @@ import {
   type TocItem,
   type TxtDocument,
   type TxtLocator,
+  type TxtPaginatedViewMode,
 } from "@reader/core";
 import "../components/ReaderShell.css";
 
@@ -507,9 +508,31 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       const nextPreferences: ReaderExperiencePreferences = {
         ...readerExperiencePreferences,
         txt: {
+          ...readerExperiencePreferences.txt,
           viewMode: mode === "continuous" ? "scroll" : "paginated",
           transition:
             mode === "continuous" ? readerExperiencePreferences.txt.transition : mode,
+        },
+      };
+      setReaderExperiencePreferences(nextPreferences);
+      setReaderExperienceError(null);
+      void saveReaderExperiencePreferences(nextPreferences).catch(
+        (experienceSaveError: unknown) => {
+          setReaderExperienceError(getErrorMessage(experienceSaveError));
+        },
+      );
+    },
+    [book.id, readerExperiencePreferences],
+  );
+
+  const handleTxtPaginatedViewModeChange = useCallback(
+    (paginatedViewMode: TxtPaginatedViewMode) => {
+      readerExperienceDirtyBookIdRef.current = book.id;
+      const nextPreferences: ReaderExperiencePreferences = {
+        ...readerExperiencePreferences,
+        txt: {
+          ...readerExperiencePreferences.txt,
+          paginatedViewMode,
         },
       };
       setReaderExperiencePreferences(nextPreferences);
@@ -1391,6 +1414,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             }
             isLoading={isLoading}
             jumpRequest={txtJumpRequest}
+            paginatedViewMode={readerExperiencePreferences.txt.paginatedViewMode}
             theme={theme}
             transition={readerExperiencePreferences.txt.transition}
             viewMode={readerExperiencePreferences.txt.viewMode}
@@ -1399,6 +1423,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onProgressChange={handleTxtProgressChange}
             onRetry={() => setTxtRetryVersion((version) => version + 1)}
             onNavigationActionsChange={handleNavigationActionsChange}
+            onPaginatedViewModeChange={handleTxtPaginatedViewModeChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
           />
