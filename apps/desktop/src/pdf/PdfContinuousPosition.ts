@@ -1,3 +1,17 @@
+import type { PdfLocator } from "@reader/core";
+
+export type PdfLocatorAnchorKind = "rect" | "page-offset" | "page-top";
+
+export function resolvePdfLocatorAnchorKind(locator: PdfLocator): PdfLocatorAnchorKind {
+  if (locator.rects !== undefined && locator.rects.length > 0) {
+    return "rect";
+  }
+  if (locator.pageOffsetRatio !== undefined) {
+    return "page-offset";
+  }
+  return "page-top";
+}
+
 export function resolvePdfContinuousAnchor(
   items: Array<{ end: number; index: number; start: number }>,
   viewportCenter: number,

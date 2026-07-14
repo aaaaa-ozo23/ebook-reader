@@ -57,6 +57,7 @@ import {
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
 import { PdfContinuousView } from "../pdf/PdfContinuousView";
+import { resolvePdfLocatorAnchorKind } from "../pdf/PdfContinuousPosition";
 
 import {
   DEFAULT_HIGHLIGHT_COLOR,
@@ -2577,6 +2578,37 @@ export function PdfReaderContent({
     };
   }, [renderVisiblePages]);
 
+  const goToPdfLocator = useCallback(
+    async (locator: PdfLocator) => {
+      const adapter = adapterRef.current;
+      if (adapter === null) {
+        return;
+      }
+
+      onSelectionChange(null);
+      window.getSelection()?.removeAllRanges();
+
+      try {
+        await adapter.goTo(locator);
+        setPdfNavigationVersion((version) => version + 1);
+        await renderVisiblePages();
+
+        if (resolvePdfLocatorAnchorKind(locator) === "rect") {
+          await scrollPdfRectIntoView(
+            frameRef.current,
+            adapter,
+            locator,
+            positionRef.current,
+          );
+        }
+      } catch (jumpError) {
+        setPreviewPosition(null);
+        setError(getErrorMessage(jumpError));
+      }
+    },
+    [onSelectionChange, renderVisiblePages],
+  );
+
   useEffect(() => {
     if (jumpRequest === null) {
       return;
@@ -2588,16 +2620,8 @@ export function PdfReaderContent({
       return;
     }
 
-    void adapter
-      .goTo(jumpRequest.locator)
-      .then(() => {
-        setPdfNavigationVersion((version) => version + 1);
-        return renderVisiblePages();
-      })
-      .catch((jumpError: unknown) => {
-        setError(getErrorMessage(jumpError));
-      });
-  }, [jumpRequest, renderVisiblePages]);
+    void goToPdfLocator(jumpRequest.locator);
+  }, [goToPdfLocator, jumpRequest]);
 
   const runPdfAction = useCallback(
     (action: (adapter: PdfReaderAdapter) => Promise<unknown> | unknown) => {
@@ -2671,15 +2695,13 @@ export function PdfReaderContent({
       return;
     }
 
-    runPdfAction((adapter) =>
-      adapter.goTo({
-        kind: "pdf",
-        page,
-        scale: positionRef.current?.scale,
-        zoomMode: positionRef.current?.zoomMode,
-      }),
-    );
-  }, [pageInput, runPdfAction]);
+    void goToPdfLocator({
+      kind: "pdf",
+      page,
+      scale: positionRef.current?.scale,
+      zoomMode: positionRef.current?.zoomMode,
+    });
+  }, [goToPdfLocator, pageInput]);
 
   const handlePageInputKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
@@ -2735,17 +2757,14 @@ export function PdfReaderContent({
       return;
     }
 
-    void adapter
-      .goToProgress(nextProgression)
-      .then(() => {
-        setPdfNavigationVersion((version) => version + 1);
-        return renderVisiblePages();
-      })
-      .catch((progressError: unknown) => {
-        setPreviewPosition(null);
-        setError(getErrorMessage(progressError));
-      });
-  }, [renderVisiblePages]);
+    try {
+      const target = adapter.previewProgress(nextProgression);
+      void goToPdfLocator(target.locator);
+    } catch (progressError) {
+      setPreviewPosition(null);
+      setError(getErrorMessage(progressError));
+    }
+  }, [goToPdfLocator]);
 
   const activeProgress = previewPosition ?? position;
   const visiblePageNumbers =
@@ -2823,9 +2842,13 @@ export function PdfReaderContent({
           {position?.renderedMode === "continuous" && pdfAdapter !== null ? (
             <PdfContinuousView
               adapter={pdfAdapter}
+              annotations={annotations}
               availableWidth={frameWidth}
               frameRef={frameRef}
               navigationVersion={pdfNavigationVersion}
+              onAnnotationActivate={(annotation, element) =>
+                onAnnotationActivate(annotation, getElementMenuAnchor(element))
+              }
               onSelectionEnd={capturePdfSelection}
               position={position}
               renderVersion={pdfRenderVersion}
@@ -4035,6 +4058,72 @@ export function getPdfPageSlotWidth(
   const horizontalPadding = 32;
 
   return Math.max(260, (frameWidth - horizontalPadding - totalGap) / renderedPages);
+}
+
+async function scrollPdfRectIntoView(
+  frame: HTMLDivElement | null,
+  adapter: PdfReaderAdapter,
+  locator: PdfLocator,
+  position: PdfPosition | null,
+): Promise<void> {
+  if (
+    frame === null ||
+    position === null ||
+    locator.rects === undefined ||
+    locator.rects.length === 0
+  ) {
+    return;
+  }
+
+  const pageElement = await waitForPdfPageElement(frame, locator.page);
+  if (pageElement === null) {
+    return;
+  }
+
+  const metrics = await adapter.getPageMetrics(locator.page);
+  const scale =
+    position.renderedMode === "continuous" && position.zoomMode === "fit-width"
+      ? Math.max(0.1, Math.max(240, frame.clientWidth - 28) / metrics.width)
+      : position.scale;
+  const [firstRect] = await adapter.pdfRectsToViewportRects(
+    locator.page,
+    [locator.rects[0]],
+    scale,
+  );
+  if (firstRect === undefined) {
+    return;
+  }
+
+  const frameRect = frame.getBoundingClientRect();
+  const pageRect = pageElement.getBoundingClientRect();
+  const readableInset = Math.min(96, Math.max(32, frame.clientHeight * 0.14));
+  frame.scrollTo({
+    behavior: "auto",
+    left: Math.max(0, frame.scrollLeft + pageRect.left - frameRect.left - 14),
+    top: Math.max(
+      0,
+      frame.scrollTop + pageRect.top - frameRect.top + firstRect.y - readableInset,
+    ),
+  });
+}
+
+async function waitForPdfPageElement(
+  frame: HTMLDivElement,
+  pageNumber: number,
+): Promise<HTMLElement | null> {
+  const selector =
+    `.reader-pdf-page-surface[data-page-number="${pageNumber}"], ` +
+    `.reader-pdf-canvas[data-page-number="${pageNumber}"]`;
+
+  for (let frameIndex = 0; frameIndex < 18; frameIndex += 1) {
+    const element = frame.querySelector<HTMLElement>(selector);
+    if (element !== null) {
+      return element;
+    }
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+
+  return null;
 }
 
 export function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {
