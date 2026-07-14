@@ -21,6 +21,14 @@ export const PAGE_TRANSITION_DURATIONS: Readonly<
   "page-curl": 650,
 };
 
+const PAGE_TRANSITION_EASINGS: Readonly<
+  Record<Exclude<PageTransitionMode, "none">, string>
+> = {
+  slide: "cubic-bezier(0.33, 0, 0.67, 1)",
+  cover: "cubic-bezier(0.37, 0, 0.63, 1)",
+  "page-curl": "cubic-bezier(0.45, 0, 0.55, 1)",
+};
+
 export function capturePageSnapshot(element: HTMLElement | null): PageSnapshot | null {
   if (element === null) {
     return null;
@@ -658,7 +666,7 @@ function createSmoothAnimations(
   const width = Math.max(stageWidth, 1);
   const options: KeyframeAnimationOptions = {
     duration: PAGE_TRANSITION_DURATIONS.slide,
-    easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+    easing: PAGE_TRANSITION_EASINGS.slide,
     fill: "both",
   };
   prepareAnchoredSnapshotFrame(
@@ -726,7 +734,7 @@ function createCoverAnimations(
   const edgeEnd = direction === "next" ? 0 : width;
   const options: KeyframeAnimationOptions = {
     duration: PAGE_TRANSITION_DURATIONS.cover,
-    easing: "cubic-bezier(0.22, 0.68, 0.18, 1)",
+    easing: PAGE_TRANSITION_EASINGS.cover,
     fill: "both",
   };
   prepareAnchoredSnapshotFrame(
@@ -790,7 +798,7 @@ function createPageCurlAnimations(
   prepareAnchoredSnapshotFrame(currentFrame, currentAnchor, width);
   const options: KeyframeAnimationOptions = {
     duration: PAGE_TRANSITION_DURATIONS["page-curl"],
-    easing: "cubic-bezier(0.22, 0.61, 0.36, 1)",
+    easing: PAGE_TRANSITION_EASINGS["page-curl"],
     fill: "both",
   };
 

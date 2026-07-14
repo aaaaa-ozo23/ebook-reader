@@ -91,6 +91,75 @@ async function captureTransitionKeyframes(
   return true;
 }
 
+async function inspectPdfTransitionMidpoint(
+  page: Page,
+  mode: "slide" | "cover" | "page-curl",
+  duration: number,
+): Promise<{
+  currentWidthRatio: number;
+  decorationOpacity: number;
+  decorationTransform: string;
+  layerHeight: number;
+  layerWidth: number;
+  targetTransform: string;
+}> {
+  const layer = page.locator(`.reader-transition-layer[data-mode="${mode}"]`);
+  await layer.waitFor({ state: "visible", timeout: 1_200 });
+
+  return page.evaluate(
+    async ({ currentTime, transitionMode }) => {
+      const transitionLayer = document.querySelector<HTMLElement>(
+        `.reader-transition-layer[data-mode="${transitionMode}"]`,
+      );
+      if (transitionLayer === null) {
+        throw new Error(`Missing PDF ${transitionMode} transition layer`);
+      }
+      const animations = document.getAnimations().filter((animation) => {
+        const target = (animation.effect as KeyframeEffect | null)?.target;
+        return (
+          target instanceof Element &&
+          target.closest(".reader-transition-layer") === transitionLayer
+        );
+      });
+      for (const animation of animations) {
+        animation.pause();
+        animation.currentTime = currentTime;
+      }
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+      const layerRect = transitionLayer.getBoundingClientRect();
+      const currentFrame = transitionLayer.querySelector<HTMLElement>(
+        ".reader-transition-layer__frame--current",
+      );
+      const targetFrame = transitionLayer.querySelector<HTMLElement>(
+        ".reader-transition-layer__frame--target",
+      );
+      const decoration = transitionLayer.querySelector<HTMLElement>(
+        transitionMode === "cover"
+          ? ".reader-transition-layer__cover-edge"
+          : ".reader-transition-layer__curl-sheet",
+      );
+      if (currentFrame === null || targetFrame === null || layerRect.width <= 0) {
+        throw new Error(`Invalid PDF ${transitionMode} transition geometry`);
+      }
+      const currentRect = currentFrame.getBoundingClientRect();
+      const decorationStyle = decoration === null ? null : getComputedStyle(decoration);
+
+      return {
+        currentWidthRatio: currentRect.width / layerRect.width,
+        decorationOpacity: Number(decorationStyle?.opacity ?? 0),
+        decorationTransform: decorationStyle?.transform ?? "none",
+        layerHeight: layerRect.height,
+        layerWidth: layerRect.width,
+        targetTransform: getComputedStyle(targetFrame).transform,
+      };
+    },
+    { currentTime: duration / 2, transitionMode: mode },
+  );
+}
+
 async function readTransitionSnapshotOffsets(
   page: Page,
   mode: "slide" | "cover" | "page-curl",
@@ -1929,9 +1998,9 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     .toBeLessThanOrEqual(6);
 
   for (const transition of [
-    { label: "Smooth", mode: "slide" },
-    { label: "Cover", mode: "cover" },
-    { label: "Realistic", mode: "page-curl" },
+    { duration: 280, label: "Smooth", mode: "slide" },
+    { duration: 320, label: "Cover", mode: "cover" },
+    { duration: 650, label: "Realistic", mode: "page-curl" },
   ] as const) {
     await pageInput.fill("10");
     await pageInput.press("Enter");
@@ -1988,6 +2057,38 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
           ),
       )
       .toEqual(["12", "13"]);
+    const midpoint = await inspectPdfTransitionMidpoint(
+      page,
+      transition.mode,
+      transition.duration,
+    );
+    if (process.env.READER_VISUAL_QA === "1") {
+      await page.screenshot({
+        path: `D:\\tl-temp\\ebook-reader-stage12-9-pdf-double-${transition.mode}-midpoint.png`,
+      });
+    }
+    expect(midpoint.layerWidth).toBeGreaterThan(0);
+    expect(midpoint.layerHeight).toBeGreaterThan(0);
+    expect(midpoint.currentWidthRatio).toBeGreaterThan(0.15);
+    expect(midpoint.currentWidthRatio).toBeLessThan(0.85);
+    if (transition.mode === "slide") {
+      expect(midpoint.targetTransform).not.toBe("none");
+    } else {
+      expect(midpoint.decorationOpacity).toBeGreaterThan(0);
+      expect(midpoint.decorationTransform).not.toBe("none");
+    }
+    await page.evaluate(() => {
+      const layer = document.querySelector(".reader-transition-layer");
+      for (const animation of document.getAnimations()) {
+        const target = (animation.effect as KeyframeEffect | null)?.target;
+        if (
+          target instanceof Element &&
+          target.closest(".reader-transition-layer") === layer
+        ) {
+          animation.play();
+        }
+      }
+    });
     await expect(pdfTransitionLayer).toHaveCount(0);
     await expect(page.getByText("Pages 12-13 / 500")).toBeVisible();
   }

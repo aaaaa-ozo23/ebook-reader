@@ -556,3 +556,12 @@
 - TXT 阅读体验偏好目前只有 `viewMode + transition`，`TxtPaginatedReaderContent` 的 `requestedSpreadMode` 每次挂载固定初始化为 `single`。Continuous 会卸载分页组件，因此返回分页必然丢失 Double；需要在现有 v1 envelope 中增加向后兼容的 `paginatedViewMode`，并由底栏 Single/Double 操作持久化。
 - Double 的 current spread 也可能在直接页码跳转后短暂未 ready；current/target 应共用同一个可取消的 600ms 准确快照等待。current 捕获失败后不再准备 target，立即执行真实导航，避免 Canvas 不可用或渲染失败时产生两段无意义等待。
 - 500 页动画验收必须分别断言 current Canvas 页号 10/11 与 target 12/13；Continuous 的 long-task 观察窗口在切入分页前结束，避免把验收代码自身的多 Canvas `getImageData` 取样成本误算为连续滚动性能回归。
+
+## 2026-07-14 大阶段 12.9：PDF Double 动画视觉修复
+
+- 应用内 Browser 可正常打开 `http://127.0.0.1:1420/`，页面身份、首屏和 console 均正常；但隔离的应用内会话没有 seeded PDF，目标 Double 动画必须使用仓库运行时生成的 500 页 fixture 进行中间帧检测。
+- PDF transition layer 虽有 `z-index: 2`，但 `.reader-pdf-frame` 没有 `reader-transition-host` 类；更关键的是现有 E2E 只断言 layer mode 与快照 Canvas 页号，从未暂停到中间时刻检查 current frame width/transform、target 可见比例或装饰层几何，因此“层存在但看起来是 None”可以通过全部旧门禁。
+- 新增 50% 时间点诊断后成功复现视觉问题：Smooth current 仅剩 5.39% 宽度、Cover 7.15%、Realistic 10.91%；截图几乎已经完全显示 target 12–13，只剩极窄边缘或轻微渐变。三种共享 easing 都高度前置，主要运动在动画开头极短时间内完成，因此 layer/WAAPI 虽存在，肉眼效果接近 None。
+- 修复方向应保留共享动画种类、持续时间和 current/target identity，只把三种共享 timing curve 改为中点对称的缓入缓出；这样 PDF/TXT/EPUB 仍复用同一实现，并让 50% 时 current 可见比例落在可辨认范围。新 E2E 需永久断言中间帧几何，不能只检查装饰层 opacity。
+- 修复后中间帧截图出现明确视觉差异：Smooth 左侧仍为 page 10、右侧已揭示 page 12；Cover 在两半之间显示移动阴影边缘；Realistic 显示带背面纹理、阴影和倾斜变形的卷页片。此前截图在同一时刻几乎只剩 page 12–13。暂停 WAAPI 后的 Chromium full-page 合成仍会把阅读舞台外区域捕获成黑块，这是既有截图暂停路径现象，实际动画层内部内容与几何正常，门禁不依赖黑块区域。
+- 修复后的自动化不只检查动画层存在：current 快照固定为 page 10–11、target 固定为 page 12–13，50% 时 current 宽度必须处于 15%–85%，Smooth target 必须有 transform，Cover edge 与 Realistic sheet 必须同时具备可见 opacity 和非空 transform；结束后仍落到准确 target spread。

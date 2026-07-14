@@ -2815,7 +2815,7 @@ export function PdfReaderContent({
       <article className="reader-page reader-page--pdf">
         <div
           ref={frameRef}
-          className="reader-pdf-frame"
+          className="reader-pdf-frame reader-transition-host"
           aria-label="PDF pages"
           onClick={handlePdfFrameClick}
           onKeyDown={handlePdfFrameKeyDown}
