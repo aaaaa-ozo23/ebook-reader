@@ -534,3 +534,5 @@
 - TanStack Virtual 的 PDF 估算只需要默认纸张比例和已访问页的轻量 metrics；目标页挂载后 `measureElement` 修正总高度，因此无需为 500 页先调用 `getPage()`。
 - Continuous Fit width 必须由每页原始宽度单独求有效 scale；把当前页的 fit scale 套到不同尺寸页面会让页面宽度和虚拟行高度同时漂移。
 - 12.2 首轮 lint 阻止在 render 中读取 `adapterRef.current`，也阻止 effect 同步镜像 `viewMode` 到 state；渲染改用 adapter state 和父级 viewMode prop，ref 仅保留给异步命令，避免虚拟列表拿到不可追踪的旧实例。
+- 每页 render sequence 必须先取消旧任务再分配新 identity；若新 identity 分配后复用会递增 sequence 的通用 cancel，刚创建的正常任务会在完成时被误判为 stale。
+- 页面尺寸缓存可以贯穿文档会话，但 `PDFPageProxy` 只应保留到 surface release；否则用户滚过 500 页后会把 500 个 page proxy 都留在 adapter 内。关闭文档还需用 document identity 拒绝迟到的 `getPage()` promise。

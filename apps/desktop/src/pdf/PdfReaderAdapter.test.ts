@@ -20,7 +20,9 @@ const getDestinationMock = vi.hoisted(() =>
 );
 const getPageMock = vi.hoisted(() =>
   vi.fn(async (pageNumber: number) => ({
+    cleanup: vi.fn(),
     pageNumber,
+    getTextContent: vi.fn(async () => ({ items: [] })),
     getViewport: vi.fn(({ scale }: { scale: number }) => ({
       width: 600 * scale,
       height: 800 * scale,
@@ -65,11 +67,34 @@ const getPageIndexMock = vi.hoisted(() =>
   }),
 );
 const workerOptions = vi.hoisted(() => ({ workerSrc: "" }));
+const textLayerCancelMock = vi.hoisted(() => vi.fn());
+const textLayerRenderMock = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("pdfjs-dist", () => ({
   getDocument: getDocumentMock,
   GlobalWorkerOptions: workerOptions,
+  TextLayer: class TextLayer {
+    cancel = textLayerCancelMock;
+    render = textLayerRenderMock;
+  },
 }));
+
+function createPdfAdapter(): PdfReaderAdapter {
+  return new PdfReaderAdapter({
+    bookId: "pdf-book",
+    sourceUrl: "blob:pdf-book",
+    theme: {
+      mode: "light",
+      fontFamily: "serif",
+      fontSize: 18,
+      lineHeight: 1.7,
+      paragraphSpacing: 12,
+      pageMargin: 32,
+      backgroundColor: "#ffffff",
+      textColor: "#111111",
+    },
+  });
+}
 
 describe("PdfReaderAdapter", () => {
   beforeEach(() => {
@@ -77,7 +102,23 @@ describe("PdfReaderAdapter", () => {
     getDocumentMock.mockClear();
     getOutlineMock.mockReset();
     getPageIndexMock.mockReset();
-    getPageMock.mockClear();
+    getPageMock.mockReset();
+    getPageMock.mockImplementation(async (pageNumber: number) => ({
+      cleanup: vi.fn(),
+      pageNumber,
+      getTextContent: vi.fn(async () => ({ items: [] })),
+      getViewport: vi.fn(({ scale }: { scale: number }) => ({
+        width: 600 * scale,
+        height: 800 * scale,
+        rotation: 0,
+      })),
+      render: vi.fn(() => ({
+        cancel: vi.fn(),
+        promise: Promise.resolve(),
+      })),
+    }));
+    textLayerCancelMock.mockClear();
+    textLayerRenderMock.mockClear();
     destroyMock.mockClear();
     getDestinationMock.mockResolvedValue(null);
     getOutlineMock.mockResolvedValue(null);
@@ -384,6 +425,102 @@ describe("PdfReaderAdapter", () => {
     expect(getPageMock).toHaveBeenCalledTimes(1);
     expect(getPageMock).toHaveBeenCalledWith(7);
     expect(adapter.getCachedPageMetrics(7)?.height).toBe(800);
+  });
+
+  it("keeps concurrent page render tasks independent and releases backing stores", async () => {
+    const tasks = new Map<
+      number,
+      {
+        cancel: ReturnType<typeof vi.fn>;
+        reject: (error: Error) => void;
+        resolve: () => void;
+      }
+    >();
+    getPageMock.mockImplementation(async (pageNumber: number) => ({
+      cleanup: vi.fn(),
+      pageNumber,
+      getTextContent: vi.fn(async () => ({ items: [] })),
+      getViewport: vi.fn(({ scale }: { scale: number }) => ({
+        width: 600 * scale,
+        height: 800 * scale,
+        rotation: 0,
+      })),
+      render: vi.fn(() => {
+        let resolve!: () => void;
+        let reject!: (error: Error) => void;
+        const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+          resolve = resolvePromise;
+          reject = rejectPromise;
+        });
+        const cancel = vi.fn(() => {
+          const error = new Error("Rendering cancelled");
+          error.name = "RenderingCancelledException";
+          reject(error);
+        });
+        tasks.set(pageNumber, { cancel, reject, resolve });
+        return { cancel, promise };
+      }),
+    }));
+    const adapter = createPdfAdapter();
+    await adapter.open("pdf-book");
+    const firstCanvas = document.createElement("canvas");
+    const secondCanvas = document.createElement("canvas");
+    vi.spyOn(firstCanvas, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+    vi.spyOn(secondCanvas, "getContext").mockReturnValue(
+      {} as CanvasRenderingContext2D,
+    );
+
+    const firstRender = adapter.renderPage(firstCanvas, 1);
+    const secondRender = adapter.renderPage(secondCanvas, 2);
+    await vi.waitFor(() => {
+      expect(adapter.getRenderLifecycleSnapshot().activeRenderTasks).toBe(2);
+    });
+
+    adapter.cancelPageRender(1);
+    expect(tasks.get(1)?.cancel).toHaveBeenCalledOnce();
+    expect(adapter.getRenderLifecycleSnapshot().activeRenderTasks).toBe(1);
+    tasks.get(2)?.resolve();
+
+    await expect(firstRender).rejects.toMatchObject({
+      name: "RenderingCancelledException",
+    });
+    await expect(secondRender).resolves.toEqual(
+      expect.objectContaining({ pageNumber: 2 }),
+    );
+
+    adapter.releasePageSurface(1, firstCanvas);
+    adapter.releasePageSurface(2, secondCanvas);
+    expect(firstCanvas.width).toBe(0);
+    expect(secondCanvas.height).toBe(0);
+    expect(adapter.getRenderLifecycleSnapshot()).toEqual(
+      expect.objectContaining({ activePages: 0, activeRenderTasks: 0 }),
+    );
+  });
+
+  it("renders and releases a cancellable canvas and text-layer handle", async () => {
+    const adapter = createPdfAdapter();
+    await adapter.open("pdf-book");
+    const canvas = document.createElement("canvas");
+    const textLayer = document.createElement("div");
+    textLayer.append(document.createElement("span"));
+    vi.spyOn(canvas, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+
+    const handle = adapter.createPageSurfaceRender({
+      canvas,
+      pageNumber: 4,
+      renderTextLayer: true,
+      scale: 1,
+      textLayer,
+    });
+    await expect(handle.ready).resolves.toEqual(
+      expect.objectContaining({ pageNumber: 4 }),
+    );
+    expect(textLayerRenderMock).toHaveBeenCalledOnce();
+
+    handle.release();
+    expect(canvas.width).toBe(0);
+    expect(textLayer.childElementCount).toBe(0);
+    expect(adapter.getRenderLifecycleSnapshot().activePages).toBe(0);
   });
 
   it("restores and reports a continuous in-page locator", async () => {

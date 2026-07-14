@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.2 PDF 虚拟页面列表：complete；下一步从已合并 12.2 的 `codex/v0.2.0-integration` 建立 12.3 分支，完善每页独立 Canvas/TextLayer 取消、清理、重试和旧任务隔离；不新增 schema、版本或 Release。
+大阶段 12.3 PDF 渲染生命周期：complete；下一步从已合并 12.3 的 `codex/v0.2.0-integration` 建立 12.4 分支，完成缩放、Fit width、主题、DPR、resize 和模式切换的稳定滚动锚定；不新增 schema、版本或 Release。
 
 ## 分支策略
 
