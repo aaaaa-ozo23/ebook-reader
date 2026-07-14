@@ -305,14 +305,18 @@ vi.mock("./epub/EpubReaderAdapter", () => ({
 }));
 
 vi.mock("./pdf/PdfReaderAdapter", () => ({
+  nextPdfSpreadStart: (page: number, totalPages: number) =>
+    Math.min(totalPages, page === 1 ? 2 : page + 2),
+  previousPdfSpreadStart: (page: number) => (page <= 2 ? 1 : page - 2),
   PdfReaderAdapter: vi.fn(function MockPdfReaderAdapter(options: {
     initialLocator?: PdfLocator;
     onPositionChange?: (position: PdfPosition) => void;
+    viewMode?: "single" | "double" | "continuous";
   }) {
     let page = options.initialLocator?.page ?? 1;
     let scale = options.initialLocator?.scale ?? 1;
-    let viewMode: "single" | "double" | "continuous" = "single";
-    let renderedMode: "single" | "double" = "single";
+    let viewMode: "single" | "double" | "continuous" = options.viewMode ?? "single";
+    let renderedMode: "single" | "double" | "continuous" = viewMode;
     let zoomMode: "fit-width" | "custom" = options.initialLocator?.zoomMode ?? "custom";
     const totalPages = 3;
     const clampPage = (nextPage: number) => Math.min(Math.max(nextPage, 1), totalPages);
@@ -340,7 +344,39 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
     };
 
     return {
+      cancelTextLayer: vi.fn(),
       close: pdfAdapterCloseMock,
+      createPageSurfaceRender: ({
+        canvas,
+        pageNumber,
+        renderTextLayer,
+        textLayer,
+      }: {
+        canvas: HTMLCanvasElement;
+        pageNumber: number;
+        renderTextLayer: boolean;
+        textLayer?: HTMLElement | null;
+      }) => {
+        const ready = pdfAdapterRenderPageMock(canvas, pageNumber).then(
+          async (result) => {
+            canvas.dataset.pageNumber = String(pageNumber);
+            if (renderTextLayer && textLayer !== null && textLayer !== undefined) {
+              await pdfAdapterRenderTextLayerMock(textLayer, pageNumber);
+            }
+            return result;
+          },
+        );
+        return {
+          pageNumber,
+          ready,
+          cancel: vi.fn(),
+          release: () => {
+            canvas.width = 0;
+            canvas.height = 0;
+            textLayer?.replaceChildren();
+          },
+        };
+      },
       fitWidth: async (width: number) => {
         await pdfAdapterFitWidthMock(width);
         scale = 1.2;
@@ -349,10 +385,26 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
         return createPosition();
       },
       getPosition: createPosition,
+      getCachedPageMetrics: () => ({
+        pageNumber: page,
+        width: 600,
+        height: 800,
+        rotation: 0,
+      }),
+      getPageMetrics: async (pageNumber: number) => ({
+        pageNumber,
+        width: 600,
+        height: 800,
+        rotation: 0,
+      }),
       getToc: pdfAdapterGetTocMock,
       getVisiblePages: () => {
         const visiblePages =
-          renderedMode === "double" && page < totalPages ? [page, page + 1] : [page];
+          renderedMode === "continuous"
+            ? []
+            : renderedMode === "double" && page < totalPages
+              ? [page, page + 1]
+              : [page];
         pdfAdapterVisiblePagesMock();
 
         return visiblePages;
@@ -392,6 +444,17 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
       },
       renderPage: pdfAdapterRenderPageMock,
       renderTextLayer: pdfAdapterRenderTextLayerMock,
+      releasePageSurface: (
+        _pageNumber: number,
+        canvas?: HTMLCanvasElement | null,
+        textLayer?: HTMLElement | null,
+      ) => {
+        if (canvas !== undefined && canvas !== null) {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        textLayer?.replaceChildren();
+      },
       pdfRectsToViewportRects: pdfAdapterPdfRectsToViewportRectsMock,
       search: pdfAdapterSearchMock,
       setTheme: pdfAdapterSetThemeMock,
@@ -402,7 +465,11 @@ vi.mock("./pdf/PdfReaderAdapter", () => ({
         pdfAdapterSetViewModeMock(mode, availableWidth);
         viewMode = mode;
         renderedMode =
-          mode === "double" && (availableWidth ?? 1000) >= 920 ? "double" : "single";
+          mode === "continuous"
+            ? "continuous"
+            : mode === "double" && (availableWidth ?? 1000) >= 920
+              ? "double"
+              : "single";
         reportPosition();
 
         return createPosition();
@@ -2706,7 +2773,7 @@ describe("App", () => {
 
     await user.click(within(reader).getByRole("button", { name: "Double" }));
     expect(pdfAdapterSetViewModeMock).toHaveBeenCalledWith("double", 1100);
-    await waitFor(() => expect(screen.getByText("Pages 1-2 / 3")).toBeVisible());
+    await waitFor(() => expect(screen.getByText("Page 1 / 3")).toBeVisible());
 
     await user.click(within(reader).getByRole("button", { name: "Next" }));
     expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1);
@@ -2751,7 +2818,15 @@ describe("App", () => {
 
     fireEvent.pointerUp(progressSlider);
 
-    await waitFor(() => expect(pdfAdapterGoToProgressMock).toHaveBeenCalledWith(1));
+    await waitFor(() =>
+      expect(pdfAdapterGoToMock).toHaveBeenCalledWith({
+        kind: "pdf",
+        page: 3,
+        scale: 1,
+        zoomMode: "custom",
+      }),
+    );
+    expect(pdfAdapterGoToProgressMock).not.toHaveBeenCalled();
 
     await user.click(within(reader).getByRole("button", { name: "+" }));
     expect(pdfAdapterSetZoomMock.mock.calls.at(-1)?.[0]).toBeCloseTo(1.1, 3);

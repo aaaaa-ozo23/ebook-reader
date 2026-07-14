@@ -5,6 +5,7 @@ import {
   captureEpubRenditionSnapshot,
   captureEpubRenditionSnapshotAfterLayout,
   capturePageSnapshot,
+  capturePdfSpreadSnapshot,
   captureTxtSpreadSnapshot,
   PAGE_TRANSITION_DURATIONS,
   serializeSanitizedDocument,
@@ -55,6 +56,55 @@ describe("isolated page transition layer", () => {
     expect(snapshot?.node.querySelector("[aria-hidden]")).toBeNull();
     expect(snapshot?.node.querySelector("#live-note")).toBeNull();
     expect(host.querySelector("#live-note")).not.toBeNull();
+  });
+
+  it("copies pixels from the exact PDF spread canvases", () => {
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const host = document.createElement("div");
+    host.innerHTML = `
+      <div class="reader-pdf-spread" data-spread-start="2">
+        <div class="reader-pdf-page-surface" data-render-ready="true">
+          <canvas data-page-number="2"></canvas><div class="reader-pdf-text-layer">live</div>
+        </div>
+        <div class="reader-pdf-page-surface" data-render-ready="true">
+          <canvas data-page-number="3"></canvas><div class="reader-pdf-highlight-layer"></div>
+        </div>
+      </div>
+      <div class="reader-pdf-spread" data-spread-start="4">
+        <div class="reader-pdf-page-surface" data-render-ready="true">
+          <canvas data-page-number="4"></canvas>
+        </div>
+      </div>`;
+    const sourceCanvases = host.querySelectorAll("canvas");
+    sourceCanvases[0]!.width = 200;
+    sourceCanvases[0]!.height = 300;
+    sourceCanvases[1]!.width = 220;
+    sourceCanvases[1]!.height = 320;
+
+    const snapshot = capturePdfSpreadSnapshot(host, 2);
+    const snapshotCanvases = snapshot?.node.querySelectorAll("canvas");
+
+    expect(snapshot?.node).toHaveAttribute("data-spread-start", "2");
+    expect(
+      Array.from(snapshotCanvases ?? []).map((canvas) => canvas.dataset.pageNumber),
+    ).toEqual(["2", "3"]);
+    expect(drawImage).toHaveBeenNthCalledWith(1, sourceCanvases[0], 0, 0);
+    expect(drawImage).toHaveBeenNthCalledWith(2, sourceCanvases[1], 0, 0);
+    expect(snapshot?.node.querySelector(".reader-pdf-text-layer")).toBeNull();
+    expect(snapshot?.node.querySelector(".reader-pdf-highlight-layer")).toBeNull();
+  });
+
+  it("refuses a PDF snapshot until every target canvas is ready", () => {
+    const host = document.createElement("div");
+    host.innerHTML = `<div class="reader-pdf-spread" data-spread-start="8">
+      <div class="reader-pdf-page-surface" data-render-ready="false">
+        <canvas data-page-number="8" width="10" height="10"></canvas>
+      </div>
+    </div>`;
+    expect(capturePdfSpreadSnapshot(host, 8)).toBeNull();
   });
 
   it("animates smooth as a full-width two-page movement", async () => {

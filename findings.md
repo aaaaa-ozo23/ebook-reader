@@ -520,3 +520,32 @@
 - 最终实现只在真实 frame 已挂载并完成尺寸读取后启动分页；缓存命中不再等待 `document.fonts.ready`，会话 LRU 可直接恢复当前布局。冷分页每 4 页（Double 每 8 页）发布一次完整批次，已发布页可用 Previous/Next、页码输入和原有动画继续阅读。
 - 渐进发布使用交互版本防止后台新批次把用户拉回旧 anchor；若用户尚未操作，则在已计算边界首次覆盖保存的 charOffset 时自动恢复。完整边界验证后才更新会话/磁盘缓存，取消任务不会写入部分结果。
 - Playwright 实测同一会话从非首页回书架再进入低于 1 秒，恢复页范围覆盖保存的 UTF-16 charOffset；桌面当前页末段无溢出，底部剩余空间低于页高 20%。
+
+## 2026-07-14 大阶段 12：PDF 连续模式
+
+- 500 页 fixture 首轮失败并非 PDF 解析或虚拟化错误：页面已显示 `Page 1 / 500`，但测试依赖 fallback 偏好在 ReaderShell 挂载后的异步载入，Continue 点击可能早于偏好生效。验收应走用户可见的五项设置切换 Continuous，并单独通过离开/重入验证分页视图持久化，避免让预置 localStorage 时序代替真实交互。
+- `getPdfVisiblePageNumbers` 的分支必须显式判断 Double，而不能用“非 Single”代替；否则 Continuous 在第 2 页以后会把相邻虚拟页误报成当前 spread，页 1 的封面特判会让普通 smoke 漏测。
+- PDF frame 同时承载 Continuous 的纵向滚动和分页 surface；模式切换若不清理 `scrollTop`，分页 Canvas 即使有正确像素也会把页首裁出视口，形成“ready 但空白/错误区域”。分页页号或 rendered Single/Double 变化应在 layout 阶段滚到页首。
+- ReaderShell 的阅读体验偏好在挂载后异步读取；高并发或慢存储下，用户可先操作设置，迟到读取随后回滚 UI。加载结果必须在该书会话尚未产生偏好修改时才应用，保存仍使用用户操作产生的完整 normalized preferences。
+- PDF adapter 的构造与 `open()` 之间存在异步窗口：此时 prop 变化只会更新 requested-mode ref，因 adapterRef 未建立无法即时下发。open 成功后必须重放 ref 中最后请求，否则大 PDF/慢机器会丢失加载期间的 Continuous/Single/Double 切换。
+- Browser/IAB runtime bootstrap 在本机继续以 `Cannot redefine property: process` 失败，且失败后没有 `agent.browsers` 或 browser binding；按技能要求读取 bootstrap troubleshooting 后不改用无关 browser backend。阶段 12 的真实 fixture、DPR2、三视口、截图、console 和 axe 证据全部由项目 Playwright 生成。
+
+- `PdfViewMode` 和 `PdfLocator.pageOffsetRatio` 已存在，但当前 PDF UI 打开时强制 Single，`resolveRenderedMode` 也把 Continuous 降级为 Single，因此类型预留尚未形成真实连续阅读。
+- PDF 当前只维护一个全局 Canvas `RenderTask`；连续虚拟列表会并发渲染多个页面，必须改为按挂载页面独立取消 Canvas 与 `TextLayer`，卸载时清空 backing store。
+- 当前 PDF Single/Double 只挂载当前一到两页，无法在动画前可靠取得准确目标页；阶段 12 将使用 previous/current/next 三 spread Canvas 窗口，并按 `data-spread-start` 捕获像素快照。
+- 普通 `cloneNode()` 不复制 Canvas 像素；PDF 动画必须显式 `drawImage` 到隔离 Canvas，且只能在准确目标 spread 已就绪时播放，否则无动画导航。
+- `ReaderExperiencePreferences.pdf` 目前只保存 `viewMode + transition`；为满足 Continuous 返回后跨重启恢复 Single/Double，需要增加向后兼容的 `paginatedViewMode`，继续使用 v1 JSON envelope而不迁移数据库。
+- 12.1 首轮 TypeScript 门禁发现 `normalizePdfLocator` 作为运行时函数被误放入 `import type`；Vitest 表现为 `ReferenceError`，tsc 提供 TS1361。修正为值导入即可，不需要改变 locator 设计。
+- v1 偏好兼容不能只给新增字段固定默认值：旧记录若已保存 PDF `viewMode=double`，归一化时应先用旧 viewMode 推导 `paginatedViewMode=double`，避免升级后丢失用户的分页选择。
+- Continuous 的百分比不能复用 `(page-1)/(total-1)`；按 `(page-1+pageOffsetRatio)/totalPages` 才能让页内位置连续，并把最后一页底部精确映射到 100%。
+- TanStack Virtual 的 PDF 估算只需要默认纸张比例和已访问页的轻量 metrics；目标页挂载后 `measureElement` 修正总高度，因此无需为 500 页先调用 `getPage()`。
+- Continuous Fit width 必须由每页原始宽度单独求有效 scale；把当前页的 fit scale 套到不同尺寸页面会让页面宽度和虚拟行高度同时漂移。
+- 12.2 首轮 lint 阻止在 render 中读取 `adapterRef.current`，也阻止 effect 同步镜像 `viewMode` 到 state；渲染改用 adapter state 和父级 viewMode prop，ref 仅保留给异步命令，避免虚拟列表拿到不可追踪的旧实例。
+- 每页 render sequence 必须先取消旧任务再分配新 identity；若新 identity 分配后复用会递增 sequence 的通用 cancel，刚创建的正常任务会在完成时被误判为 stale。
+- 页面尺寸缓存可以贯穿文档会话，但 `PDFPageProxy` 只应保留到 surface release；否则用户滚过 500 页后会把 500 个 page proxy 都留在 adapter 内。关闭文档还需用 document identity 拒绝迟到的 `getPage()` promise。
+- Double 若只按 `currentPage + 1` 组合，会让直接跳到奇数页后的 spread 与 Previous/Next 产生不同配对；统一为封面 1、随后偶数起始 spread 才能让进度、动画 identity 和窄窗恢复共享同一规则。
+- Continuous 中虚拟行高度包含页间 gap，但 locator 比例只能除以真实页面内容高度；否则滚到页尾会把 gap 计入比例，缩放恢复后锚点产生可见漂移。
+- PDF slider 若在 commit 时再次走独立 progression API，就会绕开 rect/ratio/page-top 的统一优先级和后续动画抑制；应把 preview 生成的完整 locator 交给同一个 `goToPdfLocator`。
+- 批注 rect 跳转不能只在 adapter 中修改 page：连续目标页尚未挂载。可靠顺序是 locator 导航、虚拟目标页挂载、按该页实际 scale 转换 rect、再把首个 rect 放到 frame 上部并由 surface 重放高亮。
+- PDF Canvas 的 DOM clone 会保留 width/height 属性却不保留像素；动画快照必须逐个校验源/目标 `data-page-number`，设置 backing size 后 `drawImage(sourceCanvas, 0, 0)`，任何失败都应回退无动画。
+- 邻接 spread 晋升 current 时若把 `isVisible/renderTextLayer` 放在同一个 Canvas effect 依赖中，effect cleanup 会先把已预渲染目标 Canvas 归零。Canvas 生命周期与当前页 TextLayer 生命周期必须分离，晋升只增加交互层。

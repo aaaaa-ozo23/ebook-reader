@@ -9,6 +9,7 @@ import {
   type EpubViewMode,
   type PageTransitionMode,
   type PdfLocator,
+  type PdfPaginatedViewMode,
   type PdfViewMode,
   type TxtViewMode,
 } from "../src/index";
@@ -18,6 +19,7 @@ describe("reader experience contracts", () => {
     expectTypeOf<EpubViewMode>().toEqualTypeOf<"paginated">();
     expectTypeOf<TxtViewMode>().toEqualTypeOf<"scroll" | "paginated">();
     expectTypeOf<PdfViewMode>().toEqualTypeOf<"single" | "double" | "continuous">();
+    expectTypeOf<PdfPaginatedViewMode>().toEqualTypeOf<"single" | "double">();
     expectTypeOf<PageTransitionMode>().toEqualTypeOf<
       "none" | "slide" | "cover" | "page-curl"
     >();
@@ -27,7 +29,11 @@ describe("reader experience contracts", () => {
     expect(defaultReaderExperiencePreferences).toEqual({
       epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "scroll", transition: "slide" },
-      pdf: { viewMode: "single", transition: "slide" },
+      pdf: {
+        viewMode: "single",
+        paginatedViewMode: "single",
+        transition: "slide",
+      },
     });
     expect(readerCapabilitiesByFormat.epub.viewModes).toEqual(["paginated"]);
     expect(readerCapabilitiesByFormat.txt.viewModes).toEqual(["scroll", "paginated"]);
@@ -48,6 +54,12 @@ describe("reader experience contracts", () => {
       "cover",
       "slide",
     ]);
+    expect(readerCapabilitiesByFormat.pdf.pageTransitions).toEqual([
+      "none",
+      "page-curl",
+      "cover",
+      "slide",
+    ]);
   });
 
   it("normalizes partial and invalid preferences field by field", () => {
@@ -55,14 +67,39 @@ describe("reader experience contracts", () => {
       normalizeReaderExperiencePreferences({
         epub: { viewMode: "scrolled", transition: "fade" },
         txt: { viewMode: "paginated", transition: "page-curl" },
-        pdf: { viewMode: "continuous", transition: "none" },
+        pdf: {
+          viewMode: "continuous",
+          paginatedViewMode: "double",
+          transition: "none",
+        },
         future: true,
       }),
     ).toEqual({
       epub: { viewMode: "paginated", transition: "none" },
       txt: { viewMode: "paginated", transition: "page-curl" },
-      pdf: { viewMode: "continuous", transition: "none" },
+      pdf: {
+        viewMode: "continuous",
+        paginatedViewMode: "double",
+        transition: "none",
+      },
     });
+  });
+
+  it("derives a legacy paginated PDF mode and defaults continuous-only settings", () => {
+    expect(
+      normalizeReaderExperiencePreferences({
+        pdf: { viewMode: "double", transition: "cover" },
+      }).pdf,
+    ).toEqual({
+      viewMode: "double",
+      paginatedViewMode: "double",
+      transition: "cover",
+    });
+    expect(
+      normalizeReaderExperiencePreferences({
+        pdf: { viewMode: "continuous", transition: "slide" },
+      }).pdf.paginatedViewMode,
+    ).toBe("single");
   });
 
   it("preserves the new cover value without changing legacy modes", () => {

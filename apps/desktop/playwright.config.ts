@@ -39,5 +39,15 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
       },
     },
+    {
+      name: "chromium-dpr2-pdf",
+      grep: /500-page PDF/,
+      testMatch: "smoke.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 2,
+        viewport: { width: 1280, height: 800 },
+      },
+    },
   ],
 });

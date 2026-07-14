@@ -37,6 +37,7 @@ const TRANSITION_LABELS: Record<PageTransitionMode, string> = {
 };
 
 export type TxtReadingModeOption = "continuous" | PageTransitionMode;
+export type PdfReadingModeOption = "continuous" | PageTransitionMode;
 const TXT_READING_MODE_LABELS: Record<TxtReadingModeOption, string> = {
   continuous: "Continuous",
   ...TRANSITION_LABELS,
@@ -68,11 +69,14 @@ interface ReaderThemePanelProps {
   pageTransition?: PageTransitionMode;
   pageTransitionError?: string | null;
   pageTransitionModes?: readonly PageTransitionMode[];
+  pdfReadingMode?: PdfReadingModeOption;
+  pdfReadingModeOptions?: readonly PdfReadingModeOption[];
   theme: ReaderTheme;
   themeError: string | null;
   txtReadingMode?: TxtReadingModeOption;
   txtReadingModeOptions?: readonly TxtReadingModeOption[];
   onPageTransitionChange?: (mode: PageTransitionMode) => void;
+  onPdfReadingModeChange?: (mode: PdfReadingModeOption) => void;
   onThemeChange: (theme: ReaderTheme) => void;
   onTxtReadingModeChange?: (mode: TxtReadingModeOption) => void;
 }
@@ -82,11 +86,14 @@ export function ReaderThemePanel({
   pageTransition,
   pageTransitionError,
   pageTransitionModes,
+  pdfReadingMode,
+  pdfReadingModeOptions,
   theme,
   themeError,
   txtReadingMode,
   txtReadingModeOptions,
   onPageTransitionChange,
+  onPdfReadingModeChange,
   onThemeChange,
   onTxtReadingModeChange,
 }: ReaderThemePanelProps) {
@@ -206,6 +213,41 @@ export function ReaderThemePanel({
                     index,
                     txtReadingModeOptions,
                     onTxtReadingModeChange,
+                  )
+                }
+              >
+                <TransitionPreview mode={mode} />
+                <span>{TXT_READING_MODE_LABELS[mode]}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {pdfReadingMode !== undefined &&
+      pdfReadingModeOptions !== undefined &&
+      onPdfReadingModeChange !== undefined ? (
+        <div className="theme-field">
+          <span>Reading mode</span>
+          <div
+            className="reader-theme-transition-options reader-theme-transition-options--txt"
+            role="radiogroup"
+            aria-label="PDF reading mode"
+          >
+            {pdfReadingModeOptions.map((mode, index) => (
+              <Button
+                key={mode}
+                className="reader-transition-option"
+                variant="ghost"
+                role="radio"
+                aria-checked={pdfReadingMode === mode}
+                tabIndex={pdfReadingMode === mode ? 0 : -1}
+                onClick={() => onPdfReadingModeChange(mode)}
+                onKeyDown={(event) =>
+                  handleReadingModeKeyDown(
+                    event,
+                    index,
+                    pdfReadingModeOptions,
+                    onPdfReadingModeChange,
                   )
                 }
               >

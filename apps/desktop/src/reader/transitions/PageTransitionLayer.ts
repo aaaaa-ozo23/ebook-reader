@@ -65,6 +65,87 @@ export function captureTxtSpreadSnapshot(
   return { node: snapshot };
 }
 
+export function capturePdfSpreadSnapshot(
+  host: HTMLElement | null,
+  spreadStart: number,
+): PageSnapshot | null {
+  if (host === null) {
+    return null;
+  }
+
+  const sourceSpread = Array.from(
+    host.querySelectorAll<HTMLElement>(".reader-pdf-spread[data-spread-start]"),
+  ).find((spread) => Number(spread.dataset.spreadStart) === spreadStart);
+  if (sourceSpread === undefined) {
+    return null;
+  }
+
+  const sourceSurfaces = Array.from(
+    sourceSpread.querySelectorAll<HTMLElement>(".reader-pdf-page-surface"),
+  );
+  if (
+    sourceSurfaces.length === 0 ||
+    sourceSurfaces.some((surface) => surface.dataset.renderReady !== "true")
+  ) {
+    return null;
+  }
+
+  const snapshot = document.createElement("div");
+  snapshot.className = "reader-pdf-paginated-window reader-pdf-transition-snapshot";
+  const spread = sourceSpread.cloneNode(true) as HTMLElement;
+  spread.dataset.windowState = "current";
+  spread.removeAttribute("aria-hidden");
+  spread
+    .querySelectorAll(
+      ".reader-pdf-text-layer, .reader-pdf-highlight-layer, .reader-pdf-page-error",
+    )
+    .forEach((element) => element.remove());
+  spread.querySelectorAll<HTMLElement>("[tabindex]").forEach((element) => {
+    element.removeAttribute("tabindex");
+  });
+
+  const sourceCanvases = Array.from(
+    sourceSpread.querySelectorAll<HTMLCanvasElement>("canvas[data-page-number]"),
+  );
+  const snapshotCanvases = Array.from(
+    spread.querySelectorAll<HTMLCanvasElement>("canvas[data-page-number]"),
+  );
+  if (
+    sourceCanvases.length === 0 ||
+    sourceCanvases.length !== snapshotCanvases.length
+  ) {
+    return null;
+  }
+
+  for (const [index, sourceCanvas] of sourceCanvases.entries()) {
+    const snapshotCanvas = snapshotCanvases[index];
+    if (
+      snapshotCanvas === undefined ||
+      sourceCanvas.width <= 0 ||
+      sourceCanvas.height <= 0 ||
+      snapshotCanvas.dataset.pageNumber !== sourceCanvas.dataset.pageNumber
+    ) {
+      return null;
+    }
+
+    snapshotCanvas.width = sourceCanvas.width;
+    snapshotCanvas.height = sourceCanvas.height;
+    const context = snapshotCanvas.getContext("2d");
+    if (context === null) {
+      return null;
+    }
+    try {
+      context.drawImage(sourceCanvas, 0, 0);
+    } catch {
+      return null;
+    }
+  }
+
+  snapshot.dataset.spreadStart = String(spreadStart);
+  snapshot.append(spread);
+  return { node: snapshot };
+}
+
 export function captureEpubRenditionSnapshot(
   element: HTMLElement | null,
 ): PageSnapshot | null {

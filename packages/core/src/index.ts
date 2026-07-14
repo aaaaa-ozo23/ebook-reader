@@ -8,6 +8,7 @@ export type ReaderThemeMode = "light" | "dark" | "sepia" | "green";
 export type PageTransitionMode = "none" | "slide" | "cover" | "page-curl";
 export type EpubViewMode = "paginated";
 export type TxtViewMode = "scroll" | "paginated";
+export type PdfPaginatedViewMode = "single" | "double";
 export type PdfViewMode = "single" | "double" | "continuous";
 export type ReaderViewMode = EpubViewMode | TxtViewMode | PdfViewMode;
 
@@ -29,6 +30,7 @@ export interface ReaderExperiencePreferences {
   };
   pdf: {
     viewMode: PdfViewMode;
+    paginatedViewMode: PdfPaginatedViewMode;
     transition: PageTransitionMode;
   };
 }
@@ -195,7 +197,6 @@ export const defaultReaderTheme: ReaderTheme = {
   textColor: "#25211d",
 };
 
-const BASE_PAGE_TRANSITIONS = ["none", "slide", "page-curl"] as const;
 const EPUB_PAGE_TRANSITIONS = ["none", "page-curl", "cover", "slide"] as const;
 
 export const readerCapabilitiesByFormat: Readonly<
@@ -215,7 +216,7 @@ export const readerCapabilitiesByFormat: Readonly<
   },
   pdf: {
     viewModes: ["single", "double", "continuous"],
-    pageTransitions: BASE_PAGE_TRANSITIONS,
+    pageTransitions: EPUB_PAGE_TRANSITIONS,
     supportsPublicationPageLabels: false,
     supportsImageViewer: false,
   },
@@ -224,7 +225,7 @@ export const readerCapabilitiesByFormat: Readonly<
 export const defaultReaderExperiencePreferences: ReaderExperiencePreferences = {
   epub: { viewMode: "paginated", transition: "none" },
   txt: { viewMode: "scroll", transition: "slide" },
-  pdf: { viewMode: "single", transition: "slide" },
+  pdf: { viewMode: "single", paginatedViewMode: "single", transition: "slide" },
 };
 
 export function normalizeReaderExperiencePreferences(
@@ -260,6 +261,12 @@ export function normalizeReaderExperiencePreferences(
         pdf.viewMode === "single"
           ? pdf.viewMode
           : defaultReaderExperiencePreferences.pdf.viewMode,
+      paginatedViewMode:
+        pdf.paginatedViewMode === "double" || pdf.paginatedViewMode === "single"
+          ? pdf.paginatedViewMode
+          : pdf.viewMode === "double" || pdf.viewMode === "single"
+            ? pdf.viewMode
+            : defaultReaderExperiencePreferences.pdf.paginatedViewMode,
       transition: normalizePageTransition(
         pdf.transition,
         defaultReaderExperiencePreferences.pdf.transition,
