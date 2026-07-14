@@ -135,6 +135,7 @@ interface PdfJumpRequest {
 
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
+  const readerExperienceDirtyBookIdRef = useRef<string | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(book.format === "txt");
@@ -251,7 +252,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
     void getReaderExperiencePreferences()
       .then((savedPreferences) => {
-        if (isCurrent) {
+        if (isCurrent && readerExperienceDirtyBookIdRef.current !== book.id) {
           setReaderExperiencePreferences(savedPreferences);
           setReaderExperienceError(null);
         }
@@ -481,6 +482,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   const handleEpubTransitionChange = useCallback(
     (transition: PageTransitionMode) => {
+      readerExperienceDirtyBookIdRef.current = book.id;
       const nextPreferences: ReaderExperiencePreferences = {
         ...readerExperiencePreferences,
         epub: {
@@ -496,11 +498,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         },
       );
     },
-    [readerExperiencePreferences],
+    [book.id, readerExperiencePreferences],
   );
 
   const handleTxtReadingModeChange = useCallback(
     (mode: TxtReadingModeOption) => {
+      readerExperienceDirtyBookIdRef.current = book.id;
       const nextPreferences: ReaderExperiencePreferences = {
         ...readerExperiencePreferences,
         txt: {
@@ -517,11 +520,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         },
       );
     },
-    [readerExperiencePreferences],
+    [book.id, readerExperiencePreferences],
   );
 
   const handlePdfReadingModeChange = useCallback(
     (mode: PdfReadingModeOption) => {
+      readerExperienceDirtyBookIdRef.current = book.id;
       const nextPreferences: ReaderExperiencePreferences = {
         ...readerExperiencePreferences,
         pdf: {
@@ -542,11 +546,12 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         },
       );
     },
-    [readerExperiencePreferences],
+    [book.id, readerExperiencePreferences],
   );
 
   const handlePdfPaginatedViewModeChange = useCallback(
     (paginatedViewMode: PdfPaginatedViewMode) => {
+      readerExperienceDirtyBookIdRef.current = book.id;
       const nextPreferences: ReaderExperiencePreferences = {
         ...readerExperiencePreferences,
         pdf: {
@@ -563,7 +568,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         },
       );
     },
-    [readerExperiencePreferences],
+    [book.id, readerExperiencePreferences],
   );
 
   const handleSidebarWidthChange = useCallback((sidebarWidth: number) => {

@@ -125,3 +125,5 @@
 阶段 9 最终五点对照、Browser/Playwright 证据、page-curl 决策和包体数据见 [`fidelity-ledger.md`](./fidelity-ledger.md)。
 
 阶段 11 TXT 分页、五项阅读方式、Single/Double、EPUB 同款底栏、11.8 性能/动画目标修复和完整门禁见 [`stage11-txt-pagination-fidelity.md`](./stage11-txt-pagination-fidelity.md)。
+
+阶段 12 PDF 虚拟连续滚动、页内恢复、统一跳转、有限 Canvas 生命周期、Single/Double 精确快照动画和 500 页验收见 [`stage12-pdf-continuous-fidelity.md`](./stage12-pdf-continuous-fidelity.md)。
