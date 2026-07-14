@@ -549,3 +549,10 @@
 - 批注 rect 跳转不能只在 adapter 中修改 page：连续目标页尚未挂载。可靠顺序是 locator 导航、虚拟目标页挂载、按该页实际 scale 转换 rect、再把首个 rect 放到 frame 上部并由 surface 重放高亮。
 - PDF Canvas 的 DOM clone 会保留 width/height 属性却不保留像素；动画快照必须逐个校验源/目标 `data-page-number`，设置 backing size 后 `drawImage(sourceCanvas, 0, 0)`，任何失败都应回退无动画。
 - 邻接 spread 晋升 current 时若把 `isVisible/renderTextLayer` 放在同一个 Canvas effect 依赖中，effect cleanup 会先把已预渲染目标 Canvas 归零。Canvas 生命周期与当前页 TextLayer 生命周期必须分离，晋升只增加交互层。
+
+## 2026-07-14 大阶段 12.8：阅读模式修复
+
+- PDF 分页控制器在导航前同步调用 `capturePdfSpreadSnapshot`；Double 的目标 spread 需要两张 Canvas 同时 `data-render-ready=true`，任一邻接页仍在异步渲染时就返回 `null`，控制器按既定安全策略无动画提交，因此用户看到 Smooth/Cover/Realistic 全部等同 None。修复应等待准确目标 spread 在有限时间内 ready，而不能放宽 identity/像素校验或捕获占位页。
+- TXT 阅读体验偏好目前只有 `viewMode + transition`，`TxtPaginatedReaderContent` 的 `requestedSpreadMode` 每次挂载固定初始化为 `single`。Continuous 会卸载分页组件，因此返回分页必然丢失 Double；需要在现有 v1 envelope 中增加向后兼容的 `paginatedViewMode`，并由底栏 Single/Double 操作持久化。
+- Double 的 current spread 也可能在直接页码跳转后短暂未 ready；current/target 应共用同一个可取消的 600ms 准确快照等待。current 捕获失败后不再准备 target，立即执行真实导航，避免 Canvas 不可用或渲染失败时产生两段无意义等待。
+- 500 页动画验收必须分别断言 current Canvas 页号 10/11 与 target 12/13；Continuous 的 long-task 观察窗口在切入分页前结束，避免把验收代码自身的多 Canvas `getImageData` 取样成本误算为连续滚动性能回归。

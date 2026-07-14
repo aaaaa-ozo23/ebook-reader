@@ -265,6 +265,13 @@ pub enum TxtViewMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+pub enum TxtPaginatedViewMode {
+    Single,
+    Double,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PdfViewMode {
     Single,
     Double,
@@ -289,6 +296,8 @@ pub struct EpubExperiencePreferences {
 #[serde(rename_all = "camelCase")]
 pub struct TxtExperiencePreferences {
     pub view_mode: TxtViewMode,
+    #[serde(default = "default_txt_paginated_view_mode")]
+    pub paginated_view_mode: TxtPaginatedViewMode,
     pub transition: PageTransitionMode,
 }
 
@@ -1717,6 +1726,7 @@ fn default_reader_experience_preferences() -> ReaderExperiencePreferences {
         },
         txt: TxtExperiencePreferences {
             view_mode: TxtViewMode::Scroll,
+            paginated_view_mode: TxtPaginatedViewMode::Single,
             transition: PageTransitionMode::Slide,
         },
         pdf: PdfExperiencePreferences {
@@ -1751,6 +1761,13 @@ fn normalize_reader_experience_setting(value: &serde_json::Value) -> ReaderExper
                     _ => None,
                 })
                 .unwrap_or(defaults.txt.view_mode),
+            paginated_view_mode: read_format_value(preferences, "txt", "paginatedViewMode")
+                .and_then(|value| match value {
+                    "single" => Some(TxtPaginatedViewMode::Single),
+                    "double" => Some(TxtPaginatedViewMode::Double),
+                    _ => None,
+                })
+                .unwrap_or(defaults.txt.paginated_view_mode),
             transition: read_page_transition(preferences, "txt").unwrap_or(defaults.txt.transition),
         },
         pdf: PdfExperiencePreferences {
@@ -1785,6 +1802,10 @@ fn normalize_reader_experience_setting(value: &serde_json::Value) -> ReaderExper
 
 fn default_pdf_paginated_view_mode() -> PdfPaginatedViewMode {
     PdfPaginatedViewMode::Single
+}
+
+fn default_txt_paginated_view_mode() -> TxtPaginatedViewMode {
+    TxtPaginatedViewMode::Single
 }
 
 fn read_page_transition(
@@ -2278,8 +2299,8 @@ mod tests {
         EpubExperiencePreferences, EpubLocator, EpubViewMode, ImportBookStatus, Locator,
         PageTransitionMode, PdfExperiencePreferences, PdfLocator, PdfPaginatedViewMode, PdfRect,
         PdfViewMode, PdfZoomMode, ReaderExperiencePreferences, ReaderLayoutPreferences,
-        ReaderTheme, ReaderThemeMode, TxtExperiencePreferences, TxtLocator, TxtViewMode,
-        DB_FILE_NAME,
+        ReaderTheme, ReaderThemeMode, TxtExperiencePreferences, TxtLocator, TxtPaginatedViewMode,
+        TxtViewMode, DB_FILE_NAME,
     };
 
     #[test]
@@ -3091,6 +3112,7 @@ mod tests {
             },
             txt: TxtExperiencePreferences {
                 view_mode: TxtViewMode::Paginated,
+                paginated_view_mode: TxtPaginatedViewMode::Double,
                 transition: PageTransitionMode::None,
             },
             pdf: PdfExperiencePreferences {
@@ -3118,6 +3140,7 @@ mod tests {
         assert_eq!(restored, preferences);
         assert_eq!(stored["version"], 1);
         assert_eq!(stored["preferences"]["epub"]["transition"], "cover");
+        assert_eq!(stored["preferences"]["txt"]["paginatedViewMode"], "double");
         assert_eq!(stored["preferences"]["pdf"]["paginatedViewMode"], "double");
     }
 

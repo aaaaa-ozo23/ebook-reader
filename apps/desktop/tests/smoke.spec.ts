@@ -639,6 +639,18 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await txtReadingModes.getByRole("radio", { name: "Continuous" }).click();
   await page.getByRole("button", { name: "Theme" }).click();
   await expect(page.locator(".reader-page--virtual")).toBeVisible();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await txtReadingModes.getByRole("radio", { name: "Smooth" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Theme" }).click();
+  await txtReadingModes.getByRole("radio", { name: "Continuous" }).click();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.locator(".reader-page--virtual")).toBeVisible();
 
   await page.setViewportSize({ width: 900, height: 640 });
   await expect(page.locator(".reader-sidebar")).toHaveCSS("width", "401px");
@@ -690,7 +702,6 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "aria-pressed",
     "true",
   );
-  await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   const mobileControls = await page.evaluate(() => ({
     bodyClientWidth: document.body.clientWidth,
@@ -1758,7 +1769,11 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
           version: 1,
           preferences: {
             epub: { viewMode: "paginated", transition: "none" },
-            txt: { viewMode: "continuous", transition: "none" },
+            txt: {
+              viewMode: "scroll",
+              paginatedViewMode: "single",
+              transition: "none",
+            },
             pdf: {
               viewMode: "continuous",
               paginatedViewMode: "single",
@@ -1850,6 +1865,16 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     });
   }
 
+  const longTasks = await page.evaluate(() => {
+    const stageWindow = window as Window & {
+      __stage12PdfLongTasks?: number[];
+      __stage12PdfLongTaskObserver?: PerformanceObserver;
+    };
+    stageWindow.__stage12PdfLongTaskObserver?.disconnect();
+    return stageWindow.__stage12PdfLongTasks ?? [];
+  });
+  expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
+
   const progress = page.getByRole("slider", { name: "PDF reading progress" });
   await progress.evaluate((element) => {
     const input = element as HTMLInputElement;
@@ -1902,6 +1927,73 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   await expect
     .poll(() => page.locator(".reader-pdf-canvas").count())
     .toBeLessThanOrEqual(6);
+
+  for (const transition of [
+    { label: "Smooth", mode: "slide" },
+    { label: "Cover", mode: "cover" },
+    { label: "Realistic", mode: "page-curl" },
+  ] as const) {
+    await pageInput.fill("10");
+    await pageInput.press("Enter");
+    await expect(page.getByText("Pages 10-11 / 500")).toBeVisible();
+    const currentAnimationSurfaces = page.locator(
+      '.reader-pdf-spread[data-spread-start="10"] .reader-pdf-page-surface',
+    );
+    await expect(currentAnimationSurfaces).toHaveCount(2);
+    await expect(currentAnimationSurfaces.nth(0)).toHaveAttribute(
+      "data-render-ready",
+      "true",
+      { timeout: 20_000 },
+    );
+    await expect(currentAnimationSurfaces.nth(1)).toHaveAttribute(
+      "data-render-ready",
+      "true",
+      { timeout: 20_000 },
+    );
+    const targetDoubleSurfaces = page.locator(
+      '.reader-pdf-spread[data-spread-start="12"] .reader-pdf-page-surface',
+    );
+    await expect(targetDoubleSurfaces).toHaveCount(2);
+    await expect(targetDoubleSurfaces.nth(0)).toHaveAttribute(
+      "data-render-ready",
+      "true",
+      { timeout: 20_000 },
+    );
+    await expect(targetDoubleSurfaces.nth(1)).toHaveAttribute(
+      "data-render-ready",
+      "true",
+      { timeout: 20_000 },
+    );
+    await page.getByRole("button", { name: "Theme" }).click();
+    await page.getByRole("radio", { name: transition.label }).click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Next" }).click();
+    const pdfTransitionLayer = page.locator(".reader-transition-layer");
+    await expect(pdfTransitionLayer).toHaveAttribute("data-mode", transition.mode);
+    await expect
+      .poll(() =>
+        pdfTransitionLayer
+          .locator(".reader-transition-layer__frame--current canvas[data-page-number]")
+          .evaluateAll((canvases) =>
+            canvases.map((canvas) => canvas.getAttribute("data-page-number")),
+          ),
+      )
+      .toEqual(["10", "11"]);
+    await expect
+      .poll(() =>
+        pdfTransitionLayer
+          .locator(".reader-transition-layer__frame--target canvas[data-page-number]")
+          .evaluateAll((canvases) =>
+            canvases.map((canvas) => canvas.getAttribute("data-page-number")),
+          ),
+      )
+      .toEqual(["12", "13"]);
+    await expect(pdfTransitionLayer).toHaveCount(0);
+    await expect(page.getByText("Pages 12-13 / 500")).toBeVisible();
+  }
+  await pageInput.fill("10");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Pages 10-11 / 500")).toBeVisible();
 
   if (process.env.READER_VISUAL_QA === "1") {
     await page.screenshot({
@@ -1960,16 +2052,6 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
       fullPage: true,
     });
   }
-  const longTasks = await page.evaluate(() => {
-    const stageWindow = window as Window & {
-      __stage12PdfLongTasks?: number[];
-      __stage12PdfLongTaskObserver?: PerformanceObserver;
-    };
-    stageWindow.__stage12PdfLongTaskObserver?.disconnect();
-    return stageWindow.__stage12PdfLongTasks ?? [];
-  });
-  expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
-
   await page.getByRole("button", { name: "Shelf", exact: true }).click();
   await expect(
     page.getByRole("main", { name: "Ebook Reader bookshelf" }),

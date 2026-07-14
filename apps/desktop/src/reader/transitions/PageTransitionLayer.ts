@@ -11,6 +11,7 @@ export interface PageSnapshot {
 
 const SNAPSHOT_LOAD_TIMEOUT_MS = 180;
 const SNAPSHOT_LAYOUT_ATTEMPTS = 6;
+const PDF_SNAPSHOT_READY_TIMEOUT_MS = 600;
 
 export const PAGE_TRANSITION_DURATIONS: Readonly<
   Record<Exclude<PageTransitionMode, "none">, number>
@@ -144,6 +145,54 @@ export function capturePdfSpreadSnapshot(
   snapshot.dataset.spreadStart = String(spreadStart);
   snapshot.append(spread);
   return { node: snapshot };
+}
+
+export async function capturePdfSpreadSnapshotAfterRender(
+  host: HTMLElement | null,
+  spreadStart: number,
+  signal?: AbortSignal,
+): Promise<PageSnapshot | null> {
+  const initialSnapshot = capturePdfSpreadSnapshot(host, spreadStart);
+  if (initialSnapshot !== null || host === null || signal?.aborted === true) {
+    return initialSnapshot;
+  }
+
+  return new Promise((resolve) => {
+    let isSettled = false;
+    let frameHandle = 0;
+    const observer = new MutationObserver(() => attemptCapture());
+    const finish = (snapshot: PageSnapshot | null) => {
+      if (isSettled) return;
+      isSettled = true;
+      observer.disconnect();
+      window.cancelAnimationFrame(frameHandle);
+      window.clearTimeout(timeoutHandle);
+      signal?.removeEventListener("abort", handleAbort);
+      resolve(snapshot);
+    };
+    const attemptCapture = () => {
+      if (signal?.aborted === true) {
+        finish(null);
+        return;
+      }
+      const snapshot = capturePdfSpreadSnapshot(host, spreadStart);
+      if (snapshot !== null) finish(snapshot);
+    };
+    const handleAbort = () => finish(null);
+    const timeoutHandle = window.setTimeout(
+      () => finish(null),
+      PDF_SNAPSHOT_READY_TIMEOUT_MS,
+    );
+
+    observer.observe(host, {
+      attributeFilter: ["data-render-ready"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    frameHandle = window.requestAnimationFrame(attemptCapture);
+  });
 }
 
 export function captureEpubRenditionSnapshot(
