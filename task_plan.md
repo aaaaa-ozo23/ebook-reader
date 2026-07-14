@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.8 阅读模式修复：complete；PDF Double 的 Smooth/Cover/Realistic 已按准确 current/target spread 播放，TXT 从 Continuous 返回分页会持久恢复上次 Single/Double；单元、Playwright、Rust、Windows 打包及静态门禁均通过，未新增 schema、依赖、版本或 Release。
+大阶段 12.9 PDF Double 动画视觉修复：complete；已确认旧共享 easing 令三种动画在前半程过早完成，改用中点对称曲线并补齐 PDF transition host。Double 的 Smooth/Cover/Realistic 已通过准确 current/target Canvas、50% 中间帧几何、DPR2、全量 Playwright 与 Windows 打包验证。
 
 ## 分支策略
 
@@ -481,6 +481,7 @@
 阶段 12 已于 2026-07-14 完成。500 页 fixture 的高成本 surface ≤6、分页 Canvas ≤3/6、DPR1/DPR2 和四主题通过；Browser/IAB bootstrap 环境故障已记录并由项目 Playwright 三档截图与真实交互补齐。验收账本见 `docs/design/v0.2/stage12-pdf-continuous-fidelity.md`。
 
 | 12.8 阅读模式修复 | `codex/stage12-reader-mode-fixes` | 修复 PDF Double 动画快照/事务降级；TXT 记住上次 paginated Single/Double | Double 的 Smooth/Cover/Realistic 有准确 current/target 展示层；TXT Continuous 往返与重启均恢复上次分页视图 |
+| 12.9 PDF Double 动画视觉修复 | `codex/stage12-pdf-double-animation-visual-fix` | 复现展示层存在但视觉静止的问题；按中间帧几何与像素验证 Double 三种动画 | complete；50% 帧与 None 明显不同，current/target 页号及最终落页准确 |
 
 ## 大阶段 13：产品收口与数据安全
 
