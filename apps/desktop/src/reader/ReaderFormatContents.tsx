@@ -2110,6 +2110,7 @@ export function PdfReaderContent({
   const [pageInput, setPageInput] = useState("1");
   const [frameWidth, setFrameWidth] = useState(1000);
   const [pdfNavigationVersion, setPdfNavigationVersion] = useState(0);
+  const [pdfRenderVersion, setPdfRenderVersion] = useState(0);
   const [pdfAdapter, setPdfAdapter] = useState<PdfReaderAdapter | null>(null);
   const [pdfHighlightRectsByPage, setPdfHighlightRectsByPage] = useState<
     Record<number, PdfRenderedHighlight[]>
@@ -2410,8 +2411,29 @@ export function PdfReaderContent({
 
   useEffect(() => {
     themeRef.current = theme;
-    void adapterRef.current?.setTheme(theme).then(renderVisiblePages);
+    void adapterRef.current?.setTheme(theme).then(() => {
+      setPdfRenderVersion((version) => version + 1);
+      setPdfNavigationVersion((version) => version + 1);
+      return renderVisiblePages();
+    });
   }, [renderVisiblePages, theme]);
+
+  useEffect(() => {
+    let devicePixelRatio = window.devicePixelRatio || 1;
+    const handleWindowResize = () => {
+      const nextDevicePixelRatio = window.devicePixelRatio || 1;
+      if (nextDevicePixelRatio === devicePixelRatio) {
+        return;
+      }
+      devicePixelRatio = nextDevicePixelRatio;
+      setPdfRenderVersion((version) => version + 1);
+      setPdfNavigationVersion((version) => version + 1);
+      void renderVisiblePages();
+    };
+
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, [renderVisiblePages]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -2806,6 +2828,7 @@ export function PdfReaderContent({
               navigationVersion={pdfNavigationVersion}
               onSelectionEnd={capturePdfSelection}
               position={position}
+              renderVersion={pdfRenderVersion}
             />
           ) : (
             <div

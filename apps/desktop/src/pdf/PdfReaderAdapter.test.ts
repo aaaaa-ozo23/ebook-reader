@@ -1,12 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getPdfSpreadStart,
+  nextPdfSpreadStart,
   normalizePdfPage,
   normalizePdfScale,
   pageToProgress,
   pdfContinuousPositionToProgress,
   progressToPdfContinuousPosition,
   progressToPdfPage,
+  previousPdfSpreadStart,
   PdfReaderAdapter,
 } from "./PdfReaderAdapter";
 
@@ -194,13 +197,13 @@ describe("PdfReaderAdapter", () => {
     adapter.setViewMode("double", 1280);
     await adapter.next();
 
-    expect(adapter.getVisiblePages()).toEqual([5, 6]);
+    expect(adapter.getVisiblePages()).toEqual([4, 5]);
 
     await adapter.previous();
 
     expect(adapter.getPosition()).toEqual(
       expect.objectContaining({
-        page: 3,
+        page: 2,
         totalPages: 12,
         renderedMode: "double",
       }),
@@ -339,6 +342,39 @@ describe("PdfReaderAdapter", () => {
     expect(progressToPdfPage(0.5, 3)).toBe(2);
     expect(progressToPdfPage(0.75, 3)).toBe(3);
     expect(progressToPdfPage(Number.NaN, 12)).toBe(1);
+  });
+
+  it("normalizes double-page spreads around the cover and odd last page", async () => {
+    expect(getPdfSpreadStart(1, 12)).toBe(1);
+    expect(getPdfSpreadStart(3, 12)).toBe(2);
+    expect(getPdfSpreadStart(12, 12)).toBe(12);
+    expect(nextPdfSpreadStart(1, 12)).toBe(2);
+    expect(nextPdfSpreadStart(2, 12)).toBe(4);
+    expect(previousPdfSpreadStart(4, 12)).toBe(2);
+    expect(previousPdfSpreadStart(2, 12)).toBe(1);
+
+    const adapter = new PdfReaderAdapter({
+      bookId: "pdf-book",
+      sourceUrl: "blob:pdf-book",
+      viewMode: "double",
+      initialLocator: { kind: "pdf", page: 3 },
+      theme: {
+        mode: "light",
+        fontFamily: "serif",
+        fontSize: 18,
+        lineHeight: 1.7,
+        paragraphSpacing: 12,
+        pageMargin: 32,
+        backgroundColor: "#ffffff",
+        textColor: "#111111",
+      },
+    });
+    await adapter.open("pdf-book");
+    expect(adapter.getVisiblePages()).toEqual([2, 3]);
+    await adapter.previous();
+    expect(adapter.getVisiblePages()).toEqual([1, 2]);
+    await adapter.next();
+    expect(adapter.getVisiblePages()).toEqual([2, 3]);
   });
 
   it("previews and commits PDF progress jumps by page", async () => {

@@ -1880,3 +1880,9 @@
 - **12.3 错误：** `RenderingCancelledException` 静默忽略；其他单页错误只在对应 surface 显示 Retry，不关闭整本 PDF。可见页立即渲染，overscan 页下一 animation frame 渲染。
 - **12.3 首轮测试：** 新并发测试发现 render sequence 在任务启动后被同页 cancel 例程再次递增，导致正常 page 2 也被识别为旧任务；已把旧任务取消移到新 sequence 分配之前并增加可选 invalidate。
 - **12.3 门禁：** desktop 142 tests、lint 与 build passed，覆盖并发渲染、单页取消、句柄释放、Canvas 归零和 TextLayer 清理。
+- **12.4 分支：** `codex/stage12-pdf-scroll-anchoring` 从已合并 12.3 的集成分支创建。
+- **12.4 锚定：** Continuous 用视口中心线和真实页面内容高度求 `pageOffsetRatio`，中心落在页间 gap 时选最近页；缩放、Fit width、主题、DPR、resize 和模式切换均用 navigation/render version 在重排后恢复同一 locator。
+- **12.4 进度：** Continuous 到达滚动底部强制末页 ratio=1，因此 100% 精确对应最后一页底部；普通滚动保持 750ms 节流写入，slider preview 仍只更新内存，卸载时 flush 最终 locator。
+- **12.4 Double：** spread 统一为封面 1、2–3、4–5…；目录/页码落到 spread 内任一页时对齐其起始页。窄窗只把 rendered mode 降为 Single，requested Double 不变，宽度恢复后自动回到 Double。
+- **12.4 首轮门禁：** 旧测试仍预期非对齐的 3–4/5–6 spread，且 helper 与 component 同文件触发 fast-refresh warning；已更新为统一 spread 规则，并把纯锚点函数移到独立模块。
+- **12.4 门禁：** desktop lint、146 tests 与 build passed；新增中心锚点、页间 gap、封面/奇偶/末页 spread 测试。

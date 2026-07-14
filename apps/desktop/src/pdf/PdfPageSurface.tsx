@@ -19,6 +19,7 @@ export interface PdfPageSurfaceProps {
   ) => void;
   pageNumber: number;
   renderTextLayer?: boolean;
+  renderVersion?: number;
   scale: number;
   zoomMode: "fit-width" | "custom";
 }
@@ -31,6 +32,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
   onSelectionEnd,
   pageNumber,
   renderTextLayer = true,
+  renderVersion = 0,
   scale,
   zoomMode,
 }: PdfPageSurfaceProps) {
@@ -142,6 +144,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
     metrics,
     pageNumber,
     renderTextLayer,
+    renderVersion,
     retryVersion,
   ]);
 

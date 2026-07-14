@@ -15,6 +15,7 @@ import {
   type PdfPosition,
   type PdfReaderAdapter,
 } from "./PdfReaderAdapter";
+import { resolvePdfContinuousAnchor } from "./PdfContinuousPosition";
 
 export interface PdfContinuousViewProps {
   adapter: PdfReaderAdapter;
@@ -25,6 +26,7 @@ export interface PdfContinuousViewProps {
     event: KeyboardEvent<HTMLDivElement> | MouseEvent<HTMLDivElement>,
   ) => void;
   position: PdfPosition;
+  renderVersion: number;
 }
 
 const PDF_DEFAULT_PAGE_WIDTH = 612;
@@ -38,6 +40,7 @@ export function PdfContinuousView({
   navigationVersion,
   onSelectionEnd,
   position,
+  renderVersion,
 }: PdfContinuousViewProps) {
   const [metricsVersion, setMetricsVersion] = useState(0);
   const suppressScrollTrackingUntilRef = useRef(0);
@@ -142,20 +145,19 @@ export function PdfContinuousView({
         return;
       }
 
-      const center = viewport.scrollTop + viewport.clientHeight / 2;
-      const currentItem = virtualizer
-        .getVirtualItems()
-        .find((item) => center >= item.start && center <= item.end);
-
-      if (currentItem === undefined) {
+      if (viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1) {
+        adapter.setContinuousPosition(position.totalPages, 1);
         return;
       }
-
-      const pageOffsetRatio = Math.min(
-        1,
-        Math.max(0, (center - currentItem.start) / Math.max(currentItem.size, 1)),
+      const anchor = resolvePdfContinuousAnchor(
+        virtualizer.getVirtualItems(),
+        viewport.scrollTop + viewport.clientHeight / 2,
+        (pageNumber) => getPageSize(pageNumber).height,
       );
-      adapter.setContinuousPosition(currentItem.index + 1, pageOffsetRatio);
+
+      if (anchor !== null) {
+        adapter.setContinuousPosition(anchor.page, anchor.pageOffsetRatio);
+      }
     };
     const handleScroll = () => {
       if (scrollFrameRef.current !== null) {
@@ -172,7 +174,7 @@ export function PdfContinuousView({
         scrollFrameRef.current = null;
       }
     };
-  }, [adapter, frameRef, virtualizer]);
+  }, [adapter, frameRef, getPageSize, position.totalPages, virtualizer]);
 
   const viewport = frameRef.current;
   const viewportStart = viewport?.scrollTop ?? 0;
@@ -209,6 +211,7 @@ export function PdfContinuousView({
               onMetrics={handleMetrics}
               onSelectionEnd={onSelectionEnd}
               pageNumber={pageNumber}
+              renderVersion={renderVersion}
               scale={position.scale}
               zoomMode={position.zoomMode}
             />
