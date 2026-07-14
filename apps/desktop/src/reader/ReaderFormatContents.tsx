@@ -52,12 +52,15 @@ import {
   type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
 import {
+  nextPdfSpreadStart,
   PdfReaderAdapter,
+  previousPdfSpreadStart,
   type PdfPosition,
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
 import { PdfContinuousView } from "../pdf/PdfContinuousView";
 import { resolvePdfLocatorAnchorKind } from "../pdf/PdfContinuousPosition";
+import { PdfPaginatedView } from "../pdf/PdfPaginatedView";
 
 import {
   DEFAULT_HIGHLIGHT_COLOR,
@@ -89,6 +92,7 @@ import {
 import {
   animateIsolatedPageTransition,
   captureEpubRenditionSnapshotAfterLayout,
+  capturePdfSpreadSnapshot,
   captureTxtSpreadSnapshot,
   type PageSnapshot,
 } from "./transitions/PageTransitionLayer";
@@ -170,18 +174,6 @@ export interface PendingEpubProgress {
 export interface PendingPdfProgress {
   locator: PdfLocator;
   progress?: number;
-}
-
-export interface PdfRenderedHighlight {
-  annotation: Annotation;
-  color: string;
-  hasHighlight: boolean;
-  hasNote: boolean;
-  height: number;
-  id: string;
-  width: number;
-  x: number;
-  y: number;
 }
 
 export interface ReaderNavigationActions {
@@ -2092,16 +2084,15 @@ export function PdfReaderContent({
 }: PdfReaderContentProps) {
   const frameRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<PdfReaderAdapter | null>(null);
-  const canvasRefs = useRef<Array<HTMLCanvasElement | null>>([]);
-  const textLayerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const isDraggingProgressRef = useRef(false);
   const pendingProgressRef = useRef<PendingPdfProgress | null>(null);
   const positionRef = useRef<PdfPosition | null>(null);
   const previewPositionRef = useRef<PdfPosition | null>(null);
   const progressIdleTimerRef = useRef<number | null>(null);
-  const renderSequenceRef = useRef(0);
   const requestedViewModeRef = useRef<PdfViewMode>(viewMode);
-  const annotationsRef = useRef(annotations);
+  const pdfTransitionControllerRef =
+    useRef<PageTransitionController<PageSnapshot> | null>(null);
+  const pendingPdfTargetSnapshotRef = useRef<PageSnapshot | null>(null);
   const themeRef = useRef(theme);
   const tocItemsRef = useRef(tocItems);
   const [error, setError] = useState<string | null>(null);
@@ -2112,10 +2103,8 @@ export function PdfReaderContent({
   const [frameWidth, setFrameWidth] = useState(1000);
   const [pdfNavigationVersion, setPdfNavigationVersion] = useState(0);
   const [pdfRenderVersion, setPdfRenderVersion] = useState(0);
+  const [isPdfTransitioning, setIsPdfTransitioning] = useState(false);
   const [pdfAdapter, setPdfAdapter] = useState<PdfReaderAdapter | null>(null);
-  const [pdfHighlightRectsByPage, setPdfHighlightRectsByPage] = useState<
-    Record<number, PdfRenderedHighlight[]>
-  >({});
   const [position, setPosition] = useState<PdfPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<PdfPosition | null>(null);
 
@@ -2171,129 +2160,8 @@ export function PdfReaderContent({
   );
 
   const renderVisiblePages = useCallback(async () => {
-    const adapter = adapterRef.current;
-
-    if (adapter === null) {
-      return;
-    }
-
-    const renderSequence = renderSequenceRef.current + 1;
-    renderSequenceRef.current = renderSequence;
-
-    try {
-      const visiblePages = adapter.getVisiblePages();
-      const nextHighlightRectsByPage: Record<number, PdfRenderedHighlight[]> = {};
-
-      for (const [index, pageNumber] of visiblePages.entries()) {
-        const canvas = canvasRefs.current[index];
-
-        if (canvas === undefined || canvas === null) {
-          continue;
-        }
-
-        canvas.hidden = false;
-        canvas.dataset.pageNumber = String(pageNumber);
-        await adapter.renderPage(canvas, pageNumber);
-
-        if (renderSequenceRef.current !== renderSequence) {
-          return;
-        }
-
-        const textLayer = textLayerRefs.current[index];
-
-        if (textLayer !== undefined && textLayer !== null) {
-          textLayer.hidden = false;
-          await adapter.renderTextLayer(textLayer, pageNumber);
-        }
-
-        if (renderSequenceRef.current !== renderSequence) {
-          return;
-        }
-
-        const pageHighlights = getPdfVisibleAnnotations(
-          annotationsRef.current,
-          pageNumber,
-        );
-        const pageRects: PdfRenderedHighlight[] = [];
-
-        for (const annotation of pageHighlights) {
-          const rects = annotation.locator.rects;
-
-          if (rects === undefined || rects.length === 0) {
-            continue;
-          }
-
-          const viewportRects = await adapter.pdfRectsToViewportRects(
-            pageNumber,
-            rects,
-            positionRef.current?.scale,
-          );
-
-          if (renderSequenceRef.current !== renderSequence) {
-            return;
-          }
-
-          pageRects.push(
-            ...viewportRects.map((rect, rectIndex) => ({
-              annotation,
-              id: `${annotation.id}-${rectIndex}`,
-              color: annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
-              hasHighlight: annotation.type === "highlight",
-              hasNote: annotationHasNote(annotation),
-              ...rect,
-            })),
-          );
-        }
-
-        nextHighlightRectsByPage[pageNumber] = pageRects;
-      }
-
-      for (
-        let index = visiblePages.length;
-        index < canvasRefs.current.length;
-        index += 1
-      ) {
-        const canvas = canvasRefs.current[index];
-
-        if (canvas !== undefined && canvas !== null) {
-          canvas.hidden = true;
-          canvas.removeAttribute("data-page-number");
-        }
-
-        const textLayer = textLayerRefs.current[index];
-
-        if (textLayer !== undefined && textLayer !== null) {
-          textLayer.hidden = true;
-          textLayer.replaceChildren();
-          textLayer.removeAttribute("data-page-number");
-        }
-      }
-
-      if (renderSequenceRef.current === renderSequence) {
-        setPdfHighlightRectsByPage(nextHighlightRectsByPage);
-      }
-    } catch (renderError) {
-      if (renderSequenceRef.current === renderSequence) {
-        setError(getErrorMessage(renderError));
-      }
-    }
+    setPdfRenderVersion((version) => version + 1);
   }, []);
-
-  useEffect(() => {
-    annotationsRef.current = annotations;
-
-    if (adapterRef.current === null) {
-      return;
-    }
-
-    const frameHandle = window.requestAnimationFrame(() => {
-      void renderVisiblePages();
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frameHandle);
-    };
-  }, [annotations, renderVisiblePages]);
 
   const handlePositionChange = useCallback(
     (nextPosition: PdfPosition) => {
@@ -2412,8 +2280,8 @@ export function PdfReaderContent({
 
   useEffect(() => {
     themeRef.current = theme;
+    pdfTransitionControllerRef.current?.cancel();
     void adapterRef.current?.setTheme(theme).then(() => {
-      setPdfRenderVersion((version) => version + 1);
       setPdfNavigationVersion((version) => version + 1);
       return renderVisiblePages();
     });
@@ -2427,7 +2295,7 @@ export function PdfReaderContent({
         return;
       }
       devicePixelRatio = nextDevicePixelRatio;
-      setPdfRenderVersion((version) => version + 1);
+      pdfTransitionControllerRef.current?.cancel();
       setPdfNavigationVersion((version) => version + 1);
       void renderVisiblePages();
     };
@@ -2519,7 +2387,6 @@ export function PdfReaderContent({
 
     return () => {
       isCurrent = false;
-      renderSequenceRef.current += 1;
       if (adapterRef.current === openedAdapter) {
         adapterRef.current = null;
       }
@@ -2555,6 +2422,7 @@ export function PdfReaderContent({
       }
 
       try {
+        pdfTransitionControllerRef.current?.cancel();
         setFrameWidth(Math.max(1, frame.clientWidth));
         const nextPosition = adapter.setViewMode(
           requestedViewModeRef.current,
@@ -2589,6 +2457,7 @@ export function PdfReaderContent({
       window.getSelection()?.removeAllRanges();
 
       try {
+        pdfTransitionControllerRef.current?.cancel();
         await adapter.goTo(locator);
         setPdfNavigationVersion((version) => version + 1);
         await renderVisiblePages();
@@ -2631,6 +2500,8 @@ export function PdfReaderContent({
         return;
       }
 
+      pdfTransitionControllerRef.current?.cancel();
+
       void Promise.resolve(action(adapter))
         .then(() => {
           setPdfNavigationVersion((version) => version + 1);
@@ -2643,13 +2514,127 @@ export function PdfReaderContent({
     [renderVisiblePages],
   );
 
+  useEffect(() => {
+    const controller = new PageTransitionController<PageSnapshot>({
+      animate: async (frames, mode, signal) => {
+        const frame = frameRef.current;
+        if (frame === null) {
+          return;
+        }
+        setIsPdfTransitioning(true);
+        try {
+          await animateIsolatedPageTransition(frame, frames, mode, signal);
+        } finally {
+          setIsPdfTransitioning(false);
+        }
+      },
+      captureCurrent: () => {
+        const currentPosition = positionRef.current;
+        return currentPosition === null
+          ? null
+          : capturePdfSpreadSnapshot(frameRef.current, currentPosition.page);
+      },
+      captureTarget: () => pendingPdfTargetSnapshotRef.current,
+      commit: () => {
+        pendingPdfTargetSnapshotRef.current = null;
+      },
+      getMode: () => resolvePageTransitionMode(transition, isPageCurlBlocked),
+      navigate: async (direction) => {
+        const adapter = adapterRef.current;
+        const currentPosition = positionRef.current;
+        if (adapter === null || currentPosition === null) {
+          return;
+        }
+        const targetSpread =
+          currentPosition.renderedMode === "double"
+            ? direction === "next"
+              ? nextPdfSpreadStart(currentPosition.page, currentPosition.totalPages)
+              : previousPdfSpreadStart(currentPosition.page, currentPosition.totalPages)
+            : normalizeReaderPage(
+                currentPosition.page + (direction === "next" ? 1 : -1),
+                currentPosition.totalPages,
+              );
+        pendingPdfTargetSnapshotRef.current =
+          targetSpread === currentPosition.page
+            ? null
+            : capturePdfSpreadSnapshot(frameRef.current, targetSpread);
+        if (targetSpread === currentPosition.page) {
+          return;
+        }
+        if (direction === "next") {
+          await adapter.next();
+        } else {
+          await adapter.previous();
+        }
+      },
+      prefersReducedMotion: () =>
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+    });
+    pdfTransitionControllerRef.current = controller;
+
+    return () => {
+      controller.cancel();
+      pendingPdfTargetSnapshotRef.current = null;
+      if (pdfTransitionControllerRef.current === controller) {
+        pdfTransitionControllerRef.current = null;
+      }
+    };
+  }, [isPageCurlBlocked, transition]);
+
+  const requestPdfPageMove = useCallback(
+    (direction: PageDirection) => {
+      if (positionRef.current?.renderedMode === "continuous") {
+        runPdfAction((adapter) =>
+          direction === "next" ? adapter.next() : adapter.previous(),
+        );
+        return;
+      }
+      void pdfTransitionControllerRef.current?.request(direction);
+    },
+    [runPdfAction],
+  );
+
   const handlePrevious = useCallback(() => {
-    runPdfAction((adapter) => adapter.previous());
-  }, [runPdfAction]);
+    requestPdfPageMove("previous");
+  }, [requestPdfPageMove]);
 
   const handleNext = useCallback(() => {
-    runPdfAction((adapter) => adapter.next());
-  }, [runPdfAction]);
+    requestPdfPageMove("next");
+  }, [requestPdfPageMove]);
+
+  const handlePdfFrameKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+        return;
+      }
+      event.preventDefault();
+      requestPdfPageMove(event.key === "ArrowRight" ? "next" : "previous");
+    },
+    [requestPdfPageMove],
+  );
+
+  const handlePdfFrameClick = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>) => {
+      const target = event.target;
+      if (
+        !(target instanceof Element) ||
+        target.closest(
+          "button, input, a, [role='button'], .reader-pdf-text-layer, .reader-transition-layer",
+        ) !== null ||
+        window.getSelection()?.toString().trim()
+      ) {
+        return;
+      }
+      const frameRect = event.currentTarget.getBoundingClientRect();
+      const relativeX = event.clientX - frameRect.left;
+      if (relativeX <= frameRect.width * 0.2) {
+        requestPdfPageMove("previous");
+      } else if (relativeX >= frameRect.width * 0.8) {
+        requestPdfPageMove("next");
+      }
+    },
+    [requestPdfPageMove],
+  );
 
   useEffect(() => {
     onNavigationActionsChange({
@@ -2767,8 +2752,6 @@ export function PdfReaderContent({
   }, [goToPdfLocator]);
 
   const activeProgress = previewPosition ?? position;
-  const visiblePageNumbers =
-    position === null ? [] : getPdfVisiblePageNumbers(position);
   const pageLabel =
     activeProgress === null ? "Pages loading" : getPdfPageLabel(activeProgress);
   const zoomLabel = position === null ? "100%" : `${Math.round(position.scale * 100)}%`;
@@ -2801,6 +2784,8 @@ export function PdfReaderContent({
           ref={frameRef}
           className="reader-pdf-frame"
           aria-label="PDF pages"
+          onClick={handlePdfFrameClick}
+          onKeyDown={handlePdfFrameKeyDown}
           tabIndex={0}
         >
           {isLoading ? (
@@ -2853,102 +2838,20 @@ export function PdfReaderContent({
               position={position}
               renderVersion={pdfRenderVersion}
             />
-          ) : (
-            <div
-              className={`reader-pdf-stage reader-pdf-stage--${position?.renderedMode ?? "single"}`}
-              aria-hidden={error !== null}
-            >
-              {[0, 1].map((index) => (
-                <div
-                  key={index}
-                  className="reader-pdf-sheet"
-                  hidden={visiblePageNumbers[index] === undefined}
-                  onKeyUp={capturePdfSelection}
-                  onMouseUp={capturePdfSelection}
-                >
-                  <canvas
-                    ref={(canvas) => {
-                      canvasRefs.current[index] = canvas;
-                    }}
-                    className="reader-pdf-canvas"
-                    aria-label={
-                      visiblePageNumbers[index] === undefined
-                        ? undefined
-                        : `PDF page ${visiblePageNumbers[index]}`
-                    }
-                  />
-                  <div
-                    ref={(textLayer) => {
-                      textLayerRefs.current[index] = textLayer;
-                    }}
-                    className="reader-pdf-text-layer"
-                    aria-hidden="true"
-                  />
-                  <div className="reader-pdf-highlight-layer">
-                    {(
-                      pdfHighlightRectsByPage[visiblePageNumbers[index] ?? -1] ?? []
-                    ).map((highlight) => {
-                      const className = `reader-pdf-highlight-rect ${
-                        highlight.hasHighlight
-                          ? "reader-pdf-highlight-rect--highlight"
-                          : ""
-                      } ${highlight.hasNote ? "reader-pdf-highlight-rect--note" : ""}`;
-                      const style = {
-                        "--reader-highlight-color": highlight.color,
-                        height: `${highlight.height}px`,
-                        left: `${highlight.x}px`,
-                        top: `${highlight.y}px`,
-                        width: `${highlight.width}px`,
-                      } as CSSProperties;
-
-                      if (!highlight.hasNote) {
-                        return (
-                          <span
-                            key={highlight.id}
-                            className={className}
-                            aria-hidden="true"
-                            style={style}
-                          />
-                        );
-                      }
-
-                      return (
-                        <span
-                          key={highlight.id}
-                          className={className}
-                          role="button"
-                          tabIndex={0}
-                          aria-label={`Edit note for ${
-                            highlight.annotation.selectedText ??
-                            highlight.annotation.locator.selectedText ??
-                            getLocatorLabel(highlight.annotation.locator)
-                          }`}
-                          onClick={(event) => {
-                            onAnnotationActivate(
-                              highlight.annotation,
-                              getElementMenuAnchor(event.currentTarget),
-                            );
-                          }}
-                          onKeyDown={(event) => {
-                            if (event.key !== "Enter" && event.key !== " ") {
-                              return;
-                            }
-
-                            event.preventDefault();
-                            onAnnotationActivate(
-                              highlight.annotation,
-                              getElementMenuAnchor(event.currentTarget),
-                            );
-                          }}
-                          style={style}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          ) : position !== null && pdfAdapter !== null ? (
+            <PdfPaginatedView
+              adapter={pdfAdapter}
+              annotations={annotations}
+              availableWidth={frameWidth}
+              isTransitioning={isPdfTransitioning}
+              onAnnotationActivate={(annotation, element) =>
+                onAnnotationActivate(annotation, getElementMenuAnchor(element))
+              }
+              onSelectionEnd={capturePdfSelection}
+              position={position}
+              renderVersion={pdfRenderVersion}
+            />
+          ) : null}
         </div>
         <div
           className="reader-epub-controls reader-pdf-controls"

@@ -412,6 +412,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
       return [this.currentPage];
     }
 
+    if (this.currentPage === 1) {
+      return [1];
+    }
+
     return [this.currentPage, this.currentPage + 1].filter(
       (pageNumber) => pageNumber <= document.numPages,
     );
