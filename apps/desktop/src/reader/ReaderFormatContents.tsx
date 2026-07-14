@@ -30,6 +30,7 @@ import {
   type TxtChapter,
   type TxtDocument,
   type TxtLocator,
+  type TxtPaginatedViewMode,
   type TxtViewMode,
 } from "@reader/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -93,6 +94,7 @@ import {
   animateIsolatedPageTransition,
   captureEpubRenditionSnapshotAfterLayout,
   capturePdfSpreadSnapshot,
+  capturePdfSpreadSnapshotAfterRender,
   captureTxtSpreadSnapshot,
   type PageSnapshot,
 } from "./transitions/PageTransitionLayer";
@@ -196,10 +198,12 @@ export interface TxtReaderContentProps {
   jumpRequest: TxtJumpRequest | null;
   theme: ReaderTheme;
   transition: PageTransitionMode;
+  paginatedViewMode: TxtPaginatedViewMode;
   viewMode: TxtViewMode;
   onActiveChapterChange: (chapterId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
+  onPaginatedViewModeChange: (mode: TxtPaginatedViewMode) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onRetry: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
@@ -581,11 +585,13 @@ function TxtPaginatedReaderContent({
   isPageCurlBlocked,
   isLoading,
   jumpRequest,
+  paginatedViewMode,
   theme,
   transition,
   onActiveChapterChange,
   onAnnotationActivate,
   onNavigationActionsChange,
+  onPaginatedViewModeChange,
   onProgressChange,
   onRetry,
   onSelectionChange,
@@ -613,8 +619,7 @@ function TxtPaginatedReaderContent({
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [paginationError, setPaginationError] = useState<string | null>(null);
   const [isPaginating, setIsPaginating] = useState(true);
-  const [requestedSpreadMode, setRequestedSpreadMode] =
-    useState<TxtSpreadMode>("single");
+  const requestedSpreadMode: TxtSpreadMode = paginatedViewMode;
   const [frameSize, setFrameSize] = useState<{
     bookId: string | null;
     height: number;
@@ -1077,9 +1082,9 @@ function TxtPaginatedReaderContent({
       if (activePage !== undefined) {
         currentAnchorRef.current = activePage.startCharOffset;
       }
-      setRequestedSpreadMode(mode);
+      onPaginatedViewModeChange(mode);
     },
-    [pages],
+    [onPaginatedViewModeChange, pages],
   );
   const commitPageInput = useCallback(() => {
     const pageNumber = Number.parseInt(pageInput, 10);
@@ -2544,10 +2549,15 @@ export function PdfReaderContent({
           setIsPdfTransitioning(false);
         }
       },
-      captureCurrent: () => {
+      captureCurrent: (signal) => {
         const currentPosition = positionRef.current;
-        return currentPosition === null
-          ? null
+        if (currentPosition === null) return null;
+        return currentPosition.renderedMode === "double"
+          ? capturePdfSpreadSnapshotAfterRender(
+              frameRef.current,
+              currentPosition.page,
+              signal,
+            )
           : capturePdfSpreadSnapshot(frameRef.current, currentPosition.page);
       },
       captureTarget: () => pendingPdfTargetSnapshotRef.current,
@@ -2555,7 +2565,7 @@ export function PdfReaderContent({
         pendingPdfTargetSnapshotRef.current = null;
       },
       getMode: () => resolvePageTransitionMode(transition, isPageCurlBlocked),
-      navigate: async (direction) => {
+      navigate: async (direction, signal, shouldCaptureTarget) => {
         const adapter = adapterRef.current;
         const currentPosition = positionRef.current;
         if (adapter === null || currentPosition === null) {
@@ -2570,13 +2580,20 @@ export function PdfReaderContent({
                 currentPosition.page + (direction === "next" ? 1 : -1),
                 currentPosition.totalPages,
               );
-        pendingPdfTargetSnapshotRef.current =
-          targetSpread === currentPosition.page
-            ? null
-            : capturePdfSpreadSnapshot(frameRef.current, targetSpread);
         if (targetSpread === currentPosition.page) {
+          pendingPdfTargetSnapshotRef.current = null;
           return;
         }
+        pendingPdfTargetSnapshotRef.current = shouldCaptureTarget
+          ? currentPosition.renderedMode === "double"
+            ? await capturePdfSpreadSnapshotAfterRender(
+                frameRef.current,
+                targetSpread,
+                signal,
+              )
+            : capturePdfSpreadSnapshot(frameRef.current, targetSpread)
+          : null;
+        if (signal.aborted) return;
         if (direction === "next") {
           await adapter.next();
         } else {

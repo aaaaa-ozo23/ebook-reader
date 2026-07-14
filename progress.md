@@ -1916,3 +1916,15 @@
 - **最终门禁：** `pnpm.cmd check` passed（core 7、desktop 151）；Cargo fmt check 与 Rust 36 tests passed；Playwright 15/15 passed；Tauri NSIS/MSI build passed；包体书架入口 67.20 kB gzip、ReaderShell 51.35 kB gzip，PDF runtime 继续懒加载。
 - **状态：** 12.7 complete；未新增依赖、schema、格式、版本或 Release。按计划提交验收分支、`--no-ff` 合回 `codex/v0.2.0-integration`，再合入 `main` 并推送两条分支。
 - **最终 lint 调整：** React refs 规则禁止 render 阶段按 book 重置会话对象；改为仅在用户事件中记录 `dirtyBookId`，异步读取以 dirty id 是否等于当前 `book.id` 判断，换书天然失效且无需 render/effect 写 ref。
+
+## 2026-07-14 大阶段 12.8：阅读模式修复
+
+- **状态：** complete
+- **分支：** `codex/stage12-reader-mode-fixes`，基线为已完成阶段 12 的 `main` `8ae820c`；仅保留用户未跟踪 `AGENTS.md`。
+- **目标 1：** 复现并修复 PDF paginated Double 中 None/Smooth/Cover/Realistic 实际均无展示层的问题，验证准确 Double current/target spread 与动画时长。
+- **目标 2：** TXT 从 Continuous 返回分页时恢复上次 requested Single/Double，而不是固定 Single；偏好继续使用现有 v1 envelope，不新增迁移。
+- **PDF 修复：** Double current/target spread 使用可取消、限时 600ms 的准确 Canvas 快照等待；两页必须全部 ready 且 identity/像素复制成功才播放。current 捕获失败时跳过 target 准备并立即真实导航，None/reduced-motion/失败回退语义不变，Single 保持同步路径。
+- **TXT 修复：** v1 `reader_experience` envelope 新增向后兼容的 `txt.paginatedViewMode`，旧设置默认 Single；底栏 Single/Double 立即持久化，Continuous 只改变 `viewMode`，返回任意分页动画后恢复上次布局，跨重启同样有效。
+- **自动化：** core 8 tests、desktop 152 tests、Rust 36 tests passed；500 页 PDF 在 Chromium/DPR2 逐项验证 Smooth/Cover/Realistic 的 current 10–11、target 12–13 与最终 spread，seeded TXT 验证 Double → Continuous → Smooth 仍为 Double；全量 Playwright 15/15 passed。
+- **Browser/视觉：** 应用内 Browser 成功连接本地 Vite，书架首屏语义结构正常且 console warning/error 为 0；复杂 seeded TXT/PDF 继续由仓库 Playwright fixture 验证。
+- **最终门禁：** `pnpm.cmd check`、Cargo fmt check、Rust 36 tests、Playwright 15/15、`git diff --check`、Tauri NSIS/MSI build 全部通过。书架入口 67.21 kB gzip、ReaderShell 51.63 kB gzip，PDF runtime 继续懒加载；未新增依赖、schema、格式、版本或 Release。

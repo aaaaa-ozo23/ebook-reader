@@ -8,6 +8,7 @@ export type ReaderThemeMode = "light" | "dark" | "sepia" | "green";
 export type PageTransitionMode = "none" | "slide" | "cover" | "page-curl";
 export type EpubViewMode = "paginated";
 export type TxtViewMode = "scroll" | "paginated";
+export type TxtPaginatedViewMode = "single" | "double";
 export type PdfPaginatedViewMode = "single" | "double";
 export type PdfViewMode = "single" | "double" | "continuous";
 export type ReaderViewMode = EpubViewMode | TxtViewMode | PdfViewMode;
@@ -26,6 +27,7 @@ export interface ReaderExperiencePreferences {
   };
   txt: {
     viewMode: TxtViewMode;
+    paginatedViewMode: TxtPaginatedViewMode;
     transition: PageTransitionMode;
   };
   pdf: {
@@ -224,7 +226,7 @@ export const readerCapabilitiesByFormat: Readonly<
 
 export const defaultReaderExperiencePreferences: ReaderExperiencePreferences = {
   epub: { viewMode: "paginated", transition: "none" },
-  txt: { viewMode: "scroll", transition: "slide" },
+  txt: { viewMode: "scroll", paginatedViewMode: "single", transition: "slide" },
   pdf: { viewMode: "single", paginatedViewMode: "single", transition: "slide" },
 };
 
@@ -249,6 +251,10 @@ export function normalizeReaderExperiencePreferences(
         txt.viewMode === "paginated" || txt.viewMode === "scroll"
           ? txt.viewMode
           : defaultReaderExperiencePreferences.txt.viewMode,
+      paginatedViewMode:
+        txt.paginatedViewMode === "double" || txt.paginatedViewMode === "single"
+          ? txt.paginatedViewMode
+          : defaultReaderExperiencePreferences.txt.paginatedViewMode,
       transition: normalizePageTransition(
         txt.transition,
         defaultReaderExperiencePreferences.txt.transition,

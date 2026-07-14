@@ -1281,11 +1281,34 @@ describe("App", () => {
     await user.click(within(readingModeGroup).getByRole("radio", { name: "None" }));
     expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        txt: { viewMode: "paginated", transition: "none" },
+        txt: {
+          viewMode: "paginated",
+          paginatedViewMode: "single",
+          transition: "none",
+        },
       }),
     );
     expect(await screen.findByRole("group", { name: "TXT page view" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Double" }));
+    expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        txt: {
+          viewMode: "paginated",
+          paginatedViewMode: "double",
+          transition: "none",
+        },
+      }),
+    );
+    await user.click(
+      within(readingModeGroup).getByRole("radio", { name: "Continuous" }),
+    );
+    await user.click(within(readingModeGroup).getByRole("radio", { name: "Smooth" }));
+    expect(await screen.findByRole("button", { name: "Double" })).toHaveAttribute(
       "aria-pressed",
       "true",
     );
@@ -1304,7 +1327,11 @@ describe("App", () => {
     openTxtBookMock.mockResolvedValueOnce(txtDocument);
     getReaderExperiencePreferencesMock.mockResolvedValueOnce({
       ...defaultReaderExperiencePreferences,
-      txt: { viewMode: "paginated", transition: "slide" },
+      txt: {
+        viewMode: "paginated",
+        paginatedViewMode: "single",
+        transition: "slide",
+      },
     });
     getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
       cacheKey === "txt_pagination_v1"
@@ -1392,7 +1419,11 @@ describe("App", () => {
     });
     getReaderExperiencePreferencesMock.mockResolvedValueOnce({
       ...defaultReaderExperiencePreferences,
-      txt: { viewMode: "paginated", transition: "none" },
+      txt: {
+        viewMode: "paginated",
+        paginatedViewMode: "single",
+        transition: "none",
+      },
     });
     getReaderCacheMock.mockImplementation(async (_book, cacheKey) =>
       cacheKey === "txt_pagination_v1"
@@ -2776,7 +2807,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("Page 1 / 3")).toBeVisible());
 
     await user.click(within(reader).getByRole("button", { name: "Next" }));
-    expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByText("Page 3 / 3")).toBeVisible());
 
     const pageInput = within(reader).getByRole("spinbutton", {

@@ -22,11 +22,15 @@ interface PageTransitionControllerOptions<TSnapshot> {
     mode: Exclude<PageTransitionMode, "none">,
     signal: AbortSignal,
   ) => Promise<void>;
-  captureCurrent: () => Promise<TSnapshot | null> | TSnapshot | null;
-  captureTarget: () => Promise<TSnapshot | null> | TSnapshot | null;
+  captureCurrent: (signal: AbortSignal) => Promise<TSnapshot | null> | TSnapshot | null;
+  captureTarget: (signal: AbortSignal) => Promise<TSnapshot | null> | TSnapshot | null;
   commit: (direction: PageDirection) => Promise<void> | void;
   getMode: () => PageTransitionMode;
-  navigate: (direction: PageDirection) => Promise<void>;
+  navigate: (
+    direction: PageDirection,
+    signal: AbortSignal,
+    shouldCaptureTarget: boolean,
+  ) => Promise<void>;
   onRecoverableError?: (error: unknown) => void;
   prefersReducedMotion: () => boolean;
 }
@@ -80,13 +84,20 @@ export class PageTransitionController<TSnapshot> {
       const mode = this.options.getMode();
       const canAnimate = mode !== "none" && !this.options.prefersReducedMotion();
       const current = canAnimate
-        ? await this.captureSafely(this.options.captureCurrent)
+        ? await this.captureSafely(this.options.captureCurrent, abortController.signal)
         : null;
 
-      await this.options.navigate(direction);
+      await this.options.navigate(
+        direction,
+        abortController.signal,
+        canAnimate && current !== null,
+      );
 
       if (canAnimate && current !== null && !abortController.signal.aborted) {
-        const target = await this.captureSafely(this.options.captureTarget);
+        const target = await this.captureSafely(
+          this.options.captureTarget,
+          abortController.signal,
+        );
 
         if (target !== null) {
           try {
@@ -110,10 +121,11 @@ export class PageTransitionController<TSnapshot> {
   }
 
   private async captureSafely(
-    capture: () => Promise<TSnapshot | null> | TSnapshot | null,
+    capture: (signal: AbortSignal) => Promise<TSnapshot | null> | TSnapshot | null,
+    signal: AbortSignal,
   ): Promise<TSnapshot | null> {
     try {
-      return await capture();
+      return await capture(signal);
     } catch (error) {
       this.options.onRecoverableError?.(error);
       return null;

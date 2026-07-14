@@ -11,6 +11,7 @@ import {
   type PdfLocator,
   type PdfPaginatedViewMode,
   type PdfViewMode,
+  type TxtPaginatedViewMode,
   type TxtViewMode,
 } from "../src/index";
 
@@ -18,6 +19,7 @@ describe("reader experience contracts", () => {
   it("exposes the locked view and transition unions", () => {
     expectTypeOf<EpubViewMode>().toEqualTypeOf<"paginated">();
     expectTypeOf<TxtViewMode>().toEqualTypeOf<"scroll" | "paginated">();
+    expectTypeOf<TxtPaginatedViewMode>().toEqualTypeOf<"single" | "double">();
     expectTypeOf<PdfViewMode>().toEqualTypeOf<"single" | "double" | "continuous">();
     expectTypeOf<PdfPaginatedViewMode>().toEqualTypeOf<"single" | "double">();
     expectTypeOf<PageTransitionMode>().toEqualTypeOf<
@@ -28,7 +30,7 @@ describe("reader experience contracts", () => {
   it("uses the v0.2 defaults and format capability matrix", () => {
     expect(defaultReaderExperiencePreferences).toEqual({
       epub: { viewMode: "paginated", transition: "none" },
-      txt: { viewMode: "scroll", transition: "slide" },
+      txt: { viewMode: "scroll", paginatedViewMode: "single", transition: "slide" },
       pdf: {
         viewMode: "single",
         paginatedViewMode: "single",
@@ -66,7 +68,11 @@ describe("reader experience contracts", () => {
     expect(
       normalizeReaderExperiencePreferences({
         epub: { viewMode: "scrolled", transition: "fade" },
-        txt: { viewMode: "paginated", transition: "page-curl" },
+        txt: {
+          viewMode: "paginated",
+          paginatedViewMode: "double",
+          transition: "page-curl",
+        },
         pdf: {
           viewMode: "continuous",
           paginatedViewMode: "double",
@@ -76,13 +82,30 @@ describe("reader experience contracts", () => {
       }),
     ).toEqual({
       epub: { viewMode: "paginated", transition: "none" },
-      txt: { viewMode: "paginated", transition: "page-curl" },
+      txt: {
+        viewMode: "paginated",
+        paginatedViewMode: "double",
+        transition: "page-curl",
+      },
       pdf: {
         viewMode: "continuous",
         paginatedViewMode: "double",
         transition: "none",
       },
     });
+  });
+
+  it("defaults legacy TXT settings to single and preserves an explicit double mode", () => {
+    expect(
+      normalizeReaderExperiencePreferences({
+        txt: { viewMode: "paginated", transition: "slide" },
+      }).txt.paginatedViewMode,
+    ).toBe("single");
+    expect(
+      normalizeReaderExperiencePreferences({
+        txt: { viewMode: "scroll", paginatedViewMode: "double" },
+      }).txt.paginatedViewMode,
+    ).toBe("double");
   });
 
   it("derives a legacy paginated PDF mode and defaults continuous-only settings", () => {

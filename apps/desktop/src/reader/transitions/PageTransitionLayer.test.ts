@@ -6,6 +6,7 @@ import {
   captureEpubRenditionSnapshotAfterLayout,
   capturePageSnapshot,
   capturePdfSpreadSnapshot,
+  capturePdfSpreadSnapshotAfterRender,
   captureTxtSpreadSnapshot,
   PAGE_TRANSITION_DURATIONS,
   serializeSanitizedDocument,
@@ -105,6 +106,37 @@ describe("isolated page transition layer", () => {
       </div>
     </div>`;
     expect(capturePdfSpreadSnapshot(host, 8)).toBeNull();
+  });
+
+  it("waits for every canvas in the exact PDF double spread", async () => {
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const host = document.createElement("div");
+    host.innerHTML = `<div class="reader-pdf-spread" data-spread-start="4">
+      <div class="reader-pdf-page-surface" data-render-ready="true">
+        <canvas data-page-number="4" width="10" height="10"></canvas>
+      </div>
+      <div class="reader-pdf-page-surface" data-render-ready="false">
+        <canvas data-page-number="5" width="10" height="10"></canvas>
+      </div>
+    </div>`;
+    const pendingSnapshot = capturePdfSpreadSnapshotAfterRender(host, 4);
+    const secondSurface = host.querySelectorAll<HTMLElement>(
+      ".reader-pdf-page-surface",
+    )[1];
+    secondSurface!.dataset.renderReady = "true";
+
+    const snapshot = await pendingSnapshot;
+
+    expect(snapshot?.node).toHaveAttribute("data-spread-start", "4");
+    expect(
+      Array.from(snapshot?.node.querySelectorAll("canvas") ?? []).map(
+        (canvas) => canvas.dataset.pageNumber,
+      ),
+    ).toEqual(["4", "5"]);
+    expect(drawImage).toHaveBeenCalledTimes(2);
   });
 
   it("animates smooth as a full-width two-page movement", async () => {
