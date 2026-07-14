@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.6 PDF 分页动画：complete；下一步从已合并 12.6 的 `codex/v0.2.0-integration` 建立 12.7 验收分支，生成 500 页 fixture 并完成性能、视觉、响应式、无障碍、全量门禁、main 合并和推送；不新增 schema、版本或 Release。
+大阶段 12 PDF 连续模式：complete；12.1–12.7 已按独立分支实施并通过 500 页 DPR1/DPR2、性能、视觉、响应式、无障碍、全量测试和 NSIS/MSI 打包门禁，最终同步 `codex/v0.2.0-integration` 与 `main`；未新增 schema、依赖、版本或 Release。
 
 ## 分支策略
 
@@ -477,6 +477,8 @@
 | 12.5 导航与标注整合 | `codex/stage12-pdf-navigation-integrations` | 目录、搜索、页码输入、书签、批注跳转滚动到目标页/rect，保留单页文本选择限制 | 所有跳转在 continuous 正确；高亮重放和选择菜单只绑定可见层；无跨页选择承诺 |
 | 12.6 PDF 分页动画 | `codex/stage12-pdf-page-transitions` | single/double 接入 none/slide/page-curl；continuous 强制自然滚动 | Canvas 展示层结束后文本/标注恢复；双页奇偶、末页、快速输入和降级测试通过 |
 | 12.7 阶段 12 验收 | `codex/stage12-pdf-acceptance` | 完成 500 页性能、内存、视觉、a11y 和三模式回归 | 全局门禁、Browser/Playwright/axe/Tauri build 通过；合入 main 并同步集成分支 |
+
+阶段 12 已于 2026-07-14 完成。500 页 fixture 的高成本 surface ≤6、分页 Canvas ≤3/6、DPR1/DPR2 和四主题通过；Browser/IAB bootstrap 环境故障已记录并由项目 Playwright 三档截图与真实交互补齐。验收账本见 `docs/design/v0.2/stage12-pdf-continuous-fidelity.md`。
 
 ## 大阶段 13：产品收口与数据安全
 

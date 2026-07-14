@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 function collectConsoleIssues(page: Page): string[] {
@@ -1662,7 +1662,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
     "aria-pressed",
     "true",
   );
-  await expect(page.getByText("Pages 1-2 / 3")).toBeVisible();
+  await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
   await page.getByRole("button", { name: "Fit width" }).click();
   await expect(page.locator(".reader-pdf-zoom-group strong")).not.toHaveText("100%");
@@ -1672,6 +1672,314 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await expect(
     page.getByRole("main", { name: "Ebook Reader bookshelf" }),
   ).toBeVisible();
+  expect(
+    consoleIssues.filter(
+      (issue) =>
+        !issue.includes("Canvas2D: Multiple readback operations using getImageData"),
+    ),
+  ).toEqual([]);
+});
+
+test("virtualizes a generated 500-page PDF and preserves bounded page surfaces", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const consoleIssues = collectConsoleIssues(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.addInitScript(
+    ({ pageCount }) => {
+      const book = {
+        id: "e2e-500-page-pdf",
+        title: "500 Page PDF",
+        format: "pdf",
+        sourcePath: "D:\\books\\500-pages.pdf",
+        libraryPath: "D:\\library\\500-pages.pdf",
+        fileHash: "generated-500-page-pdf-hash",
+        coverStatus: "pending",
+        createdAt: "2026-07-14T08:00:00.000Z",
+        updatedAt: "2026-07-14T08:00:00.000Z",
+      };
+      const padOffset = (offset: number) => String(offset).padStart(10, "0");
+      const createStream = (pageNumber: number) =>
+        [
+          "BT",
+          "/F1 24 Tf",
+          "72 720 Td",
+          `(Virtual PDF Page ${pageNumber}) Tj`,
+          "0 -42 Td",
+          "(Bounded rendering fixture) Tj",
+          "ET",
+        ].join("\n");
+      const kids: string[] = [];
+      const objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      ];
+
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+        const pageObjectNumber = objects.length + 1;
+        const streamObjectNumber = pageObjectNumber + 1;
+        const stream = createStream(pageNumber);
+        kids.push(`${pageObjectNumber} 0 R`);
+        objects.push(
+          `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${streamObjectNumber} 0 R >>`,
+          `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+        );
+      }
+      objects[1] = `<< /Type /Pages /Kids [${kids.join(" ")}] /Count ${pageCount} >>`;
+
+      const offsets: number[] = [0];
+      let pdf = "%PDF-1.4\n% Runtime generated 500-page fixture\n";
+      for (const [index, object] of objects.entries()) {
+        offsets[index + 1] = pdf.length;
+        pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+      }
+      const xrefOffset = pdf.length;
+      pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+      for (let index = 1; index <= objects.length; index += 1) {
+        pdf += `${padOffset(offsets[index])} 00000 n \n`;
+      }
+      pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\n`;
+      pdf += `startxref\n${xrefOffset}\n%%EOF`;
+
+      window.localStorage.setItem("reader:fallback:books", JSON.stringify([book]));
+      window.localStorage.setItem(
+        "reader:fallback:pdfSources",
+        JSON.stringify({
+          "e2e-500-page-pdf": URL.createObjectURL(
+            new Blob([pdf], { type: "application/pdf" }),
+          ),
+        }),
+      );
+      window.localStorage.setItem(
+        "reader:fallback:readerExperience",
+        JSON.stringify({
+          version: 1,
+          preferences: {
+            epub: { viewMode: "paginated", transition: "none" },
+            txt: { viewMode: "continuous", transition: "none" },
+            pdf: {
+              viewMode: "continuous",
+              paginatedViewMode: "single",
+              transition: "slide",
+            },
+          },
+        }),
+      );
+    },
+    { pageCount: 500 },
+  );
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Continue" }).click();
+  const reader = page.getByRole("main", { name: "PDF reader" });
+  await expect(reader).toBeVisible();
+  await page.getByRole("button", { name: "Theme" }).click();
+  await page.getByRole("radio", { name: /Continuous/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".reader-pdf-continuous-list")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.getByText("Page 1 / 500")).toBeVisible();
+  await expect
+    .poll(() => page.locator(".reader-pdf-page-surface").count())
+    .toBeLessThanOrEqual(6);
+  await page.evaluate(() => {
+    const longTasks: number[] = [];
+    (
+      window as Window & {
+        __stage12PdfLongTasks?: number[];
+        __stage12PdfLongTaskObserver?: PerformanceObserver;
+      }
+    ).__stage12PdfLongTasks = longTasks;
+    const observer = new PerformanceObserver((entries) => {
+      longTasks.push(...entries.getEntries().map((entry) => entry.duration));
+    });
+    observer.observe({ type: "longtask", buffered: false });
+    (
+      window as Window & {
+        __stage12PdfLongTaskObserver?: PerformanceObserver;
+      }
+    ).__stage12PdfLongTaskObserver = observer;
+  });
+
+  const pageInput = page.getByRole("spinbutton", { name: "PDF page number" });
+  await pageInput.fill("250");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Page 250 / 500")).toBeVisible();
+  await expect(
+    page.locator('.reader-pdf-page-surface[data-page-number="250"]'),
+  ).toHaveAttribute("data-render-ready", "true", { timeout: 20_000 });
+
+  const continuousBudget = await page.locator(".reader-pdf-frame").evaluate(() => {
+    const canvases = Array.from(
+      document.querySelectorAll<HTMLCanvasElement>(".reader-pdf-canvas"),
+    );
+    return {
+      backingPixels: canvases.reduce(
+        (total, canvas) => total + canvas.width * canvas.height,
+        0,
+      ),
+      canvases: canvases.length,
+      mountedPages: document.querySelectorAll(".reader-pdf-page-surface").length,
+    };
+  });
+  expect(continuousBudget.canvases).toBeLessThanOrEqual(6);
+  expect(continuousBudget.mountedPages).toBeLessThanOrEqual(6);
+  expect(continuousBudget.backingPixels).toBeLessThanOrEqual(12_000_000);
+
+  for (const theme of ["light", "green", "dark", "sepia"]) {
+    await page.getByRole("button", { name: "Theme" }).click();
+    await page.getByRole("button", { name: theme }).click();
+    await expect(reader).toHaveAttribute("data-reader-theme", theme);
+    await page.keyboard.press("Escape");
+    const themedCurrentPage = page.locator(
+      '.reader-pdf-page-surface[data-page-number="250"]',
+    );
+    await expect(themedCurrentPage).toHaveAttribute("data-render-ready", "true", {
+      timeout: 20_000,
+    });
+    await expect.poll(() => pdfCanvasesHaveInk(themedCurrentPage)).toBe(true);
+  }
+
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage12-pdf-continuous-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  const progress = page.getByRole("slider", { name: "PDF reading progress" });
+  await progress.evaluate((element) => {
+    const input = element as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    setter?.call(input, "1000");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+  });
+  await expect(page.getByText("Page 500 / 500")).toBeVisible();
+  await expect(page.locator(".reader-pdf-status").getByText("100%")).toBeVisible();
+
+  await page.getByRole("button", { name: "Theme" }).click();
+  const smoothMode = page.getByRole("radio", { name: /Smooth/ });
+  await smoothMode.click();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
+  await pageInput.fill("10");
+  await pageInput.press("Enter");
+  await expect(page.getByText("Page 10 / 500")).toBeVisible();
+  await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
+  await expect
+    .poll(() => page.locator(".reader-pdf-canvas").count())
+    .toBeLessThanOrEqual(3);
+
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
+  await page.getByRole("button", { name: "Double" }).click();
+  await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible();
+  const currentDoubleSurfaces = page.locator(
+    '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface',
+  );
+  await expect(currentDoubleSurfaces).toHaveCount(2);
+  await expect(currentDoubleSurfaces.nth(0)).toHaveAttribute("data-page-number", "10");
+  await expect(currentDoubleSurfaces.nth(1)).toHaveAttribute("data-page-number", "11");
+  await expect(currentDoubleSurfaces.nth(0)).toHaveAttribute(
+    "data-render-ready",
+    "true",
+    { timeout: 20_000 },
+  );
+  await expect(currentDoubleSurfaces.nth(1)).toHaveAttribute(
+    "data-render-ready",
+    "true",
+    { timeout: 20_000 },
+  );
+  await expect.poll(() => pdfCanvasesHaveInk(currentDoubleSurfaces)).toBe(true);
+  await expect
+    .poll(() => page.locator(".reader-pdf-canvas").count())
+    .toBeLessThanOrEqual(6);
+
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage12-pdf-double-desktop.png",
+      fullPage: true,
+    });
+  }
+
+  await page.setViewportSize({ width: 640, height: 640 });
+  const currentCompactSurface = page.locator(
+    '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface[data-page-number="10"]',
+  );
+  await expect(currentCompactSurface).toHaveAttribute("data-render-ready", "true", {
+    timeout: 20_000,
+  });
+  await expect.poll(() => pdfCanvasesHaveInk(currentCompactSurface)).toBe(true);
+  const compactLayout = await reader.evaluate((element) => ({
+    bodyWidth: document.body.scrollWidth,
+    viewportWidth: window.innerWidth,
+    readerWidth: element.scrollWidth,
+  }));
+  expect(compactLayout.bodyWidth).toBeLessThanOrEqual(compactLayout.viewportWidth);
+  expect(compactLayout.readerWidth).toBeLessThanOrEqual(compactLayout.viewportWidth);
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage12-pdf-compact.png",
+      fullPage: true,
+    });
+  }
+
+  await page.setViewportSize({ width: 375, height: 760 });
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
+  const currentMobileSurface = page.locator(
+    '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface[data-page-number="10"]',
+  );
+  await expect(currentMobileSurface).toHaveAttribute("data-render-ready", "true", {
+    timeout: 20_000,
+  });
+  await expect.poll(() => pdfCanvasesHaveInk(currentMobileSurface)).toBe(true);
+  const mobileLayout = await reader.evaluate((element) => ({
+    bodyWidth: document.body.scrollWidth,
+    viewportWidth: window.innerWidth,
+    readerWidth: element.scrollWidth,
+  }));
+  expect(mobileLayout.bodyWidth).toBeLessThanOrEqual(mobileLayout.viewportWidth);
+  expect(mobileLayout.readerWidth).toBeLessThanOrEqual(mobileLayout.viewportWidth);
+  await expectNoSeriousAccessibilityViolations(page, consoleIssues);
+
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage12-pdf-500-mobile.png",
+      fullPage: true,
+    });
+  }
+  const longTasks = await page.evaluate(() => {
+    const stageWindow = window as Window & {
+      __stage12PdfLongTasks?: number[];
+      __stage12PdfLongTaskObserver?: PerformanceObserver;
+    };
+    stageWindow.__stage12PdfLongTaskObserver?.disconnect();
+    return stageWindow.__stage12PdfLongTasks ?? [];
+  });
+  expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
+
+  await page.getByRole("button", { name: "Shelf", exact: true }).click();
+  await expect(
+    page.getByRole("main", { name: "Ebook Reader bookshelf" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByRole("main", { name: "PDF reader" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   expect(
     consoleIssues.filter(
       (issue) =>
@@ -1710,4 +2018,47 @@ async function firstPdfCanvasHasInk(page: Page): Promise<boolean> {
 
       return false;
     });
+}
+
+async function pdfCanvasesHaveInk(locator: Locator): Promise<boolean> {
+  const canvases = locator.locator(".reader-pdf-canvas");
+  const canvasCount = await canvases.count();
+
+  if (canvasCount === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < canvasCount; index += 1) {
+    const hasInk = await canvases.nth(index).evaluate((canvasElement) => {
+      const canvas = canvasElement as HTMLCanvasElement;
+      const context = canvas.getContext("2d");
+
+      if (canvas.width === 0 || canvas.height === 0 || context === null) {
+        return false;
+      }
+
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let darkPixelCount = 0;
+      for (let pixel = 0; pixel < pixels.length; pixel += 4) {
+        if (
+          pixels[pixel + 3] !== 0 &&
+          pixels[pixel] < 128 &&
+          pixels[pixel + 1] < 128 &&
+          pixels[pixel + 2] < 128
+        ) {
+          darkPixelCount += 1;
+          if (darkPixelCount >= 20) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    if (!hasInk) {
+      return false;
+    }
+  }
+
+  return true;
 }

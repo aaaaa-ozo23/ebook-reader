@@ -1858,6 +1858,17 @@
 
 ## 2026-07-14 大阶段 12：PDF 连续模式
 
+- **12.7 首轮验收问题：** `generated PDF|500-page PDF` 定向命令因脚本透传方式实际运行了全部 Playwright；13 项通过，新增 500 页用例在等待 Continuous 列表时失败。错误上下文确认 500 页 PDF 已解析并显示 `Page 1 / 500`，失败来自测试在 ReaderShell 异步载入偏好前点击 Continue 的竞态。验收改为通过设置 UI 明确选择 Continuous，并在结束时重新进入阅读器验证 Double 跨重启保持。
+- **12.7 第二轮验收问题：** 远距离页码输入已正确挂载并渲染 249–251 页，但状态栏显示 `Pages 250-251 / 500`。根因是页码 helper 把所有非 Single 模式都当成 Double，Continuous 首页又被 `page === 1` 特判掩盖。现仅 `renderedMode=double` 输出范围，Continuous 与 Single 均输出当前单页。
+- **12.7 第三轮验收调整：** 1280px 视口保留展开的目录侧栏时，PDF frame 可用宽度低于 920px，按产品窄窗契约正确临时渲染 Single。验收在检查桌面 Double 三 spread/六 Canvas 前收起目录，随后再缩到 640/375 验证 requested Double 保持且 rendered Single 自动降级。
+- **12.7 视觉首轮问题：** DPR2 截图在 Double 切换后立即捕获到黑色 Canvas，640/375 resize 后捕获到重排中的空白页；原断言只等待窗口 DOM 与 Canvas 数量。截图前门禁现同时验证 current spread 的准确 `data-page-number`、每页 `data-render-ready=true` 和 Canvas 非空像素，用于区分过早截图与真实陈旧/错误页。
+- **12.7 空白页根因：** Canvas backing store 已含正确第 10/11 页文本，但诊断时 current surface 顶部为 `-228.7px`。Continuous 从末页切到分页后 frame 沿用连续滚动的 `scrollTop`，把分页页首裁出视口。现对分页模式/spread 页号变化用 layout effect 在绘制前归零 frame scroll，Continuous 的自然滚动与页内锚定不受影响。
+- **12.7 全量门禁问题：** 首轮 `pnpm check` 仅发现新增 DPR2 Playwright project 未格式化；格式化后 lint/build/core 7 tests 通过，desktop 6 个 PDF 组件测试因 JSDOM 不实现 `HTMLElement.scrollTo` 统一卸载。分页归零改用标准 `scrollLeft/scrollTop` 可写属性，不改变浏览器行为并兼容测试环境。
+- **12.7 单测兼容：** `scrollTop` 修正后 desktop 150/151 通过；唯一失败是 PDF controls 旧断言仍把 Double 封面显示为 `Pages 1-2 / 3`。阶段 12 spread 契约是封面 1、随后 2–3，因此更新为 `Page 1 / 3`，Next 的后续 spread 行为继续由原测试覆盖。
+- **12.7 全量 Playwright 竞态：** 13/15 通过；DPR1/DPR2 的 500 页实例在五 worker 压力下均出现 Continuous 点击后又回到 Single。根因是 ReaderShell 异步偏好读取可能晚于用户设置操作并覆盖新 state。现以会话 dirty ref 保护迟到读取，EPUB/PDF/TXT 任一偏好操作后均不再接受旧响应回滚。
+- **12.7 竞态二次修正：** 双 worker 定向仍复现，因为偏好 effect 启动时会把此前用户点击写入的 dirty 重新清零。现用按 `book.id` 同步轮换的 `{bookId, dirty}` 会话 ref，effect 不再重置；即使用户在首个 effect 前操作，迟到结果也不能覆盖。
+- **12.7 慢解析竞态根因：** adapter 已按初始 Single 构造但仍在 `open()` 时，Continuous prop/ref 可以更新；因 `adapterRef` 尚未建立，viewMode effect 无法下发，open 完成后旧代码也不重放。现于 open 成功、公开 adapter 前调用 `setViewMode(requestedViewModeRef.current, frameWidth)`，确保解析期间的最后请求生效。
+
 - **状态：** 12.1 complete
 - **当前分支：** `codex/stage12-pdf-continuous-locator`
 - **基线：** 从最新 `codex/v0.2.0-integration` `be9a5cf` 创建；该提交与 `main` 的代码树一致；工作区仅保留用户未跟踪 `AGENTS.md`。
@@ -1898,3 +1909,10 @@
 - **12.6 生命周期修正：** 邻接 Canvas 晋升为 current 时不再清零重渲染；Canvas 与 TextLayer effect 分离，晋升只挂文本/批注，确保动画结束后 live 目标页已经是正确像素。
 - **12.6 首轮门禁：** 新三窗口组件令 App adapter mock 缺少 metrics/render-handle/release API，6 个 PDF 组件测试卸载时报错；补齐真实接口形状后只剩 mock 缺少 spread helper export，随后修正。产品代码未回退到旧全局 Canvas。
 - **12.6 门禁：** desktop lint、151 tests、build 与 `git diff --check` passed；测试覆盖 30 次快速输入合并、Single/Double 窗口上限、封面/末页、准确 PDF Canvas identity/pixel copy、目标未 ready 回退及三种共享时长。
+- **12.7 分支：** `codex/stage12-pdf-acceptance` 从已合并 12.6 的集成分支创建；新增浏览器运行时生成的 500 页 PDF fixture 与 DPR2 专用 project。
+- **12.7 性能/内存：** Continuous 高成本 surface/Canvas ≤6、backing pixels ≤12,000,000；Single/Double Canvas ≤3/6；第 250 页远跳、100% 末页、四主题重绘、无 >50ms long task、离开/重入 Double 持久化通过。
+- **12.7 视觉/a11y：** `view_image` 复核 1280×800 Continuous、桌面 Double、640×640、375×760 与 DPR2；页码/百分比/slider/缩放/44px 控件一致，窄窗 Double→Single 且无 body 横向溢出，axe serious/critical 0。
+- **Browser/IAB：** 优先初始化时返回 `Cannot redefine property: process`，无 agent/browser binding 可复用；已按 Browser 技能读取 bootstrap 故障说明并停止替代控制。真实 500 页 PDF、四主题、三档视口与 console/axe 由项目 Playwright 完成。
+- **最终门禁：** `pnpm.cmd check` passed（core 7、desktop 151）；Cargo fmt check 与 Rust 36 tests passed；Playwright 15/15 passed；Tauri NSIS/MSI build passed；包体书架入口 67.20 kB gzip、ReaderShell 51.35 kB gzip，PDF runtime 继续懒加载。
+- **状态：** 12.7 complete；未新增依赖、schema、格式、版本或 Release。按计划提交验收分支、`--no-ff` 合回 `codex/v0.2.0-integration`，再合入 `main` 并推送两条分支。
+- **最终 lint 调整：** React refs 规则禁止 render 阶段按 book 重置会话对象；改为仅在用户事件中记录 `dirtyBookId`，异步读取以 dirty id 是否等于当前 `book.id` 判断，换书天然失效且无需 render/effect 写 ref。

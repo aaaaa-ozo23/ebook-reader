@@ -2773,7 +2773,7 @@ describe("App", () => {
 
     await user.click(within(reader).getByRole("button", { name: "Double" }));
     expect(pdfAdapterSetViewModeMock).toHaveBeenCalledWith("double", 1100);
-    await waitFor(() => expect(screen.getByText("Pages 1-2 / 3")).toBeVisible());
+    await waitFor(() => expect(screen.getByText("Page 1 / 3")).toBeVisible());
 
     await user.click(within(reader).getByRole("button", { name: "Next" }));
     expect(pdfAdapterNextMock).toHaveBeenCalledTimes(1);

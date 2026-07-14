@@ -2108,6 +2108,18 @@ export function PdfReaderContent({
   const [position, setPosition] = useState<PdfPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<PdfPosition | null>(null);
 
+  useLayoutEffect(() => {
+    if (position?.renderedMode === "continuous") {
+      return;
+    }
+
+    const frame = frameRef.current;
+    if (frame !== null) {
+      frame.scrollLeft = 0;
+      frame.scrollTop = 0;
+    }
+  }, [position?.page, position?.renderedMode]);
+
   useEffect(() => {
     tocItemsRef.current = tocItems;
   }, [tocItems]);
@@ -2345,6 +2357,10 @@ export function PdfReaderContent({
           return;
         }
 
+        adapter.setViewMode(
+          requestedViewModeRef.current,
+          frameRef.current?.clientWidth,
+        );
         adapterRef.current = adapter;
         setPdfAdapter(adapter);
         onSearchProviderChange(
@@ -3912,8 +3928,12 @@ export function normalizeEpubHref(href: string): string {
 }
 
 export function getPdfVisiblePageNumbers(position: PdfPosition): number[] {
-  if (position.renderedMode === "single") {
+  if (position.renderedMode !== "double") {
     return [position.page];
+  }
+
+  if (position.page === 1) {
+    return [1];
   }
 
   return [position.page, position.page + 1].filter(

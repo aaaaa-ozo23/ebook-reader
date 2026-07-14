@@ -523,6 +523,13 @@
 
 ## 2026-07-14 大阶段 12：PDF 连续模式
 
+- 500 页 fixture 首轮失败并非 PDF 解析或虚拟化错误：页面已显示 `Page 1 / 500`，但测试依赖 fallback 偏好在 ReaderShell 挂载后的异步载入，Continue 点击可能早于偏好生效。验收应走用户可见的五项设置切换 Continuous，并单独通过离开/重入验证分页视图持久化，避免让预置 localStorage 时序代替真实交互。
+- `getPdfVisiblePageNumbers` 的分支必须显式判断 Double，而不能用“非 Single”代替；否则 Continuous 在第 2 页以后会把相邻虚拟页误报成当前 spread，页 1 的封面特判会让普通 smoke 漏测。
+- PDF frame 同时承载 Continuous 的纵向滚动和分页 surface；模式切换若不清理 `scrollTop`，分页 Canvas 即使有正确像素也会把页首裁出视口，形成“ready 但空白/错误区域”。分页页号或 rendered Single/Double 变化应在 layout 阶段滚到页首。
+- ReaderShell 的阅读体验偏好在挂载后异步读取；高并发或慢存储下，用户可先操作设置，迟到读取随后回滚 UI。加载结果必须在该书会话尚未产生偏好修改时才应用，保存仍使用用户操作产生的完整 normalized preferences。
+- PDF adapter 的构造与 `open()` 之间存在异步窗口：此时 prop 变化只会更新 requested-mode ref，因 adapterRef 未建立无法即时下发。open 成功后必须重放 ref 中最后请求，否则大 PDF/慢机器会丢失加载期间的 Continuous/Single/Double 切换。
+- Browser/IAB runtime bootstrap 在本机继续以 `Cannot redefine property: process` 失败，且失败后没有 `agent.browsers` 或 browser binding；按技能要求读取 bootstrap troubleshooting 后不改用无关 browser backend。阶段 12 的真实 fixture、DPR2、三视口、截图、console 和 axe 证据全部由项目 Playwright 生成。
+
 - `PdfViewMode` 和 `PdfLocator.pageOffsetRatio` 已存在，但当前 PDF UI 打开时强制 Single，`resolveRenderedMode` 也把 Continuous 降级为 Single，因此类型预留尚未形成真实连续阅读。
 - PDF 当前只维护一个全局 Canvas `RenderTask`；连续虚拟列表会并发渲染多个页面，必须改为按挂载页面独立取消 Canvas 与 `TextLayer`，卸载时清空 backing store。
 - 当前 PDF Single/Double 只挂载当前一到两页，无法在动画前可靠取得准确目标页；阶段 12 将使用 previous/current/next 三 spread Canvas 窗口，并按 `data-spread-start` 捕获像素快照。
