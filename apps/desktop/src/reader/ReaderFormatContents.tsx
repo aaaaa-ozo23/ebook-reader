@@ -609,6 +609,7 @@ function TxtPaginatedReaderContent({
   const previewPageIndexRef = useRef<number | null>(null);
   const currentAnchorRef = useRef(initialProgress?.locator.charOffset ?? 0);
   const committedPageIndexRef = useRef(0);
+  const paginationInteractionVersionRef = useRef(0);
   const [pages, setPages] = useState<TxtPage[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [previewPageIndex, setPreviewPageIndex] = useState<number | null>(null);
@@ -619,11 +620,17 @@ function TxtPaginatedReaderContent({
   const [isPaginating, setIsPaginating] = useState(true);
   const [requestedSpreadMode, setRequestedSpreadMode] =
     useState<TxtSpreadMode>("single");
-  const [frameSize, setFrameSize] = useState({ height: 588, width: 780 });
+  const [frameSize, setFrameSize] = useState<{
+    bookId: string | null;
+    height: number;
+    width: number;
+  }>({ bookId: null, height: 588, width: 780 });
   const [devicePixelRatio, setDevicePixelRatio] = useState(
     () => window.devicePixelRatio || 1,
   );
   const virtualBlocks = useMemo(() => flattenReaderBlocks(blocks), [blocks]);
+  const hasMeasuredFrame =
+    txtDocument !== null && frameSize.bookId === txtDocument.book.id;
   const canRenderDouble =
     frameSize.width >= TXT_DOUBLE_MIN_PAGE_WIDTH * 2 + TXT_SPREAD_GAP;
   const renderedSpreadMode: TxtSpreadMode =
@@ -675,18 +682,23 @@ function TxtPaginatedReaderContent({
   }, [isPageCurlBlocked, pages, renderedSpreadMode, transition, txtDocument]);
 
   useLayoutEffect(() => {
+    if (isLoading || txtDocument === null) return;
     const frame = frameRef.current;
     if (frame === null) {
       return;
     }
+    const bookId = txtDocument.book.id;
     const updateSize = () => {
       const nextSize = {
+        bookId,
         height: Math.max(260, frame.clientHeight || 588),
         width: Math.max(1, frame.clientWidth || 780),
       };
       setDevicePixelRatio(window.devicePixelRatio || 1);
       setFrameSize((currentSize) =>
-        currentSize.height === nextSize.height && currentSize.width === nextSize.width
+        currentSize.bookId === nextSize.bookId &&
+        currentSize.height === nextSize.height &&
+        currentSize.width === nextSize.width
           ? currentSize
           : nextSize,
       );
@@ -702,10 +714,21 @@ function TxtPaginatedReaderContent({
       observer.disconnect();
       window.removeEventListener("resize", updateSize);
     };
-  }, []);
+  }, [isLoading, txtDocument]);
+
+  useLayoutEffect(() => {
+    const restoredOffset = initialProgress?.locator.charOffset;
+    if (restoredOffset === undefined) return;
+    currentAnchorRef.current = restoredOffset;
+  }, [initialProgress?.locator.charOffset, txtDocument?.book.id]);
 
   useEffect(() => {
-    if (isLoading || txtDocument === null || virtualBlocks.length === 0) {
+    if (
+      isLoading ||
+      txtDocument === null ||
+      virtualBlocks.length === 0 ||
+      !hasMeasuredFrame
+    ) {
       return;
     }
     pendingTransitionPageRef.current = null;
@@ -719,27 +742,42 @@ function TxtPaginatedReaderContent({
     paginationAbortRef.current?.abort();
     const controller = new AbortController();
     paginationAbortRef.current = controller;
-    let hasPublishedPartialPages = false;
+    const interactionVersionAtStart = paginationInteractionVersionRef.current;
+    let hasPublishedPages = false;
+    let hasRestoredAnchor = false;
     const restorePages = (nextPages: readonly TxtPage[], isComplete: boolean) => {
       if (controller.signal.aborted || nextPages.length === 0) return;
-      const restoredPageIndex = getTxtSpreadStart(
-        Math.max(0, findTxtPageIndex(nextPages, currentAnchorRef.current)),
-        renderedSpreadMode,
-      );
-      if (
-        !isComplete &&
-        (nextPages.length < spreadSize ||
-          hasPublishedPartialPages ||
-          currentAnchorRef.current > (nextPages.at(-1)?.endCharOffset ?? 0))
-      ) {
-        return;
+      if (!isComplete && nextPages.length < spreadSize) return;
+
+      const userHasNavigated =
+        paginationInteractionVersionRef.current !== interactionVersionAtStart;
+      const anchorIsAvailable =
+        isComplete || currentAnchorRef.current < (nextPages.at(-1)?.endCharOffset ?? 0);
+      const shouldRestoreAnchor =
+        !userHasNavigated && !hasRestoredAnchor && anchorIsAvailable;
+      const nextPageIndex = shouldRestoreAnchor
+        ? getTxtSpreadStart(
+            Math.max(0, findTxtPageIndex(nextPages, currentAnchorRef.current)),
+            renderedSpreadMode,
+          )
+        : getTxtSpreadStart(
+            Math.min(
+              Math.max(0, nextPages.length - 1),
+              hasPublishedPages ? committedPageIndexRef.current : 0,
+            ),
+            renderedSpreadMode,
+          );
+      hasPublishedPages = true;
+      if (shouldRestoreAnchor) hasRestoredAnchor = true;
+      committedPageIndexRef.current = nextPageIndex;
+      const restoredFragment = nextPages[nextPageIndex]?.fragments[0];
+      if (restoredFragment !== undefined) {
+        onActiveChapterChange(restoredFragment.chapterId);
       }
-      if (!isComplete) hasPublishedPartialPages = true;
-      committedPageIndexRef.current = restoredPageIndex;
       startTransition(() => {
         setPages([...nextPages]);
-        setActivePageIndex(restoredPageIndex);
-        setPageInput(String(restoredPageIndex + 1));
+        setActivePageIndex(nextPageIndex);
+        setPageInput(String(nextPageIndex + 1));
       });
     };
     const paginate = async () => {
@@ -747,7 +785,6 @@ function TxtPaginatedReaderContent({
       if (controller.signal.aborted) return;
       setIsPaginating(true);
       setPaginationError(null);
-      setPages([]);
       setPreviewPageIndex(null);
       setPreviewProgressValue(null);
 
@@ -758,10 +795,10 @@ function TxtPaginatedReaderContent({
         return;
       }
 
-      const [cachedValue] = await Promise.all([
-        getReaderCache(txtDocument.book, TXT_PAGINATION_CACHE_KEY).catch(() => null),
-        document.fonts?.ready ?? Promise.resolve(),
-      ]);
+      const cachedValue = await getReaderCache(
+        txtDocument.book,
+        TXT_PAGINATION_CACHE_KEY,
+      ).catch(() => null);
       const cached = parseTxtPaginationCache(
         cachedValue,
         layoutSignature,
@@ -773,6 +810,9 @@ function TxtPaginatedReaderContent({
         nextPages = reconstructTxtPages(virtualBlocks, cached);
         txtSessionPaginationCache.set(sessionCacheKey, cached);
       } else {
+        setPages([]);
+        await (document.fonts?.ready ?? Promise.resolve());
+        if (controller.signal.aborted) return;
         const frame = frameRef.current;
         if (frame === null) return;
         const measurer = createTxtDomPageMeasurer(frame, pageWidth);
@@ -781,6 +821,7 @@ function TxtPaginatedReaderContent({
             maxPageHeight: pageHeight,
             measurePage: measurer.measurePage,
             onPages: (partialPages) => restorePages(partialPages, false),
+            progressEveryPages: Math.max(4, spreadSize * 4),
             signal: controller.signal,
           });
           const envelope = createTxtPaginationCacheEnvelope(
@@ -815,7 +856,9 @@ function TxtPaginatedReaderContent({
     return () => controller.abort();
   }, [
     isLoading,
+    hasMeasuredFrame,
     layoutSignature,
+    onActiveChapterChange,
     pageHeight,
     pageWidth,
     renderedSpreadMode,
@@ -920,6 +963,7 @@ function TxtPaginatedReaderContent({
       const nextPage = pages[nextIndex];
       if (nextPage === undefined) return;
       committedPageIndexRef.current = nextIndex;
+      paginationInteractionVersionRef.current += 1;
       setActivePageIndex(nextIndex);
       savePageProgress(nextPage);
     },
@@ -977,6 +1021,7 @@ function TxtPaginatedReaderContent({
         );
         pendingTransitionPageRef.current = page;
         committedPageIndexRef.current = nextIndex;
+        paginationInteractionVersionRef.current += 1;
         currentAnchorRef.current = page.startCharOffset;
         setPreviewPageIndex(null);
         previewPageIndexRef.current = null;
@@ -1043,14 +1088,14 @@ function TxtPaginatedReaderContent({
   );
   const commitPageInput = useCallback(() => {
     const pageNumber = Number.parseInt(pageInput, 10);
-    if (!Number.isFinite(pageNumber) || pages.length === 0 || isPaginating) {
+    if (!Number.isFinite(pageNumber) || pages.length === 0) {
       setPageInput(String(committedPageIndexRef.current + 1));
       return;
     }
     const normalizedPage = normalizeReaderPage(pageNumber, pages.length);
     setPageInput(String(normalizedPage));
     commitPageIndex(normalizedPage - 1);
-  }, [commitPageIndex, isPaginating, pageInput, pages.length]);
+  }, [commitPageIndex, pageInput, pages.length]);
   const handleProgressPreview = useCallback(
     (value: string) => {
       if (txtDocument === null || pages.length === 0 || isPaginating) return;
@@ -1146,11 +1191,15 @@ function TxtPaginatedReaderContent({
       ((visiblePage?.startCharOffset ?? 0) / Math.max(txtDocument.charCount, 1)) * 1000,
     );
   const progressPercent = Math.round(progressValue / 10);
-  const positionLabel = isPaginating
-    ? "Pages calculating"
-    : spreadSize === 2 && spreadEnd > spreadStart + 1
-      ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pages.length}`
-      : `Page ${spreadStart + 1} / ${pages.length}`;
+  const pageTotalLabel =
+    pages.length === 0 ? "-" : isPaginating ? `${pages.length}+` : String(pages.length);
+  const calculationLabel = isPaginating ? " · Calculating" : "";
+  const positionLabel =
+    pages.length === 0
+      ? "Pages calculating"
+      : spreadSize === 2 && spreadEnd > spreadStart + 1
+        ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pageTotalLabel}${calculationLabel}`
+        : `Page ${spreadStart + 1} / ${pageTotalLabel}${calculationLabel}`;
   const spreadDescription =
     requestedSpreadMode === "double" && renderedSpreadMode === "single"
       ? "Double view will resume when the window is wide enough."
@@ -1162,6 +1211,7 @@ function TxtPaginatedReaderContent({
       className="reader-viewport reader-viewport--txt-paginated"
       data-page-transition={transition}
       data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
+      data-pagination-state={isPaginating ? "calculating" : "ready"}
       aria-label={`${txtDocument.book.title} content`}
       tabIndex={0}
       onKeyUp={handleTextSelection}
@@ -1182,15 +1232,6 @@ function TxtPaginatedReaderContent({
             spreadMode={renderedSpreadMode}
           />
         )}
-        {isPaginating && pages.length > 0 ? (
-          <span
-            className="reader-txt-pagination-pending"
-            role="status"
-            aria-live="polite"
-          >
-            Pages calculating
-          </span>
-        ) : null}
       </div>
       <PaginatedReaderControls
         ariaLabel="TXT navigation"
@@ -1207,8 +1248,9 @@ function TxtPaginatedReaderContent({
         onSpreadModeChange={handleSpreadModeChange}
         pageFieldLabel="Page"
         pageInputAriaLabel="TXT page number"
-        pageInputDisabled={isPaginating || pages.length === 0}
-        pageInputMax={isPaginating ? null : pages.length}
+        pageInputDisabled={pages.length === 0}
+        pageInputMax={pages.length || null}
+        pageInputTotalLabel={pageTotalLabel}
         pageInputValue={pageInput}
         positionLabel={positionLabel}
         previousDisabled={pages.length === 0 || spreadStart === 0}

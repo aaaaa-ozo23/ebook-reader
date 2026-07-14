@@ -460,18 +460,95 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await page.getByRole("button", { name: "Theme" }).click();
   const txtReadingModes = page.getByRole("radiogroup", { name: "TXT reading mode" });
   await expect(txtReadingModes.getByRole("radio")).toHaveCount(5);
+  await page.evaluate(() => {
+    window.requestIdleCallback = (callback) =>
+      window.setTimeout(
+        () => callback({ didTimeout: false, timeRemaining: () => 0 }),
+        60,
+      );
+  });
   await txtReadingModes.getByRole("radio", { name: "None" }).click();
   await expect(page.getByRole("group", { name: "TXT page view" })).toBeVisible();
   await page.getByRole("button", { name: "Theme" }).click();
+  const txtViewport = page.getByLabel("长篇样本 content");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
+  await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
+  const partialSpreadStart = await page
+    .locator('.reader-txt-spread[data-window-state="current"]')
+    .getAttribute("data-spread-start");
+  await page.getByRole("button", { name: "Next" }).click();
+  await expect(
+    page.locator('.reader-txt-spread[data-window-state="current"]'),
+  ).not.toHaveAttribute("data-spread-start", partialSpreadStart ?? "0");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   await page.getByRole("button", { name: "第一章 长文本" }).click();
   await expect(page.locator(".reader-epub-status strong")).toHaveText(/Page 1 \/ \d+/);
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
+  const pageFill = await page
+    .locator('.reader-txt-spread[data-window-state="current"] .reader-txt-page')
+    .first()
+    .evaluate((readerPage) => {
+      const pageRect = readerPage.getBoundingClientRect();
+      const lastFragment = readerPage.lastElementChild?.getBoundingClientRect();
+      return {
+        emptyRatio:
+          lastFragment === undefined || pageRect.height === 0
+            ? 1
+            : (pageRect.bottom - lastFragment.bottom) / pageRect.height,
+        overflow: (lastFragment?.bottom ?? pageRect.bottom) - pageRect.bottom,
+      };
+    });
+  expect(pageFill.emptyRatio).toBeLessThan(0.2);
+  expect(pageFill.overflow).toBeLessThanOrEqual(2);
+  await page.getByRole("button", { name: "Next" }).click();
+  const savedPage = page
+    .locator('.reader-txt-spread[data-window-state="current"] .reader-txt-page')
+    .first();
+  await expect(savedPage).not.toHaveAttribute("data-page-start", "0");
+  const savedCharOffset = Number(await savedPage.getAttribute("data-page-start"));
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const raw = window.localStorage.getItem("reader:fallback:readingProgress");
+        if (raw === null) return -1;
+        const stored = JSON.parse(raw) as Record<
+          string,
+          { locator?: { charOffset?: number } }
+        >;
+        return stored["e2e-long-txt"]?.locator?.charOffset ?? -1;
+      }),
+    )
+    .toBe(savedCharOffset);
+
+  await page.getByRole("button", { name: "Back to shelf" }).click();
+  const cachedReopenStartedAt = Date.now();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
+  const restoredPageRange = await page
+    .locator('.reader-txt-spread[data-window-state="current"] .reader-txt-page')
+    .first()
+    .evaluate((readerPage) => ({
+      end: Number(readerPage.dataset.pageEnd),
+      start: Number(readerPage.dataset.pageStart),
+    }));
+  expect(restoredPageRange.start).toBeLessThanOrEqual(savedCharOffset);
+  expect(restoredPageRange.end).toBeGreaterThan(savedCharOffset);
+  expect(Date.now() - cachedReopenStartedAt).toBeLessThan(1_000);
+  await page.getByRole("button", { name: "第一章 长文本" }).click();
+  await expect(
+    page.locator('.reader-txt-spread[data-window-state="current"]'),
+  ).toHaveAttribute("data-spread-start", "0");
   expect(
     await page
       .locator(".reader-txt-page-window")
       .getAttribute("data-rendered-page-count"),
   ).toBe("2");
   await page.getByRole("button", { name: "Double" }).click();
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
   await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
   const doubleRenderedPages = Number(
     await page
@@ -599,6 +676,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   });
   await mobileTxtReadingModes.getByRole("radio", { name: "Cover" }).click();
   await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   const mobileModeHeights = await mobileTxtReadingModes
     .getByRole("radio")
     .evaluateAll((options) =>
@@ -612,6 +690,8 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "aria-pressed",
     "true",
   );
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   const mobileControls = await page.evaluate(() => ({
     bodyClientWidth: document.body.clientWidth,
     bodyScrollWidth: document.body.scrollWidth,
@@ -623,7 +703,15 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   }));
   expect(mobileControls.bodyScrollWidth).toBe(mobileControls.bodyClientWidth);
   expect(mobileControls.heights.every((height) => height >= 44)).toBe(true);
+  await expect(transitionLayer).toHaveCount(0);
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
   await page.screenshot({
+    animations: "disabled",
     path: testInfo.outputPath("txt-paginated-mobile-cover.png"),
   });
   await expectNoSeriousAccessibilityViolations(page);

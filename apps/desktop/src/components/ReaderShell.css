@@ -774,21 +774,6 @@
   text-indent: 2em;
 }
 
-.reader-txt-pagination-pending {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
-  border: 1px solid var(--txt-reader-meta-border, #d8cebc);
-  border-radius: 999px;
-  background: var(--txt-reader-meta-background, rgba(255, 255, 255, 0.88));
-  color: var(--txt-reader-muted, #5f6870);
-  padding: 5px 10px;
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
 .reader-txt-measure {
   position: absolute;
   top: 0;

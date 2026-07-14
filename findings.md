@@ -508,3 +508,15 @@
 - 11.8 修复后 Double 阈值按 `2 × 320px + 18px` 真实页槽计算；默认桌面 seeded fixture 的两个当前页宽度均不低于 320px、左右不重叠且正文来自相邻页，375px 保留 requested Double 并明确提示 rendered Single。
 - `reconstructTxtPages` 的 10,000 页合成用例现在在测试中要求低于 1 秒；页/块双游标将旧路径的理论 100,000,000 次页块配对降为线性遍历。短段不创建字素分段表，DOM measurer 只更新变化的末尾文本节点。
 - 动画事务在 React 状态变化前按目标 `data-spread-start` 捕获相邻窗口；单元测试验证精确 Double target clone，Playwright 验证 Smooth 隔离层 target spread 与最终 current spread 完全一致。
+
+## 2026-07-14 大阶段 11.9：TXT 分页持续阅读与渐进加载
+
+- 用户截图中的分页正文只使用约半个阅读舞台，而底栏固定在窗口底部；代码把 frame 初始值设为 `588px`，尺寸监听 effect 仅执行一次。TXT 文档异步加载期间 frame 尚未挂载，effect 因而提前返回且不会在正文挂载后重试，分页一直使用兜底高度。这同时增加了页数、冷分页工作量和缓存布局偏差。
+- 分页 anchor ref 只从组件首次 render 的 `initialProgress` 初始化；需要验证保存进度异步到达时是否重新应用，以及退出前最后可见 spread 是否稳定提交。
+- 渐进分页当前通过 `hasPublishedPartialPages` 只接受第一个完整 spread，后续批次直到全部完成都不会更新 React 页面数组；因此 Next 在已算出更多页面时仍被旧数组边界禁用。
+- 首轮检索命令引用不存在的 `apps/desktop/src/styles.css` 和 PowerShell 不支持的 glob，组合命令返回 exit 1；已改为按 `rg --files`/真实路径定位，不影响产品代码。
+- 应用内 Browser 插件初始化失败并报告 `Cannot redefine property: process`，故障文档对象也未建立；本轮按技能回退规则使用项目 Playwright 完成真实 seeded 数据、DOM、console、axe 与截图验收。
+- DPR2 移动截图发现正文右上角的计算胶囊遮挡章节标题；计算状态已并入底栏页数文本（`… / n+ · Calculating`），正文不再放置浮动提示。
+- 最终实现只在真实 frame 已挂载并完成尺寸读取后启动分页；缓存命中不再等待 `document.fonts.ready`，会话 LRU 可直接恢复当前布局。冷分页每 4 页（Double 每 8 页）发布一次完整批次，已发布页可用 Previous/Next、页码输入和原有动画继续阅读。
+- 渐进发布使用交互版本防止后台新批次把用户拉回旧 anchor；若用户尚未操作，则在已计算边界首次覆盖保存的 charOffset 时自动恢复。完整边界验证后才更新会话/磁盘缓存，取消任务不会写入部分结果。
+- Playwright 实测同一会话从非首页回书架再进入低于 1 秒，恢复页范围覆盖保存的 UTF-16 charOffset；桌面当前页末段无溢出，底部剩余空间低于页高 20%。
