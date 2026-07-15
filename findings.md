@@ -620,3 +620,12 @@
 - TXT 渐进分页测试曾把 `requestIdleCallback` 固定为每 60 ms 且 `timeRemaining=0`，375 重排需逐批等待而长期显示 Calculating；在完成渐进发布断言后恢复有预算的 idle callback，产品分页算法未被改成同步阻塞。
 - 640 首轮截图显示格式、标题和四个工具挤在 388 px 主区并截断 Focus；紧凑档现只显示等宽四工具栏，书名/作者继续由常驻侧栏承担，正文与 body 均无横向溢出。
 - 顶部 Shelf、侧栏 Back to shelf 和 Close contents 最初产生包含匹配歧义；最终可访问名称明确区分，设置关闭会把焦点恢复到 Theme，打开面板自动聚焦关闭按钮。
+
+## 2026-07-16 大阶段 13.1/13.2：批准稿二次完成审计
+
+- **审计结论：** 首轮 13.2 虽通过通用门禁，但未完整复刻 07/12/13/14/15：排版控件被简化、format page view 未进入设置、移动工具栏错误、手势只是 entrance animation、tooltip 时序和格式系统态缺少运行证据。
+- **设置修正：** 四主题使用 `Aa`；字体显示 Lora；Size 保留步进器；Line/Spacing/Margin 改成三段图形控件；EPUB/TXT/PDF 的阅读模式、转场和 Single/Double 与真实偏好/adapter 状态双向联动，Continuous 下显示明确禁用原因。
+- **移动交互：** 375 px topbar 固定为 Back/Contents/Theme/Bookmark/More，More 承载 Notes/Search/Focus；drawer 横向、sheet 纵向按 touch/pen 1:1 跟踪，越界按 0.18 阻尼，释放按位移/速度决定关闭或回弹，pointer capture 失败安全降级。
+- **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
+- **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
+- **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

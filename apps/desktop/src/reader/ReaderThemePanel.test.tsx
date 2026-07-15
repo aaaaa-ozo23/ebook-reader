@@ -10,10 +10,11 @@ describe("ReaderThemePanel page transitions", () => {
   it("presents the four compatible modes as an accessible radio group", () => {
     renderPanel("none", vi.fn());
 
-    expect(
-      screen.getByRole("radiogroup", { name: "EPUB page transition" }),
-    ).toBeVisible();
-    expect(screen.getAllByRole("radio")).toHaveLength(4);
+    const transitionGroup = screen.getByRole("radiogroup", {
+      name: "EPUB page transition",
+    });
+    expect(transitionGroup).toBeVisible();
+    expect(transitionGroup.querySelectorAll('[role="radio"]')).toHaveLength(4);
     expect(screen.getByRole("radio", { name: "None" })).toHaveAttribute(
       "aria-checked",
       "true",
@@ -80,6 +81,29 @@ describe("ReaderThemePanel page transitions", () => {
     expect(group.querySelectorAll('[role="radio"]')).toHaveLength(5);
     fireEvent.click(screen.getByRole("radio", { name: "Realistic" }));
     expect(onPdfReadingModeChange).toHaveBeenCalledWith("page-curl");
+  });
+
+  it("disables page view truthfully while continuous reading is active", () => {
+    render(
+      <ReaderThemePanel
+        isOpen
+        onClose={vi.fn()}
+        pageViewDisabled
+        pageViewDisabledMessage="Page view is not available in Continuous reading mode."
+        pageViewMode="single"
+        theme={defaultReaderTheme}
+        themeError={null}
+        onPageViewModeChange={vi.fn()}
+        onThemeChange={vi.fn()}
+      />,
+    );
+
+    const pageView = screen.getByRole("radiogroup", { name: "Page view" });
+    expect(pageView.querySelectorAll('[role="radio"]')).toHaveLength(2);
+    expect(screen.getByRole("radio", { name: "single" })).toBeDisabled();
+    expect(
+      screen.getByText("Page view is not available in Continuous reading mode."),
+    ).toBeVisible();
   });
 });
 

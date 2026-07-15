@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { Annotation } from "@reader/core";
 
 import { PdfPageSurface } from "./PdfPageSurface";
@@ -79,3 +80,5 @@ export function PdfPaginatedView({
     </div>
   );
 }
+
+export const MemoizedPdfPaginatedView = memo(PdfPaginatedView);

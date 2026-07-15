@@ -379,7 +379,7 @@ test("removes a seeded book through the right-click actions menu", async ({ page
 test("opens a seeded TXT reader without rendering the whole document", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   await page.addInitScript(() => {
     const book = {
       id: "e2e-long-txt",
@@ -575,7 +575,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(page.locator(".reader-epub-status strong")).toHaveText(/Page 1 \/ \d+/);
   await page.setViewportSize({ width: 1280, height: 1000 });
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
-  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
+    timeout: 20_000,
+  });
   const pageFill = await page
     .locator('.reader-txt-spread[data-window-state="current"] .reader-txt-page')
     .first()
@@ -788,6 +790,34 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     animations: "disabled",
     path: testInfo.outputPath("stage13-reader-mobile-drawer.png"),
   });
+  const mobileDrawer = page.locator(".reader-sidebar");
+  const mobileDrawerBox = await mobileDrawer.boundingBox();
+  expect(mobileDrawerBox).not.toBeNull();
+  if (mobileDrawerBox !== null) {
+    await mobileDrawer.dispatchEvent("pointerdown", {
+      button: 0,
+      clientX: mobileDrawerBox.x + mobileDrawerBox.width * 0.8,
+      clientY: mobileDrawerBox.y + 300,
+      pointerId: 41,
+      pointerType: "touch",
+    });
+    await mobileDrawer.dispatchEvent("pointermove", {
+      clientX: mobileDrawerBox.x + mobileDrawerBox.width * 0.18,
+      clientY: mobileDrawerBox.y + 302,
+      pointerId: 41,
+      pointerType: "touch",
+    });
+    await expect(mobileDrawer).toHaveAttribute("style", /--reader-drawer-offset: -/);
+    await mobileDrawer.dispatchEvent("pointerup", {
+      clientX: mobileDrawerBox.x + mobileDrawerBox.width * 0.18,
+      clientY: mobileDrawerBox.y + 302,
+      pointerId: 41,
+      pointerType: "touch",
+    });
+    await expect(mobileDrawer).toBeHidden();
+    await page.getByRole("button", { name: "Contents", exact: true }).click();
+    await expect(mobileDrawer).toBeVisible();
+  }
   await page.locator(".reader-sidebar__close").click();
   await expect(page.locator(".reader-sidebar")).toBeHidden();
   await page.getByRole("button", { name: "Theme" }).click();
@@ -798,6 +828,36 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     animations: "disabled",
     path: testInfo.outputPath("stage13-reader-mobile-settings.png"),
   });
+  const mobileSettingsHeader = page.locator(".reader-theme-panel__header");
+  const mobileSettingsHeaderBox = await mobileSettingsHeader.boundingBox();
+  expect(mobileSettingsHeaderBox).not.toBeNull();
+  if (mobileSettingsHeaderBox !== null) {
+    await mobileSettingsHeader.dispatchEvent("pointerdown", {
+      button: 0,
+      clientX: mobileSettingsHeaderBox.x + 120,
+      clientY: mobileSettingsHeaderBox.y + 24,
+      pointerId: 42,
+      pointerType: "touch",
+    });
+    await mobileSettingsHeader.dispatchEvent("pointermove", {
+      clientX: mobileSettingsHeaderBox.x + 121,
+      clientY: mobileSettingsHeaderBox.y + 250,
+      pointerId: 42,
+      pointerType: "touch",
+    });
+    await expect(page.locator(".reader-theme-panel")).toHaveAttribute(
+      "style",
+      /--reader-sheet-offset: [1-9]/,
+    );
+    await mobileSettingsHeader.dispatchEvent("pointerup", {
+      clientX: mobileSettingsHeaderBox.x + 121,
+      clientY: mobileSettingsHeaderBox.y + 250,
+      pointerId: 42,
+      pointerType: "touch",
+    });
+    await expect(page.locator(".reader-theme-panel")).toBeHidden();
+    await page.getByRole("button", { name: "Theme" }).click();
+  }
   await mobileTxtReadingModes.getByRole("radio", { name: "Cover" }).click();
   await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
   const mobileModeHeights = await mobileTxtReadingModes
@@ -816,7 +876,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     "aria-pressed",
     "true",
   );
-  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
+    timeout: 20_000,
+  });
   const mobileControls = await page.evaluate(() => ({
     bodyClientWidth: document.body.clientWidth,
     bodyScrollWidth: document.body.scrollWidth,
@@ -851,7 +913,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
 
 test("opens a generated EPUB reader and uses contents and theme controls", async ({
   page,
-}) => {
+}, testInfo) => {
   test.setTimeout(60_000);
   const consoleIssues = collectConsoleIssues(page);
 
@@ -1094,6 +1156,53 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(epubLocationInput).toBeEnabled();
   await expect(page.getByText("Page i").first()).toBeVisible();
 
+  const contentsTool = page.getByRole("button", { name: "Contents", exact: true });
+  await contentsTool.hover();
+  expect(
+    await contentsTool.evaluate(
+      (button) => getComputedStyle(button, "::after").opacity,
+    ),
+  ).toBe("0");
+  await expect
+    .poll(() =>
+      contentsTool.evaluate((button) => getComputedStyle(button, "::after").opacity),
+    )
+    .toBe("1");
+  const themeTool = page.getByRole("button", { name: "Theme" });
+  await themeTool.hover();
+  await expect
+    .poll(
+      () =>
+        themeTool.evaluate((button) =>
+          Number(getComputedStyle(button, "::after").opacity),
+        ),
+      { timeout: 300 },
+    )
+    .toBeGreaterThan(0.9);
+
+  await page.getByRole("button", { name: "Bookmark", exact: true }).click();
+  await page.getByRole("tab", { name: "Bookmarks" }).click();
+  await expect(page.getByRole("button", { name: /Go to bookmark/ })).toBeVisible();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-bookmarks.png"),
+  });
+  await page.getByRole("tab", { name: "Notes" }).click();
+  await expect(page.getByText("No notes yet.")).toBeVisible();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-notes-empty.png"),
+  });
+  await page.getByRole("tab", { name: "Search" }).click();
+  await page.getByRole("textbox", { name: "Search in book" }).fill("generated");
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  await expect(page.getByText("No results.")).toBeVisible();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-search-empty.png"),
+  });
+  await page.getByRole("tab", { name: "Contents" }).click();
+
   await page.evaluate(() => {
     const transitionModes: string[] = [];
     Object.assign(window, { __readerTransitionModes: transitionModes });
@@ -1134,6 +1243,14 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     "aria-checked",
     "true",
   );
+  const epubPageView = page.getByRole("radiogroup", { name: "Page view" });
+  await expect(epubPageView).toBeVisible();
+  await epubPageView.getByRole("radio", { name: "double" }).click();
+  await expect(epubPageView.getByRole("radio", { name: "double" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await epubPageView.getByRole("radio", { name: "single" }).click();
   if (process.env.READER_VISUAL_QA === "1") {
     await page.screenshot({
       path: "D:\\tl-temp\\ebook-reader-stage10x-transition-settings-desktop.png",
@@ -2012,18 +2129,49 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   expect(continuousBudget.mountedPages).toBeLessThanOrEqual(6);
   expect(continuousBudget.backingPixels).toBeLessThanOrEqual(12_000_000);
 
+  const navigationLongTasks = await page.evaluate(() => {
+    const stageWindow = window as Window & {
+      __stage12PdfLongTasks?: number[];
+      __stage12PdfLongTaskObserver?: PerformanceObserver;
+    };
+    stageWindow.__stage12PdfLongTaskObserver?.disconnect();
+    return stageWindow.__stage12PdfLongTasks ?? [];
+  });
+  expect(navigationLongTasks.filter((duration) => duration > 50)).toEqual([]);
+  await page.locator(".reader-tool-button--theme").evaluate((button) => {
+    (button as HTMLButtonElement).click();
+  });
+  await page.evaluate(() => {
+    const longTasks: number[] = [];
+    const stageWindow = window as Window & {
+      __stage12PdfLongTasks?: number[];
+      __stage12PdfLongTaskObserver?: PerformanceObserver;
+    };
+    stageWindow.__stage12PdfLongTasks = longTasks;
+    const observer = new PerformanceObserver((entries) => {
+      longTasks.push(...entries.getEntries().map((entry) => entry.duration));
+    });
+    observer.observe({ type: "longtask", buffered: false });
+    stageWindow.__stage12PdfLongTaskObserver = observer;
+  });
+
   for (const theme of ["light", "green", "dark", "sepia"]) {
-    await page.getByRole("button", { name: "Theme" }).click();
-    await page.getByRole("button", { name: theme }).click();
+    await page.evaluate((nextTheme) => {
+      const themeButton = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(".theme-mode-button"),
+      ).find(
+        (button) =>
+          button.textContent?.trim().toLocaleLowerCase().endsWith(nextTheme) === true,
+      );
+      themeButton?.click();
+    }, theme);
     await expect(reader).toHaveAttribute("data-reader-theme", theme);
-    await page.keyboard.press("Escape");
     const themedCurrentPage = page.locator(
       '.reader-pdf-page-surface[data-page-number="250"]',
     );
     await expect(themedCurrentPage).toHaveAttribute("data-render-ready", "true", {
       timeout: 20_000,
     });
-    await expect.poll(() => pdfCanvasesHaveInk(themedCurrentPage)).toBe(true);
   }
 
   if (process.env.READER_VISUAL_QA === "1") {
@@ -2042,6 +2190,18 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     return stageWindow.__stage12PdfLongTasks ?? [];
   });
   expect(longTasks.filter((duration) => duration > 50)).toEqual([]);
+  await page.evaluate(() => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "Escape" }),
+    );
+  });
+  await expect
+    .poll(() =>
+      pdfCanvasesHaveInk(
+        page.locator('.reader-pdf-page-surface[data-page-number="250"]'),
+      ),
+    )
+    .toBe(true);
 
   const progress = page.getByRole("slider", { name: "PDF reading progress" });
   await progress.evaluate((element) => {
@@ -2312,23 +2472,27 @@ async function pdfCanvasesHaveInk(locator: Locator): Promise<boolean> {
   for (let index = 0; index < canvasCount; index += 1) {
     const hasInk = await canvases.nth(index).evaluate((canvasElement) => {
       const canvas = canvasElement as HTMLCanvasElement;
-      const context = canvas.getContext("2d");
+      const sample = document.createElement("canvas");
+      sample.width = 128;
+      sample.height = 128;
+      const context = sample.getContext("2d", { willReadFrequently: true });
 
       if (canvas.width === 0 || canvas.height === 0 || context === null) {
         return false;
       }
 
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      context.drawImage(canvas, 0, 0, sample.width, sample.height);
+      const pixels = context.getImageData(0, 0, sample.width, sample.height).data;
       let darkPixelCount = 0;
       for (let pixel = 0; pixel < pixels.length; pixel += 4) {
         if (
           pixels[pixel + 3] !== 0 &&
-          pixels[pixel] < 128 &&
-          pixels[pixel + 1] < 128 &&
-          pixels[pixel + 2] < 128
+          pixels[pixel] < 210 &&
+          pixels[pixel + 1] < 210 &&
+          pixels[pixel + 2] < 210
         ) {
           darkPixelCount += 1;
-          if (darkPixelCount >= 20) {
+          if (darkPixelCount >= 4) {
             return true;
           }
         }

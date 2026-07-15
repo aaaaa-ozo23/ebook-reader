@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -91,6 +92,7 @@ import type {
   ReaderNotePopoverState,
   ReaderSelectionSnapshot,
 } from "./readerUiTypes";
+import type { EpubSpreadMode } from "../epub/EpubReaderAdapter";
 import { useReaderNavigationController } from "./useReaderNavigationController";
 
 function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
@@ -145,6 +147,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
+  const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState(false);
+  const [epubSpreadMode, setEpubSpreadMode] = useState<EpubSpreadMode>("single");
   const [isFormatOverlayOpen, setIsFormatOverlayOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
   const [themeError, setThemeError] = useState<string | null>(null);
@@ -183,14 +187,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const selectionMenuRef = useRef<HTMLDivElement | null>(null);
   const noteEditorRef = useRef<HTMLFormElement | null>(null);
   const notePopoverRef = useRef<HTMLDivElement | null>(null);
+  const toolbarMenuRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
   const { navigate, register: handleNavigationActionsChange } =
     useReaderNavigationController();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
   const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const layoutSaveTimerRef = useRef<number | null>(null);
+  const toolbarTooltipTimerRef = useRef<number | null>(null);
   const [sidebarTab, setSidebarTab] = useState<ReaderSidebarTab>("contents");
   const [activeTocItemId, setActiveTocItemId] = useState<string | null>(null);
   const [txtJumpRequest, setTxtJumpRequest] = useState<TxtJumpRequest | null>(null);
@@ -201,6 +209,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isToolbarMenuOpen,
     isFormatOverlayOpen,
     noteEditor,
     notePopover,
@@ -212,6 +221,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       isChromeHidden,
       isSidebarOpen,
       isThemePanelOpen,
+      isToolbarMenuOpen,
       isFormatOverlayOpen,
       noteEditor,
       notePopover,
@@ -221,6 +231,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     isChromeHidden,
     isSidebarOpen,
     isThemePanelOpen,
+    isToolbarMenuOpen,
     isFormatOverlayOpen,
     noteEditor,
     notePopover,
@@ -460,6 +471,47 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     }
   }, [closeSidebar, isSidebarOpen]);
 
+  const openSidebarTab = useCallback((tab: ReaderSidebarTab) => {
+    setIsChromeHidden(false);
+    setIsThemePanelOpen(false);
+    setIsToolbarMenuOpen(false);
+    setSidebarTab(tab);
+    setIsSidebarOpen(true);
+    if (tab === "search") {
+      focusElementSoon(searchInputRef);
+    }
+  }, []);
+
+  const handleToolbarPointerEnter = useCallback(() => {
+    if (
+      toolbarTooltipTimerRef.current !== null ||
+      toolbarRef.current?.classList.contains("reader-toolbar--tooltip-warm") === true
+    ) {
+      return;
+    }
+    toolbarTooltipTimerRef.current = window.setTimeout(() => {
+      toolbarTooltipTimerRef.current = null;
+      toolbarRef.current?.classList.add("reader-toolbar--tooltip-warm");
+    }, 520);
+  }, []);
+
+  const handleToolbarPointerLeave = useCallback(() => {
+    if (toolbarTooltipTimerRef.current !== null) {
+      window.clearTimeout(toolbarTooltipTimerRef.current);
+      toolbarTooltipTimerRef.current = null;
+    }
+    toolbarRef.current?.classList.remove("reader-toolbar--tooltip-warm");
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (toolbarTooltipTimerRef.current !== null) {
+        window.clearTimeout(toolbarTooltipTimerRef.current);
+      }
+    },
+    [],
+  );
+
   const closeThemePanel = useCallback(() => {
     setIsThemePanelOpen(false);
     focusElementSoon(themeButtonRef);
@@ -477,6 +529,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     setIsChromeHidden(true);
     setIsSidebarOpen(false);
     setIsThemePanelOpen(false);
+    setIsToolbarMenuOpen(false);
   }, []);
 
   const exitFocusMode = useCallback(() => {
@@ -485,7 +538,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   }, []);
 
   const handleThemeChange = useCallback((nextTheme: ReaderTheme) => {
-    setTheme(nextTheme);
+    startTransition(() => setTheme(nextTheme));
     setThemeError(null);
 
     void saveReaderTheme(nextTheme).catch((saveError: unknown) => {
@@ -926,11 +979,14 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       if (
         selectionMenuRef.current?.contains(target) === true ||
         noteEditorRef.current?.contains(target) === true ||
-        notePopoverRef.current?.contains(target) === true
+        notePopoverRef.current?.contains(target) === true ||
+        toolbarMenuRef.current?.contains(target) === true ||
+        moreButtonRef.current?.contains(target) === true
       ) {
         return;
       }
 
+      setIsToolbarMenuOpen(false);
       setSelectionSnapshot(null);
       setNoteEditor(null);
       setNotePopover(null);
@@ -967,6 +1023,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       }
 
       if (event.key === "Escape") {
+        if (shortcutState.isToolbarMenuOpen) {
+          event.preventDefault();
+          setIsToolbarMenuOpen(false);
+          focusElementSoon(moreButtonRef);
+          return;
+        }
+
         if (
           shortcutState.selectionSnapshot !== null ||
           shortcutState.noteEditor !== null ||
@@ -1363,7 +1426,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <header className="reader-topbar">
           <div className="reader-title-group">
             <button
-              ref={sidebarToggleRef}
               type="button"
               className="reader-link-button"
               aria-label="Shelf"
@@ -1381,11 +1443,19 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             <h1>{book.title}</h1>
             <p>{book.author ?? "Unknown author"}</p>
           </div>
-          <div className="reader-toolbar" aria-label="Reader tools">
+          <div
+            ref={toolbarRef}
+            className="reader-toolbar"
+            aria-label="Reader tools"
+            onPointerEnter={handleToolbarPointerEnter}
+            onPointerLeave={handleToolbarPointerLeave}
+          >
             <button
-              ref={themeButtonRef}
+              ref={sidebarToggleRef}
               type="button"
-              className="reader-tool-button"
+              className="reader-tool-button reader-tool-button--contents"
+              aria-label="Contents"
+              data-tooltip="Contents"
               aria-expanded={isSidebarOpen}
               onClick={toggleSidebar}
             >
@@ -1394,7 +1464,9 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             </button>
             <button
               type="button"
-              className="reader-tool-button"
+              className="reader-tool-button reader-tool-button--bookmark"
+              aria-label="Bookmark"
+              data-tooltip="Bookmark"
               disabled={currentBookmarkLocator === null}
               onClick={handleCreateBookmark}
             >
@@ -1402,8 +1474,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               <span>Bookmark</span>
             </button>
             <button
+              ref={themeButtonRef}
               type="button"
-              className="reader-tool-button"
+              className="reader-tool-button reader-tool-button--theme"
+              aria-label="Theme"
+              data-tooltip="Theme"
               aria-expanded={isThemePanelOpen}
               onClick={toggleThemePanel}
             >
@@ -1413,12 +1488,56 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             <button
               ref={focusButtonRef}
               type="button"
-              className="reader-tool-button"
+              className="reader-tool-button reader-tool-button--focus"
+              aria-label="Focus"
+              data-tooltip="Focus"
               onClick={enterFocusMode}
             >
               <ReaderIcon name="focus" />
               <span>Focus</span>
             </button>
+            <button
+              ref={moreButtonRef}
+              type="button"
+              className="reader-tool-button reader-tool-button--more"
+              aria-label="More"
+              aria-expanded={isToolbarMenuOpen}
+              aria-haspopup="menu"
+              data-tooltip="More"
+              onClick={() => setIsToolbarMenuOpen((isOpen) => !isOpen)}
+            >
+              <ReaderIcon name="more" />
+              <span>More</span>
+            </button>
+            {isToolbarMenuOpen ? (
+              <div
+                ref={toolbarMenuRef}
+                className="reader-toolbar-menu"
+                role="menu"
+                aria-label="More reader tools"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openSidebarTab("notes")}
+                >
+                  <ReaderIcon name="notes" />
+                  Notes
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => openSidebarTab("search")}
+                >
+                  <ReaderIcon name="search" />
+                  Search
+                </button>
+                <button type="button" role="menuitem" onClick={enterFocusMode}>
+                  <ReaderIcon name="focus" />
+                  Focus mode
+                </button>
+              </div>
+            ) : null}
           </div>
         </header>
         {isChromeHidden ? (
@@ -1469,6 +1588,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             jumpRequest={epubJumpRequest}
             theme={theme}
             transition={readerExperiencePreferences.epub.transition}
+            spreadMode={epubSpreadMode}
             tocItems={tocItems}
             onActiveTocItemChange={setActiveTocItemId}
             onBackToLibrary={onBackToLibrary}
@@ -1480,6 +1600,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onSelectionCleared={handleClearSelectionUi}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
+            onSpreadModeChange={setEpubSpreadMode}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -1512,6 +1633,27 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         ) : null}
         <ReaderThemePanel
           isOpen={isThemePanelOpen}
+          pageViewDisabled={
+            book.format === "txt"
+              ? readerExperiencePreferences.txt.viewMode === "scroll"
+              : book.format === "pdf"
+                ? readerExperiencePreferences.pdf.viewMode === "continuous"
+                : false
+          }
+          pageViewDisabledMessage={
+            book.format === "txt"
+              ? "Double page view is not available in Continuous reading mode."
+              : book.format === "pdf"
+                ? "Page view is not available in Continuous reading mode."
+                : undefined
+          }
+          pageViewMode={
+            book.format === "epub"
+              ? epubSpreadMode
+              : book.format === "txt"
+                ? readerExperiencePreferences.txt.paginatedViewMode
+                : readerExperiencePreferences.pdf.paginatedViewMode
+          }
           pageTransition={
             book.format === "epub"
               ? readerExperiencePreferences.epub.transition
@@ -1539,6 +1681,13 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           txtReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           onClose={closeThemePanel}
           onPageTransitionChange={handleEpubTransitionChange}
+          onPageViewModeChange={
+            book.format === "epub"
+              ? setEpubSpreadMode
+              : book.format === "txt"
+                ? handleTxtPaginatedViewModeChange
+                : handlePdfPaginatedViewModeChange
+          }
           onPdfReadingModeChange={handlePdfReadingModeChange}
           onThemeChange={handleThemeChange}
           onTxtReadingModeChange={handleTxtReadingModeChange}

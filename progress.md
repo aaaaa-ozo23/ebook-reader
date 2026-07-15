@@ -2006,3 +2006,17 @@
 - **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 158）；Playwright Chromium/DPR2/专用 TXT/PDF project 21/21 passed；Cargo fmt check 与 Rust 36 tests passed；production ReaderShell gzip 52.73 kB，PDF runtime 127.30 kB 并继续懒加载。
 - **视觉证据：** 1280 desktop/settings、640 compact、375 drawer/settings 五张稳定截图均经 `view_image` 原尺寸复核；差异和修正记录在 `docs/design/v0.2/stage13-reader-fidelity.md`。
 - **Browser：** 新隔离 tab 验证真实 Vite 页面身份、空书架语义和 `bodyScrollWidth === bodyClientWidth`；隔离会话无本地书籍，复杂三格式状态由项目生成 fixture 补齐。
+
+## 2026-07-16 大阶段 13.1/13.2：批准稿二次 fidelity completion
+
+- [x] 原尺寸重新审计 15 张批准画板与 binding README。
+- [x] 补齐 format-aware settings、EPUB Single/Double 外提状态与 Continuous 禁用说明。
+- [x] 补齐移动 Back/Contents/Theme/Bookmark/More 工具顺序和 Notes/Search/Focus overflow。
+- [x] 补齐 toolbar 首次延迟/相邻即时 tooltip，避免根阅读树重渲染。
+- [x] 补齐 drawer/sheet 1:1 gesture、intent lock、velocity settle、rubber-banding 和 reduced-motion。
+- [x] 美化真实 bookmarks/notes/search panels 与 EPUB/TXT/PDF loading/error states。
+- [x] 优化 PDF theme surface 更新和 memo 边界；Playwright Chromium/DPR2 50ms long-task 门通过。
+- [x] 定向 Vitest、lint/build；Playwright 全量 21/21。
+- [x] 最终 `pnpm.cmd check`（core 8、desktop 160）、Cargo fmt/Rust 36、Playwright 21/21。
+- [ ] 最终 diff check、提交/合并/推送。
+- [x] 保持 13.3 未开始，未改版本/schema/依赖/格式，未发布 Release。
