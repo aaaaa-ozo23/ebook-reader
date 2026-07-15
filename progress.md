@@ -1994,3 +1994,15 @@
 - **自动化：** desktop 18 files / 158 tests passed；Stage 13.1 Chromium 3/3；responsive + Stage 13.1 DPR2 6/6；既有 bookshelf smoke 3/3；production build passed。
 - **Browser：** 新标签页验证 `Ebook Reader` 页面身份、1536/1536 无横向溢出、Grid→List、Shelf→Recent、真实空态和 console warning/error 0；隔离 Browser 无 seeded 本地书库，六书状态由项目 Playwright fixture 补充。
 - **过程纠正：** 初次 Vite 命令多传一个 `--` 导致只绑定 localhost/IPv6，已按 Browser 契约重启到 `127.0.0.1:1420`；首次组合 Vitest 参数误跑全部测试并暴露兼容断言，修正语义后通过；Browser screenshot 属于 tab API 而非 `tab.playwright`，纠正后恢复；DPR2 axe 曾在入场透明度中途取样，改为完成动画后测稳定视觉；List smoke 的旧几何断言也改为等待 View Transition 完成。
+
+## 2026-07-16 大阶段 13.2：阅读器视觉收口完成
+
+- **状态：** complete；分支 `codex/stage13-reader-polish`。仅完成 13.2 reader UI，未开始 13.3、未改版本/依赖/schema/格式、未发布 Release。
+- **结构：** 新增统一线性 `ReaderIcons`；ReaderShell topbar 改为格式/书名/工具三段，ReaderSidebar 增加书名作者与四个图标 tab，原有 bookmark/annotation/search/locator/transition 行为不变。
+- **视觉：** 366 px deep-ink 桌面侧栏、356 px Reading settings、开放式暖纸阅读舞台、青绿目录/进度、琥珀 focus/active；TXT/EPUB/PDF 各自只调整表现，不互相覆盖 layout。
+- **响应式：** 900 档保持可调桌面侧栏；640 使用 252 px 常驻侧栏和等宽四工具栏；375 使用白色 drawer、模糊 backdrop 与 bottom sheet，44 px 控件和 body 无横向溢出。
+- **动效：** popover 使用 origin-aware scale/fade，drawer/bottom sheet 使用可打断的短距离 slide，press 为 0.97；reduced-motion 清除位移、缩放和转场，仅保留即时状态变化。
+- **回归：** targeted Vitest 67/67，desktop 全量 18 files / 158 tests；seeded TXT、生成 EPUB（含图片查看器）、3 页 PDF、500 页 PDF 虚拟化均通过；axe serious/critical、focus、DPR2、窄窗回退由既有 smoke/acceptance 覆盖。
+- **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 158）；Playwright Chromium/DPR2/专用 TXT/PDF project 21/21 passed；Cargo fmt check 与 Rust 36 tests passed；production ReaderShell gzip 52.73 kB，PDF runtime 127.30 kB 并继续懒加载。
+- **视觉证据：** 1280 desktop/settings、640 compact、375 drawer/settings 五张稳定截图均经 `view_image` 原尺寸复核；差异和修正记录在 `docs/design/v0.2/stage13-reader-fidelity.md`。
+- **Browser：** 新隔离 tab 验证真实 Vite 页面身份、空书架语义和 `bodyScrollWidth === bodyClientWidth`；隔离会话无本地书籍，复杂三格式状态由项目生成 fixture 补齐。

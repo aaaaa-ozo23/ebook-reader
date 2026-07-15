@@ -29,6 +29,7 @@ import {
   type TxtPaginatedViewMode,
 } from "@reader/core";
 import "../components/ReaderShell.css";
+import "../components/ReaderStage13.css";
 
 import {
   createAnnotation,
@@ -68,6 +69,7 @@ import {
   searchTxtDocument,
   splitChapterParagraphs,
 } from "./ReaderFormatContents";
+import { ReaderIcon } from "./ReaderIcons";
 import { NoteEditor, NotePopover, SelectionMenu } from "./ReaderOverlays";
 import {
   clampSidebarWidth,
@@ -185,6 +187,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     useReaderNavigationController();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const sidebarToggleRef = useRef<HTMLButtonElement | null>(null);
+  const themeButtonRef = useRef<HTMLButtonElement | null>(null);
   const focusButtonRef = useRef<HTMLButtonElement | null>(null);
   const sidebarCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const layoutSaveTimerRef = useRef<number | null>(null);
@@ -457,9 +460,18 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     }
   }, [closeSidebar, isSidebarOpen]);
 
-  const toggleThemePanel = useCallback(() => {
-    setIsThemePanelOpen((currentValue) => !currentValue);
+  const closeThemePanel = useCallback(() => {
+    setIsThemePanelOpen(false);
+    focusElementSoon(themeButtonRef);
   }, []);
+
+  const toggleThemePanel = useCallback(() => {
+    if (isThemePanelOpen) {
+      closeThemePanel();
+      return;
+    }
+    setIsThemePanelOpen(true);
+  }, [closeThemePanel, isThemePanelOpen]);
 
   const enterFocusMode = useCallback(() => {
     setIsChromeHidden(true);
@@ -970,6 +982,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         if (shortcutState.isThemePanelOpen) {
           event.preventDefault();
           setIsThemePanelOpen(false);
+          focusElementSoon(themeButtonRef);
           return;
         }
 
@@ -1318,6 +1331,8 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         annotationError={visibleAnnotationError}
         annotations={visibleAnnotations}
         bookmarks={visibleBookmarks}
+        bookAuthor={book.author ?? "Unknown author"}
+        bookTitle={book.title}
         bookmarkError={visibleBookmarkError}
         items={tocItems}
         isOpen={isSidebarOpen}
@@ -1351,23 +1366,31 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               ref={sidebarToggleRef}
               type="button"
               className="reader-link-button"
+              aria-label="Shelf"
               onClick={onBackToLibrary}
             >
-              Shelf
+              <ReaderIcon name="back" />
+              <span>Back</span>
             </button>
-            <div>
-              <p className="reader-kicker">{formatBookFormat(book.format)} reading</p>
-              <h1>{book.title}</h1>
-            </div>
+            <p className="reader-kicker">
+              <ReaderIcon name="book" />
+              <span>{formatBookFormat(book.format)} reading</span>
+            </p>
+          </div>
+          <div className="reader-book-heading">
+            <h1>{book.title}</h1>
+            <p>{book.author ?? "Unknown author"}</p>
           </div>
           <div className="reader-toolbar" aria-label="Reader tools">
             <button
+              ref={themeButtonRef}
               type="button"
               className="reader-tool-button"
               aria-expanded={isSidebarOpen}
               onClick={toggleSidebar}
             >
-              Contents
+              <ReaderIcon name="contents" />
+              <span>Contents</span>
             </button>
             <button
               type="button"
@@ -1375,14 +1398,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               disabled={currentBookmarkLocator === null}
               onClick={handleCreateBookmark}
             >
-              Bookmark
+              <ReaderIcon name="bookmark" />
+              <span>Bookmark</span>
             </button>
             <button
               type="button"
               className="reader-tool-button"
+              aria-expanded={isThemePanelOpen}
               onClick={toggleThemePanel}
             >
-              Theme
+              <ReaderIcon name="theme" />
+              <span>Theme</span>
             </button>
             <button
               ref={focusButtonRef}
@@ -1390,13 +1416,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               className="reader-tool-button"
               onClick={enterFocusMode}
             >
-              Focus
+              <ReaderIcon name="focus" />
+              <span>Focus</span>
             </button>
           </div>
         </header>
         {isChromeHidden ? (
           <button type="button" className="reader-focus-exit" onClick={exitFocusMode}>
-            Exit focus
+            <ReaderIcon name="focus" />
+            <span>Exit focus</span>
           </button>
         ) : null}
         {book.format === "txt" ? (
@@ -1509,6 +1537,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               : undefined
           }
           txtReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
+          onClose={closeThemePanel}
           onPageTransitionChange={handleEpubTransitionChange}
           onPdfReadingModeChange={handlePdfReadingModeChange}
           onThemeChange={handleThemeChange}

@@ -105,7 +105,7 @@ export interface ReaderLayoutPreferences {
 }
 
 export const defaultReaderLayoutPreferences: ReaderLayoutPreferences = {
-  sidebarWidth: 292,
+  sidebarWidth: 366,
 };
 
 export interface LocatorContext {
