@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.10 PDF Double 冷启动动画修复：complete；已把快照状态拆分为 pending/ready/failed，冷启动 pending 在可取消的 10 秒窗口内等待准确 Canvas，明确渲染/快照失败仍立即安全回退。500 页 PDF 首次打开后立即 Double Next 已在 Chromium/DPR2 验证准确 page 1 → page 2–3 与可见中间帧，并通过完整 Web/Rust/Tauri 门禁。
+大阶段 13.1 书架视觉收口：in_progress。用户已于 2026-07-16 批准 13.1/13.2 全部 15 张活动画板；先在 `codex/stage13-bookshelf-polish` 完成书架 Grid/List、系统状态、响应式、控件交互和视觉对比，再进入 13.2 阅读器视觉收口。13.1/13.2 完成前不开始 13.3。
 
 ## 分支策略
 
@@ -501,6 +501,13 @@
 | 13.7 应用内更新 | `codex/stage13-app-updater` | 接入 Tauri updater、签名清单、检查/下载/安装状态和手动回退说明 | 无更新、下载失败、签名失败、取消、重启安装和数据库兼容路径通过 |
 | 13.8 发布安全与签名 | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
 | 13.9 v0.2 发布候选 | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | RC 仅含已验收功能；全套门禁和安装矩阵通过；发布需用户明确授权后执行 |
+
+### 阶段 13.1/13.2 设计评审前置记录
+
+- 当前状态：approved_for_implementation；15 张活动画板于 2026-07-16 全部批准。
+- 实施边界：先 `codex/stage13-bookshelf-polish`，完成并合入集成分支后再进入 `codex/stage13-reader-polish`；不得把两阶段压缩为一次大改。
+- 审核门：13.1 对照 01–04 与 14–15，覆盖 Grid/List、删除确认、loading/empty/error/import feedback、1280/900/640/375/DPR2、focus/reduced-motion；13.2 对照 05–15，覆盖 EPUB/TXT/PDF、四主题、侧栏/抽屉、设置、浮层、图片查看器和动效。
+- 停止边界：完成 13.1/13.2 产品实现与验收后停止，不开始 13.3 备份导出。
 
 ## 大阶段 14：v0.3 格式与阅读能力扩展
 

@@ -127,3 +127,5 @@
 阶段 11 TXT 分页、五项阅读方式、Single/Double、EPUB 同款底栏、11.8 性能/动画目标修复和完整门禁见 [`stage11-txt-pagination-fidelity.md`](./stage11-txt-pagination-fidelity.md)。
 
 阶段 12 PDF 虚拟连续滚动、页内恢复、统一跳转、有限 Canvas 生命周期、Single/Double 精确快照动画和 500 页验收见 [`stage12-pdf-continuous-fidelity.md`](./stage12-pdf-continuous-fidelity.md)。
+
+阶段 13.1/13.2 的逐功能 UI 概念、响应式方案、系统状态、动效分镜和控件交互状态见 [`stage13-concepts/README.md`](./stage13-concepts/README.md)。15 张活动画板已于 2026-07-16 全部批准，当前状态为 `approved_for_implementation`；实施按 13.1 书架、13.2 阅读器两条阶段分支分别验收，不开始 13.3。
