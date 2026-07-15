@@ -45,6 +45,7 @@ describe("ReaderThemePanel page transitions", () => {
     render(
       <ReaderThemePanel
         isOpen
+        onClose={vi.fn()}
         theme={defaultReaderTheme}
         themeError={null}
         txtReadingMode="continuous"
@@ -65,6 +66,7 @@ describe("ReaderThemePanel page transitions", () => {
     render(
       <ReaderThemePanel
         isOpen
+        onClose={vi.fn()}
         pdfReadingMode="continuous"
         pdfReadingModeOptions={["continuous", ...MODES]}
         theme={defaultReaderTheme}
@@ -88,6 +90,7 @@ function renderPanel(
   return render(
     <ReaderThemePanel
       isOpen
+      onClose={vi.fn()}
       pageTransition={pageTransition}
       pageTransitionError={null}
       pageTransitionModes={MODES}

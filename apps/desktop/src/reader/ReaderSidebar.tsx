@@ -23,6 +23,7 @@ import {
   formatAnnotationTimestamp,
   getLocatorLabel,
 } from "./readerAnnotationPresentation";
+import { ReaderIcon, type ReaderIconName } from "./ReaderIcons";
 
 export type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
 
@@ -38,6 +39,8 @@ interface ReaderSidebarProps {
   activeTab: ReaderSidebarTab;
   annotationError: string | null;
   annotations: Annotation[];
+  bookAuthor: string;
+  bookTitle: string;
   bookmarks: Array<Bookmark<Locator>>;
   bookmarkError: string | null;
   items: TocItem[];
@@ -71,6 +74,8 @@ function ReaderSidebar({
   activeTab,
   annotationError,
   annotations,
+  bookAuthor,
+  bookTitle,
   bookmarks,
   bookmarkError,
   items,
@@ -132,7 +137,8 @@ function ReaderSidebar({
           className="reader-sidebar__back"
           onClick={onBackToLibrary}
         >
-          Back to shelf
+          <ReaderIcon name="back" />
+          <span>Back to shelf</span>
         </button>
         <button
           ref={sidebarCloseButtonRef}
@@ -141,8 +147,12 @@ function ReaderSidebar({
           aria-label="Close contents"
           onClick={onClose}
         >
-          Close
+          <ReaderIcon name="close" />
         </button>
+      </div>
+      <div className="reader-sidebar__book">
+        <p className="reader-sidebar__book-title">{bookTitle}</p>
+        <p>{bookAuthor}</p>
       </div>
       <div className="reader-sidebar-tabs" role="tablist" aria-label="Reader sidebar">
         {(["contents", "bookmarks", "notes", "search"] as ReaderSidebarTab[]).map(
@@ -154,7 +164,8 @@ function ReaderSidebar({
               aria-selected={activeTab === tab}
               onClick={() => onTabChange(tab)}
             >
-              {formatSidebarTab(tab)}
+              <ReaderIcon name={getSidebarIcon(tab)} />
+              <span>{formatSidebarTab(tab)}</span>
             </button>
           ),
         )}
@@ -324,6 +335,13 @@ function ReaderSidebar({
       ) : null}
     </aside>
   );
+}
+
+function getSidebarIcon(tab: ReaderSidebarTab): ReaderIconName {
+  if (tab === "contents") return "contents";
+  if (tab === "bookmarks") return "bookmark";
+  if (tab === "notes") return "notes";
+  return "search";
 }
 
 interface ReaderSidebarResizerProps {

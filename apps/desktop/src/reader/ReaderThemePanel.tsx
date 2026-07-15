@@ -2,6 +2,7 @@
 import { useCallback, type ChangeEvent, type KeyboardEvent } from "react";
 import type { PageTransitionMode, ReaderTheme, ReaderThemeMode } from "@reader/core";
 import { Button } from "../components/ui/Button";
+import { ReaderIcon } from "./ReaderIcons";
 
 export const THEME_PRESETS: Record<
   ReaderThemeMode,
@@ -66,6 +67,7 @@ export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string>
 
 interface ReaderThemePanelProps {
   isOpen: boolean;
+  onClose: () => void;
   pageTransition?: PageTransitionMode;
   pageTransitionError?: string | null;
   pageTransitionModes?: readonly PageTransitionMode[];
@@ -83,6 +85,7 @@ interface ReaderThemePanelProps {
 
 export function ReaderThemePanel({
   isOpen,
+  onClose,
   pageTransition,
   pageTransitionError,
   pageTransitionModes,
@@ -111,8 +114,8 @@ export function ReaderThemePanel({
   );
   const handleNumberChange = useCallback(
     (field: "fontSize" | "lineHeight" | "paragraphSpacing" | "pageMargin") =>
-      (event: ChangeEvent<HTMLInputElement>) => {
-        onThemeChange({ ...theme, [field]: Number(event.currentTarget.value) });
+      (value: number) => {
+        onThemeChange({ ...theme, [field]: value });
       },
     [onThemeChange, theme],
   );
@@ -120,7 +123,19 @@ export function ReaderThemePanel({
   if (!isOpen) return null;
 
   return (
-    <aside className="reader-theme-panel" aria-label="Reader theme">
+    <aside className="reader-theme-panel" aria-label="Reading settings">
+      <header className="reader-theme-panel__header">
+        <h2>Reading settings</h2>
+        <button
+          type="button"
+          aria-label="Close reading settings"
+          autoFocus
+          onClick={onClose}
+        >
+          <ReaderIcon name="close" />
+        </button>
+      </header>
+      <p className="reader-theme-panel__section-label">Theme</p>
       <div className="theme-mode-grid" role="group" aria-label="Theme mode">
         {(["light", "sepia", "green", "dark"] satisfies ReaderThemeMode[]).map(
           (mode) => (
@@ -368,24 +383,50 @@ interface ThemeSliderProps {
   min: number;
   step: number;
   value: number;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onChange: (value: number) => void;
 }
 
 function ThemeSlider({ label, max, min, step, value, onChange }: ThemeSliderProps) {
+  const displayValue = formatThemeControlValue(label, value);
+
   return (
-    <label className="theme-field">
-      <span>
-        {label}
-        <strong>{Number.isInteger(value) ? value : value.toFixed(2)}</strong>
-      </span>
+    <div className="theme-field">
+      <span>{label}</span>
+      <div className="theme-stepper" role="group" aria-label={`${label} controls`}>
+        <button
+          type="button"
+          aria-label={`Decrease ${label.toLowerCase()}`}
+          disabled={value <= min}
+          onClick={() => onChange(Math.max(min, Number((value - step).toFixed(2))))}
+        >
+          −
+        </button>
+        <output aria-live="polite">{displayValue}</output>
+        <button
+          type="button"
+          aria-label={`Increase ${label.toLowerCase()}`}
+          disabled={value >= max}
+          onClick={() => onChange(Math.min(max, Number((value + step).toFixed(2))))}
+        >
+          +
+        </button>
+      </div>
       <input
+        className="theme-stepper__range"
+        aria-label={`${label} value`}
         max={max}
         min={min}
         step={step}
         type="range"
         value={value}
-        onChange={onChange}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
-    </label>
+    </div>
   );
+}
+
+function formatThemeControlValue(label: string, value: number): string {
+  if (label === "Size") return `${Math.round((value / 18) * 100)}%`;
+  if (label === "Line") return value.toFixed(2);
+  return `${Math.round(value)}px`;
 }

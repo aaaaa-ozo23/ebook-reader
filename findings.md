@@ -609,3 +609,14 @@
 - 375 px Grid 按批准稿移除 rail 和可见 overflow 按钮，封面限制为 88 px；List 继续提供显式 overflow，Grid 仍保留右键上下文菜单，因此视觉简化没有删除操作能力。
 - DPR2 首轮 axe 在卡片入场透明度尚未结束时把混合后的中间颜色误判为静态低对比；验收现显式完成入场动画后再测稳定状态。最终静态 375 px 颜色对比、44 px target、无横向溢出均通过。
 - 真实 Browser 的旧 tab 保留过一次已修复 HMR 异常；换新 tab 后只有 Vite debug 与 React DevTools info，无 warning/error。隔离会话验证真实空态与 Grid/List、Shelf/Recent；六书视觉与操作状态由仓库 fixture 验证。
+
+## 2026-07-16 大阶段 13.2：阅读器视觉收口
+
+- 阅读器旧样式把 sidebar、topbar、各格式正文和设置控件混在同一视觉层。13.2 保留现有数据/locator/adapter 行为，只用后置 `ReaderStage13.css` 和语义化图标层重塑 chrome，避免触碰 EPUB/PDF 懒加载边界。
+- 桌面默认侧栏从 292 调整为批准稿的 366 px；900 以下不再直接退化为覆盖式 drawer，521–899 保留 252 px 常驻侧栏，只有 520 以下使用白色抽屉与遮罩。375 抽屉仍保留关闭、焦点恢复和 Escape 路径。
+- Reading settings 改为 356 px 桌面实边面板和移动端 bottom sheet；四主题只改变阅读舞台，设置面板自身保持中性白色，避免 Dark 主题让系统控件整体变黑。数值 range 继续保留可访问输入，同时视觉呈现为减号/当前值/加号 stepper。
+- 1280 桌面打开设置后可用 topbar 宽度不足，初版出现书名与工具栏重叠；1400 以下打开设置时隐藏重复的居中书名，保留格式与四个操作，1600 批准布局仍显示完整三段 topbar。
+- 通用 `.reader-page` 宽度首轮误限制 PDF 舞台为 690 px，导致 Double 按钮保持选中但实际降级为 Single；宽度约束已缩到 TXT virtual page，500 页 PDF 的 Double/Continuous/窄窗回退恢复通过。
+- TXT 渐进分页测试曾把 `requestIdleCallback` 固定为每 60 ms 且 `timeRemaining=0`，375 重排需逐批等待而长期显示 Calculating；在完成渐进发布断言后恢复有预算的 idle callback，产品分页算法未被改成同步阻塞。
+- 640 首轮截图显示格式、标题和四个工具挤在 388 px 主区并截断 Focus；紧凑档现只显示等宽四工具栏，书名/作者继续由常驻侧栏承担，正文与 body 均无横向溢出。
+- 顶部 Shelf、侧栏 Back to shelf 和 Close contents 最初产生包含匹配歧义；最终可访问名称明确区分，设置关闭会把焦点恢复到 Theme，打开面板自动聚焦关闭按钮。

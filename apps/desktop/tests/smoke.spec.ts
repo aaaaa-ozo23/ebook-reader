@@ -465,6 +465,10 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   ).toBe(false);
   await expect(page.getByRole("button", { name: "Theme" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "第一章 长文本" })).toBeVisible();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-desktop.png"),
+  });
   await expectNoSeriousAccessibilityViolations(page);
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");
 
@@ -482,6 +486,10 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(page.getByRole("heading", { name: "第三章 归来" })).toBeVisible();
 
   await page.getByRole("button", { name: "Theme" }).click();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-settings-desktop.png"),
+  });
   await page.getByRole("button", { name: "dark" }).click();
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
@@ -508,17 +516,21 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     (resizerBox?.y ?? 0) + (resizerBox?.height ?? 0) / 2,
   );
   await page.mouse.up();
+  const resizedSidebarWidth = Number(
+    await contentsResizer.getAttribute("aria-valuenow"),
+  );
+  expect(resizedSidebarWidth).toBeGreaterThanOrEqual(380);
+  expect(resizedSidebarWidth).toBeLessThanOrEqual(480);
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
-    /--reader-sidebar-width: 401px/,
+    new RegExp(`--reader-sidebar-width: ${resizedSidebarWidth}px`),
   );
-  await expect(contentsResizer).toHaveAttribute("aria-valuenow", "401");
   await page.waitForTimeout(350);
   await page.reload();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
-    /--reader-sidebar-width: 401px/,
+    new RegExp(`--reader-sidebar-width: ${resizedSidebarWidth}px`),
   );
   const firstTocItem = page.getByRole("button", { name: "第一章 长文本" });
   await expect(firstTocItem).toHaveCSS("white-space", "nowrap");
@@ -556,7 +568,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(
     page.locator('.reader-txt-spread[data-window-state="current"]'),
   ).not.toHaveAttribute("data-spread-start", partialSpreadStart ?? "0");
-  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
+    timeout: 20_000,
+  });
   await page.getByRole("button", { name: "第一章 长文本" }).click();
   await expect(page.locator(".reader-epub-status strong")).toHaveText(/Page 1 \/ \d+/);
   await page.setViewportSize({ width: 1280, height: 1000 });
@@ -729,16 +743,30 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(page.locator(".reader-page--virtual")).toBeVisible();
 
   await page.setViewportSize({ width: 900, height: 640 });
-  await expect(page.locator(".reader-sidebar")).toHaveCSS("width", "401px");
+  await expect(page.locator(".reader-sidebar")).toHaveCSS(
+    "width",
+    `${resizedSidebarWidth}px`,
+  );
 
   await page.setViewportSize({ width: 899, height: 640 });
   const mediumSidebar = await page.locator(".reader-sidebar").boundingBox();
   expect(mediumSidebar?.width).toBeLessThanOrEqual(899 * 0.4);
 
   await page.setViewportSize({ width: 640, height: 640 });
-  await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
+  await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "relative");
   await expect(contentsResizer).toBeHidden();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-compact.png"),
+  });
 
+  await page.evaluate(() => {
+    window.requestIdleCallback = (callback) =>
+      window.setTimeout(
+        () => callback({ didTimeout: false, timeRemaining: () => 50 }),
+        0,
+      );
+  });
   await page.setViewportSize({ width: 375, height: 760 });
   await expect(page.locator(".reader-sidebar")).toHaveCSS("position", "fixed");
   await expect(contentsResizer).toBeHidden();
@@ -756,15 +784,22 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   expect(narrowLayout.bodyScrollWidth).toBe(narrowLayout.bodyClientWidth);
   expect(narrowLayout.mainLeft).toBe(0);
   expect(narrowLayout.sidebarWidth).toBeLessThanOrEqual(360);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-mobile-drawer.png"),
+  });
   await page.locator(".reader-sidebar__close").click();
   await expect(page.locator(".reader-sidebar")).toBeHidden();
   await page.getByRole("button", { name: "Theme" }).click();
   const mobileTxtReadingModes = page.getByRole("radiogroup", {
     name: "TXT reading mode",
   });
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-mobile-settings.png"),
+  });
   await mobileTxtReadingModes.getByRole("radio", { name: "Cover" }).click();
   await expect(page.getByRole("spinbutton", { name: "TXT page number" })).toBeEnabled();
-  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
   const mobileModeHeights = await mobileTxtReadingModes
     .getByRole("radio")
     .evaluateAll((options) =>
@@ -772,6 +807,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     );
   expect(mobileModeHeights.every((height) => height >= 44)).toBe(true);
   await page.keyboard.press("Escape");
+  await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
+    timeout: 20_000,
+  });
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.locator(".reader-txt-page-window--single")).toBeVisible();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
@@ -802,7 +840,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     path: testInfo.outputPath("txt-paginated-mobile-cover.png"),
   });
   await expectNoSeriousAccessibilityViolations(page);
-  await page.getByRole("button", { name: "Contents" }).click();
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
   await expect(page.locator(".reader-sidebar")).toBeVisible();
 
   await page.getByRole("button", { name: "Back to shelf" }).click();
@@ -1600,7 +1638,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(viewableImage).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page, consoleIssues);
 
-  await page.getByRole("button", { name: "Contents" }).click();
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
   await page.getByRole("button", { name: "Back to shelf" }).click();
   await expect(
     page.getByRole("main", { name: "Ebook Reader bookshelf" }),
@@ -1743,7 +1781,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await pageInput.press("Enter");
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
-  await page.getByRole("button", { name: "Contents" }).click();
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
     "aria-pressed",
@@ -2188,10 +2226,9 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   }
 
   await page.setViewportSize({ width: 375, height: 760 });
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Double", includeHidden: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
   const currentMobileSurface = page.locator(
     '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface[data-page-number="10"]',
@@ -2221,10 +2258,9 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("main", { name: "PDF reader" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Double", includeHidden: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   expect(
     consoleIssues.filter(
       (issue) =>

@@ -2,7 +2,7 @@
   display: grid;
   height: 100vh;
   min-height: 100vh;
-  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 292px), 480px) minmax(
+  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 366px), 480px) minmax(
       0,
       1fr
     );
@@ -1743,7 +1743,7 @@
 
 @media (min-width: 761px) and (max-width: 899px) {
   .reader-shell {
-    grid-template-columns: min(var(--reader-sidebar-width, 292px), 40vw) minmax(0, 1fr);
+    grid-template-columns: min(var(--reader-sidebar-width, 366px), 40vw) minmax(0, 1fr);
   }
 }
 
