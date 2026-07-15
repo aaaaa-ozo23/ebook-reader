@@ -493,7 +493,7 @@
 | 小阶段 | 分支 | 工作内容 | 验收 |
 |--------|------|----------|------|
 | 13.1 书架视觉收口（complete） | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1536/1280/900/640/375/DPR2 通过 |
-| 13.2 阅读器视觉收口（complete） | `codex/stage13-reader-polish` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效 | 四主题、三格式、focus/reduced-motion、窄屏抽屉和图片查看器视觉/a11y 通过 |
+| 13.2 阅读器视觉收口（complete） | `codex/stage13-reader-polish` + `codex/stage13-fidelity-completion` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效；按 15 张批准稿完成二次逐项审计与缺口收口 | 四主题、三格式、format-aware settings、focus/reduced-motion、真实手势、tooltips、系统态、窄屏抽屉和图片查看器视觉/a11y 通过 |
 | 13.3 备份导出 | `codex/stage13-backup-export` | 定义版本化备份 manifest/JSON，导出书库元数据、设置、进度、书签、标注；原书/封面为显式选项 | 可校验版本、checksum 和缺失文件；导出不修改数据库；大书库有进度/取消 |
 | 13.4 备份恢复 | `codex/stage13-backup-restore` | 校验备份后事务恢复；书籍按 file hash 去重，记录按 UUID 合并，冲突以 `updated_at` 新者为准 | 失败原子回滚；旧/重复/部分/损坏备份、无原书和跨路径恢复测试通过 |
 | 13.5 元数据与封面编辑 | `codex/stage13-book-metadata-editor` | 编辑标题/作者和用户封面；区分提取值与用户覆盖值，支持恢复自动封面 | 重启/升级保持覆盖；格式/尺寸校验、删除书籍和备份恢复一致 |
@@ -508,6 +508,12 @@
 - 实施边界：先 `codex/stage13-bookshelf-polish`，完成并合入集成分支后再进入 `codex/stage13-reader-polish`；不得把两阶段压缩为一次大改。
 - 审核门：13.1 对照 01–04 与 14–15，覆盖 Grid/List、删除确认、loading/empty/error/import feedback、1280/900/640/375/DPR2、focus/reduced-motion；13.2 对照 05–15，覆盖 EPUB/TXT/PDF、四主题、侧栏/抽屉、设置、浮层、图片查看器和动效。
 - 停止边界：完成 13.1/13.2 产品实现与验收后停止，不开始 13.3 备份导出。
+
+### 阶段 13.1/13.2 最终 fidelity completion
+
+- 分支：`codex/stage13-fidelity-completion`，从已合入 13.1/13.2 的 `codex/v0.2.0-integration` 创建。
+- 完成项：设置面板、格式页视图、移动工具栏、侧栏工具态、加载/错误态、tooltip 时序、drawer/sheet 手势与 PDF 主题性能逐项对齐批准稿。
+- 验收：所有 15 张活动画板重新原尺寸审计；TXT/EPUB/PDF 运行态截图和 21 个 Playwright 项目通过；13.3 保持未开始。
 
 ## 大阶段 14：v0.3 格式与阅读能力扩展
 

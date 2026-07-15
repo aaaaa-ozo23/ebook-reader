@@ -103,6 +103,7 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private readonly pagePromises = new Map<number, Promise<PDFPageProxy>>();
   private readonly renderTasks = new Map<number, RenderTask>();
   private readonly renderSequences = new Map<number, number>();
+  private readonly surfaceCanvases = new Set<HTMLCanvasElement>();
   private readonly textLayers = new Map<number, CancellableTextLayer>();
   private readonly textLayerSequences = new Map<number, number>();
   private pageOffsetRatio: number | undefined;
@@ -171,6 +172,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     this.pagePromises.clear();
     this.renderSequences.clear();
     this.textLayerSequences.clear();
+    for (const canvas of this.surfaceCanvases) {
+      canvas.style.removeProperty("background-color");
+    }
+    this.surfaceCanvases.clear();
 
     if (this.loadingTask !== null) {
       await this.loadingTask.destroy();
@@ -221,6 +226,9 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
 
   async setTheme(theme: ReaderTheme): Promise<void> {
     this.theme = theme;
+    for (const canvas of this.surfaceCanvases) {
+      canvas.style.backgroundColor = theme.backgroundColor;
+    }
   }
 
   async search(query: string): Promise<SearchHit<PdfLocator>[]> {
@@ -469,13 +477,15 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     canvas.height = Math.floor(viewport.height * outputScale);
     canvas.style.width = `${Math.floor(viewport.width)}px`;
     canvas.style.height = `${Math.floor(viewport.height)}px`;
+    canvas.style.backgroundColor = this.theme.backgroundColor;
+    this.surfaceCanvases.add(canvas);
 
     const renderTask = page.render({
       canvas,
       canvasContext: context,
       transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : undefined,
       viewport,
-      background: this.theme.backgroundColor,
+      background: "rgba(0, 0, 0, 0)",
     });
 
     this.renderTasks.set(normalizedPage, renderTask);
@@ -701,8 +711,10 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
     textLayer?.removeAttribute("data-page-number");
 
     if (canvas !== undefined && canvas !== null) {
+      this.surfaceCanvases.delete(canvas);
       canvas.width = 0;
       canvas.height = 0;
+      canvas.style.removeProperty("background-color");
       canvas.removeAttribute("data-page-number");
     }
 

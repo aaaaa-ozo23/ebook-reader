@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useRef,
@@ -228,3 +229,5 @@ export function PdfContinuousView({
     </div>
   );
 }
+
+export const MemoizedPdfContinuousView = memo(PdfContinuousView);
