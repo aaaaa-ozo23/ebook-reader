@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 13.1 书架视觉收口：in_progress。用户已于 2026-07-16 批准 13.1/13.2 全部 15 张活动画板；先在 `codex/stage13-bookshelf-polish` 完成书架 Grid/List、系统状态、响应式、控件交互和视觉对比，再进入 13.2 阅读器视觉收口。13.1/13.2 完成前不开始 13.3。
+大阶段 13.1 书架视觉收口：complete。批准稿对应的 Grid/List、系统状态、真实进度、响应式、控件交互、motion/reduced-motion 和视觉对比已在 `codex/stage13-bookshelf-polish` 完成并通过 Chromium/DPR2 验收；下一步按独立 `codex/stage13-reader-polish` 分支进入 13.2。13.2 完成前不开始 13.3。
 
 ## 分支策略
 
@@ -492,7 +492,7 @@
 
 | 小阶段 | 分支 | 工作内容 | 验收 |
 |--------|------|----------|------|
-| 13.1 书架视觉收口 | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1280/900/640/375/DPR2 通过 |
+| 13.1 书架视觉收口（complete） | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1536/1280/900/640/375/DPR2 通过 |
 | 13.2 阅读器视觉收口 | `codex/stage13-reader-polish` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效 | 四主题、三格式、focus/reduced-motion、窄屏抽屉和图片查看器视觉/a11y 通过 |
 | 13.3 备份导出 | `codex/stage13-backup-export` | 定义版本化备份 manifest/JSON，导出书库元数据、设置、进度、书签、标注；原书/封面为显式选项 | 可校验版本、checksum 和缺失文件；导出不修改数据库；大书库有进度/取消 |
 | 13.4 备份恢复 | `codex/stage13-backup-restore` | 校验备份后事务恢复；书籍按 file hash 去重，记录按 UUID 合并，冲突以 `updated_at` 新者为准 | 失败原子回滚；旧/重复/部分/损坏备份、无原书和跨路径恢复测试通过 |

@@ -313,6 +313,13 @@ test("shows the complete default-cover title in list view", async ({ page }) => 
   await page.goto("/");
 
   await page.getByRole("button", { name: "List" }).click();
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
   const card = page.getByRole("article", { name: `${title} book` });
   const cover = page.locator(".book-card__cover");
   const coverShell = card.locator(".book-card__cover-shell");
@@ -331,8 +338,8 @@ test("shows the complete default-cover title in list view", async ({ page }) => 
 
   const coverBox = await cover.boundingBox();
   const cardAfterHover = await card.boundingBox();
-  expect(coverBox?.width).toBe(82);
-  expect(coverBox?.height).toBe(123);
+  expect(coverBox?.width).toBeCloseTo(70, 2);
+  expect(coverBox?.height).toBeCloseTo(105, 2);
   expect(cardAfterHover?.height).toBe(cardBeforeHover?.height);
 });
 

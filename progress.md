@@ -1983,3 +1983,14 @@
 - **13.1 视觉基线：** 已用 `view_image` 原尺寸复核 01 Grid、02 List/actions、03 system states、04 responsive 四张批准图，记录 token、布局、真实数据边界与动效约束。
 - **技能约束：** Build Web Apps 将批准稿视为生产规格并要求最终批准图/浏览器截图直接比对；frontend-design/React best practices 约束组件结构；Emil/Apple 规范 press、popover、layout transition、手势和 reduced-motion；Browser 优先执行渲染 QA。
 - **停止边界：** 只完成 13.1/13.2；不开始 13.3，不改版本、不发布 Release。
+
+## 2026-07-16 大阶段 13.1：书架视觉收口完成
+
+- **状态：** complete；分支 `codex/stage13-bookshelf-polish`。实现范围严格止于书架，不提前修改 13.2 reader chrome，也不开始 13.3。
+- **组件/数据：** 提取 `library/Bookshelf.tsx`，App 保留行为编排；新增 `bookProgress.ts` 读取真实持久化进度（去重、最大六并发、坏记录隔离）；ReaderShell 与 EPUB/PDF runtime 继续懒加载。
+- **视觉：** 落实 106 px rail、开放式三列 Grid、70×105 List、批准 token、真实 cover/fallback、系统 skeleton/empty/error/import feedback、900/640/375 响应式和 44 px compact target。
+- **交互/动效：** Grid/List 使用 book identity View Transition；overflow origin-aware；pointer press 0.97；菜单/删除确认的焦点转移与恢复保留；reduced motion 移除位移/stagger，仅保留短颜色/透明度反馈。
+- **对图：** 原尺寸复核批准板 01–04，并用 `view_image` 比较最终 1536 Grid/List 与 375 Grid 截图；封面列起点、List 信息分组、封面纵横比、进度宽度等发现项均已修正。差异账本见 `docs/design/v0.2/stage13-bookshelf-fidelity.md`，无未记录偏差。
+- **自动化：** desktop 18 files / 158 tests passed；Stage 13.1 Chromium 3/3；responsive + Stage 13.1 DPR2 6/6；既有 bookshelf smoke 3/3；production build passed。
+- **Browser：** 新标签页验证 `Ebook Reader` 页面身份、1536/1536 无横向溢出、Grid→List、Shelf→Recent、真实空态和 console warning/error 0；隔离 Browser 无 seeded 本地书库，六书状态由项目 Playwright fixture 补充。
+- **过程纠正：** 初次 Vite 命令多传一个 `--` 导致只绑定 localhost/IPv6，已按 Browser 契约重启到 `127.0.0.1:1420`；首次组合 Vitest 参数误跑全部测试并暴露兼容断言，修正语义后通过；Browser screenshot 属于 tab API 而非 `tab.playwright`，纠正后恢复；DPR2 axe 曾在入场透明度中途取样，改为完成动画后测稳定视觉；List smoke 的旧几何断言也改为等待 View Transition 完成。

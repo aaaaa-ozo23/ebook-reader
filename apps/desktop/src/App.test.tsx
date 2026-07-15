@@ -235,6 +235,7 @@ const deleteBookmarkMock = vi.hoisted(() => vi.fn());
 const listAnnotationsMock = vi.hoisted(() => vi.fn());
 const listBookmarksMock = vi.hoisted(() => vi.fn());
 const prepareBookCoverMock = vi.hoisted(() => vi.fn());
+const loadBookProgressSummariesMock = vi.hoisted(() => vi.fn());
 const listenForOpenBookFilesMock = vi.hoisted(() => vi.fn());
 const takePendingOpenFilesMock = vi.hoisted(() => vi.fn());
 const openBookFilesHandlerRef = vi.hoisted(
@@ -243,6 +244,10 @@ const openBookFilesHandlerRef = vi.hoisted(
 
 vi.mock("./covers/bookCovers", () => ({
   prepareBookCover: prepareBookCoverMock,
+}));
+
+vi.mock("./library/bookProgress", () => ({
+  loadBookProgressSummaries: loadBookProgressSummariesMock,
 }));
 
 vi.mock("./tauri/library", () => ({
@@ -572,6 +577,7 @@ describe("App", () => {
       ...book,
       coverStatus: "fallback",
     }));
+    loadBookProgressSummariesMock.mockResolvedValue({});
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({
         id: bookId,
@@ -811,7 +817,7 @@ describe("App", () => {
       await screen.findByRole("alertdialog", { name: "Remove from shelf?" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/The original file you imported will not be deleted/),
+      screen.getByText(/Your original imported file will not be deleted/),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
