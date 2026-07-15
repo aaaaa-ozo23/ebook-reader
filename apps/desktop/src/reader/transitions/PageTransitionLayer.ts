@@ -9,9 +9,13 @@ export interface PageSnapshot {
   node: HTMLElement;
 }
 
+type PdfSpreadSnapshotResult =
+  | { status: "failed" | "pending" }
+  | { snapshot: PageSnapshot; status: "ready" };
+
 const SNAPSHOT_LOAD_TIMEOUT_MS = 180;
 const SNAPSHOT_LAYOUT_ATTEMPTS = 6;
-const PDF_SNAPSHOT_READY_TIMEOUT_MS = 600;
+const PDF_SNAPSHOT_READY_TIMEOUT_MS = 10_000;
 
 export const PAGE_TRANSITION_DURATIONS: Readonly<
   Record<Exclude<PageTransitionMode, "none">, number>
@@ -82,21 +86,31 @@ export function capturePdfSpreadSnapshot(
     return null;
   }
 
-  const sourceSpread = Array.from(
-    host.querySelectorAll<HTMLElement>(".reader-pdf-spread[data-spread-start]"),
-  ).find((spread) => Number(spread.dataset.spreadStart) === spreadStart);
+  const result = capturePdfSpreadSnapshotResult(host, spreadStart);
+  return result.status === "ready" ? result.snapshot : null;
+}
+
+function capturePdfSpreadSnapshotResult(
+  host: HTMLElement,
+  spreadStart: number,
+): PdfSpreadSnapshotResult {
+  const sourceSpread = findPdfSpread(host, spreadStart);
   if (sourceSpread === undefined) {
-    return null;
+    return { status: "pending" };
+  }
+
+  if (sourceSpread.querySelector(".reader-pdf-page-error") !== null) {
+    return { status: "failed" };
   }
 
   const sourceSurfaces = Array.from(
     sourceSpread.querySelectorAll<HTMLElement>(".reader-pdf-page-surface"),
   );
-  if (
-    sourceSurfaces.length === 0 ||
-    sourceSurfaces.some((surface) => surface.dataset.renderReady !== "true")
-  ) {
-    return null;
+  if (sourceSurfaces.length === 0) {
+    return { status: "pending" };
+  }
+  if (sourceSurfaces.some((surface) => surface.dataset.renderReady !== "true")) {
+    return { status: "pending" };
   }
 
   const snapshot = document.createElement("div");
@@ -123,7 +137,7 @@ export function capturePdfSpreadSnapshot(
     sourceCanvases.length === 0 ||
     sourceCanvases.length !== snapshotCanvases.length
   ) {
-    return null;
+    return { status: "failed" };
   }
 
   for (const [index, sourceCanvas] of sourceCanvases.entries()) {
@@ -134,25 +148,25 @@ export function capturePdfSpreadSnapshot(
       sourceCanvas.height <= 0 ||
       snapshotCanvas.dataset.pageNumber !== sourceCanvas.dataset.pageNumber
     ) {
-      return null;
+      return { status: "failed" };
     }
 
     snapshotCanvas.width = sourceCanvas.width;
     snapshotCanvas.height = sourceCanvas.height;
     const context = snapshotCanvas.getContext("2d");
     if (context === null) {
-      return null;
+      return { status: "failed" };
     }
     try {
       context.drawImage(sourceCanvas, 0, 0);
     } catch {
-      return null;
+      return { status: "failed" };
     }
   }
 
   snapshot.dataset.spreadStart = String(spreadStart);
   snapshot.append(spread);
-  return { node: snapshot };
+  return { snapshot: { node: snapshot }, status: "ready" };
 }
 
 export async function capturePdfSpreadSnapshotAfterRender(
@@ -160,9 +174,12 @@ export async function capturePdfSpreadSnapshotAfterRender(
   spreadStart: number,
   signal?: AbortSignal,
 ): Promise<PageSnapshot | null> {
-  const initialSnapshot = capturePdfSpreadSnapshot(host, spreadStart);
-  if (initialSnapshot !== null || host === null || signal?.aborted === true) {
-    return initialSnapshot;
+  if (host === null || signal?.aborted === true) {
+    return null;
+  }
+  const initialResult = capturePdfSpreadSnapshotResult(host, spreadStart);
+  if (initialResult.status !== "pending") {
+    return initialResult.status === "ready" ? initialResult.snapshot : null;
   }
 
   return new Promise((resolve) => {
@@ -183,8 +200,12 @@ export async function capturePdfSpreadSnapshotAfterRender(
         finish(null);
         return;
       }
-      const snapshot = capturePdfSpreadSnapshot(host, spreadStart);
-      if (snapshot !== null) finish(snapshot);
+      const result = capturePdfSpreadSnapshotResult(host, spreadStart);
+      if (result.status === "ready") {
+        finish(result.snapshot);
+      } else if (result.status === "failed") {
+        finish(null);
+      }
     };
     const handleAbort = () => finish(null);
     const timeoutHandle = window.setTimeout(
@@ -201,6 +222,15 @@ export async function capturePdfSpreadSnapshotAfterRender(
     signal?.addEventListener("abort", handleAbort, { once: true });
     frameHandle = window.requestAnimationFrame(attemptCapture);
   });
+}
+
+function findPdfSpread(
+  host: HTMLElement,
+  spreadStart: number,
+): HTMLElement | undefined {
+  return Array.from(
+    host.querySelectorAll<HTMLElement>(".reader-pdf-spread[data-spread-start]"),
+  ).find((spread) => Number(spread.dataset.spreadStart) === spreadStart);
 }
 
 export function captureEpubRenditionSnapshot(
