@@ -599,3 +599,13 @@
 - 响应式契约是 900/640 保留 rail，375 移除 rail 并把 Grid/List 与导入压缩为 44px 触控控件；Grid/List 两种移动布局都不能出现 body 横向滚动。
 - 概念中的书名、作者和封面只用于设计演示。产品实现必须继续渲染真实用户书库数据，并复刻容器、排版、进度、菜单与状态语法，不能内置演示书籍。
 - 动效按共享 token 实施：press 100–140ms/0.97、popover 150–180ms origin-aware、Grid/List 180–220ms layout/crossfade；键盘触发即时、reduced-motion 只保留 120–180ms opacity/color feedback。
+
+## 2026-07-16 大阶段 13.1：书架视觉收口
+
+- 旧 `App.tsx` 同时承担数据协调与整套书架表现，难以让 Grid/List、系统态和响应式共享稳定结构；将纯书架拆为 `library/Bookshelf.tsx` 后，App 只保留导入/打开/移除/文件关联等编排，ReaderShell 仍在打开书籍后懒加载。
+- 书架进度此前只存在于 reader runtime，主书架不能展示概念要求的真实百分比。新增只读汇总层按唯一 book id 读取持久化进度、最大六并发、单条失败隔离并把值钳制到 0–1；没有新增 schema 或复制进度来源。
+- 首轮视觉截图揭示桌面 Grid 的 20 px 卡片 padding 把封面整体右推，List 又把格式标签变成独立中列；两者都破坏批准稿的信息分组。最终 Grid 封面贴列起点，List 把标题/作者/格式归为左组、进度归为右组。
+- 1536 px 对图还揭示默认 2:3 封面比批准稿短约 22 px、进度轨道过宽。最终桌面封面为约 172×280、轨道限制为 174 px，保留真实封面自身 `object-fit: cover`，不会拉伸用户图像内容。
+- 375 px Grid 按批准稿移除 rail 和可见 overflow 按钮，封面限制为 88 px；List 继续提供显式 overflow，Grid 仍保留右键上下文菜单，因此视觉简化没有删除操作能力。
+- DPR2 首轮 axe 在卡片入场透明度尚未结束时把混合后的中间颜色误判为静态低对比；验收现显式完成入场动画后再测稳定状态。最终静态 375 px 颜色对比、44 px target、无横向溢出均通过。
+- 真实 Browser 的旧 tab 保留过一次已修复 HMR 异常；换新 tab 后只有 Vite debug 与 React DevTools info，无 warning/error。隔离会话验证真实空态与 Grid/List、Shelf/Recent；六书视觉与操作状态由仓库 fixture 验证。

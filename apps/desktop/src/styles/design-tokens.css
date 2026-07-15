@@ -1,19 +1,21 @@
 :root {
-  --ds-color-chrome: #243438;
-  --ds-color-chrome-alt: #263238;
-  --ds-color-chrome-text: #f7f2e8;
-  --ds-color-accent: #f3bc55;
-  --ds-color-action: #2f5d62;
-  --ds-color-action-hover: #244d51;
-  --ds-color-danger: #a84632;
-  --ds-color-danger-hover: #913724;
-  --ds-color-paper: #f5f2ea;
-  --ds-color-reading-paper: #f7f1e3;
+  --ds-color-chrome: #1f3035;
+  --ds-color-chrome-alt: #1f3035;
+  --ds-color-chrome-text: #f8f7f3;
+  --ds-color-accent: #f2b84b;
+  --ds-color-action: #235f62;
+  --ds-color-action-hover: #194f52;
+  --ds-color-import: #b94b35;
+  --ds-color-import-hover: #a43e2b;
+  --ds-color-danger: #b33a2b;
+  --ds-color-danger-hover: #982f23;
+  --ds-color-paper: #fcfbf8;
+  --ds-color-reading-paper: #f7f2e8;
   --ds-color-surface: #ffffff;
-  --ds-color-ink: #25211d;
-  --ds-color-muted: #5e6670;
-  --ds-color-border: #ded7c8;
-  --ds-color-border-strong: #cfc6b6;
+  --ds-color-ink: #20211f;
+  --ds-color-muted: #667078;
+  --ds-color-border: #dfe1de;
+  --ds-color-border-strong: #cfd3d0;
   --ds-color-disabled: #9aa3aa;
   --ds-font-ui:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -29,18 +31,22 @@
   --ds-radius-control: 8px;
   --ds-radius-small: 6px;
   --ds-radius-overlay: 12px;
-  --ds-shadow-menu: 0 12px 30px rgba(35, 50, 56, 0.18);
+  --ds-shadow-menu: 0 16px 38px rgba(31, 48, 53, 0.18);
   --ds-shadow-drawer: 18px 0 48px rgba(18, 28, 31, 0.32);
   --ds-shadow-modal: 0 24px 72px rgba(18, 28, 31, 0.34);
   --ds-z-menu: 8;
   --ds-z-drawer: 20;
   --ds-z-modal: 40;
   --ds-motion-fast: 140ms;
+  --ds-motion-popover: 170ms;
   --ds-motion-ui: 220ms;
+  --ds-motion-feedback: 160ms;
   --ds-motion-page-smooth: 280ms;
   --ds-motion-page-cover: 320ms;
   --ds-motion-page-curl: 650ms;
-  --ds-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ds-ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --ds-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ds-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --ds-focus-width: 3px;
   --ds-focus-offset: 2px;
 }
@@ -48,6 +54,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --ds-motion-fast: 0.01ms;
+    --ds-motion-popover: 0.01ms;
     --ds-motion-ui: 0.01ms;
     --ds-motion-page-smooth: 0.01ms;
     --ds-motion-page-cover: 0.01ms;

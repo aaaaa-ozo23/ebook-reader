@@ -22,7 +22,7 @@ export default defineConfig({
     },
     {
       name: "chromium-dpr2",
-      testMatch: "responsive.spec.ts",
+      testMatch: /(?:responsive|stage13-bookshelf)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         deviceScaleFactor: 2,
