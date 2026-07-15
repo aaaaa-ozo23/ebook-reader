@@ -1844,8 +1844,8 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
               transition: "none",
             },
             pdf: {
-              viewMode: "continuous",
-              paginatedViewMode: "single",
+              viewMode: "double",
+              paginatedViewMode: "double",
               transition: "slide",
             },
           },
@@ -1859,6 +1859,60 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   await page.getByRole("button", { name: "Continue" }).click();
   const reader = page.getByRole("main", { name: "PDF reader" });
   await expect(reader).toBeVisible();
+  await page.getByRole("button", { name: "Contents", exact: true }).click();
+  await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(reader.locator('[data-page-transition="slide"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Next" }).click();
+  const coldTransitionLayer = page.locator(".reader-transition-layer");
+  await expect(coldTransitionLayer).toHaveAttribute("data-mode", "slide", {
+    timeout: 12_000,
+  });
+  await expect
+    .poll(() =>
+      coldTransitionLayer
+        .locator(".reader-transition-layer__frame--current canvas[data-page-number]")
+        .evaluateAll((canvases) =>
+          canvases.map((canvas) => canvas.getAttribute("data-page-number")),
+        ),
+    )
+    .toEqual(["1"]);
+  await expect
+    .poll(() =>
+      coldTransitionLayer
+        .locator(".reader-transition-layer__frame--target canvas[data-page-number]")
+        .evaluateAll((canvases) =>
+          canvases.map((canvas) => canvas.getAttribute("data-page-number")),
+        ),
+    )
+    .toEqual(["2", "3"]);
+  const coldMidpoint = await inspectPdfTransitionMidpoint(page, "slide", 280);
+  if (process.env.READER_VISUAL_QA === "1") {
+    await page.screenshot({
+      path: "D:\\tl-temp\\ebook-reader-stage12-10-pdf-double-cold-start-smooth.png",
+    });
+  }
+  expect(coldMidpoint.currentWidthRatio).toBeGreaterThan(0.15);
+  expect(coldMidpoint.currentWidthRatio).toBeLessThan(0.85);
+  await page.evaluate(() => {
+    const layer = document.querySelector(".reader-transition-layer");
+    for (const animation of document.getAnimations()) {
+      const target = (animation.effect as KeyframeEffect | null)?.target;
+      if (
+        target instanceof Element &&
+        target.closest(".reader-transition-layer") === layer
+      ) {
+        animation.play();
+      }
+    }
+  });
+  await expect(coldTransitionLayer).toHaveCount(0);
+  await expect(page.getByText("Pages 2-3 / 500")).toBeVisible();
+  const coldPageInput = page.getByRole("spinbutton", { name: "PDF page number" });
+  await coldPageInput.fill("1");
+  await coldPageInput.press("Enter");
+  await expect(page.getByText("Page 1 / 500")).toBeVisible();
   await page.getByRole("button", { name: "Theme" }).click();
   await page.getByRole("radio", { name: /Continuous/ }).click();
   await page.keyboard.press("Escape");
@@ -1964,6 +2018,8 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   const smoothMode = page.getByRole("radio", { name: /Smooth/ });
   await smoothMode.click();
   await page.keyboard.press("Escape");
+  await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible();
+  await page.getByRole("button", { name: "Single" }).click();
   await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
   await pageInput.fill("10");
   await pageInput.press("Enter");
@@ -1973,7 +2029,6 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     .poll(() => page.locator(".reader-pdf-canvas").count())
     .toBeLessThanOrEqual(3);
 
-  await page.getByRole("button", { name: "Contents", exact: true }).click();
   await page.getByRole("button", { name: "Double" }).click();
   await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible();
   const currentDoubleSurfaces = page.locator(
