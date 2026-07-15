@@ -2018,5 +2018,5 @@
 - [x] 优化 PDF theme surface 更新和 memo 边界；Playwright Chromium/DPR2 50ms long-task 门通过。
 - [x] 定向 Vitest、lint/build；Playwright 全量 21/21。
 - [x] 最终 `pnpm.cmd check`（core 8、desktop 160）、Cargo fmt/Rust 36、Playwright 21/21。
-- [ ] 最终 diff check、提交/合并/推送。
+- [x] `git diff --check` 通过；实现提交 `81857ed` 已推送并 `--no-ff` 合入 `codex/v0.2.0-integration`。
 - [x] 保持 13.3 未开始，未改版本/schema/依赖/格式，未发布 Release。
