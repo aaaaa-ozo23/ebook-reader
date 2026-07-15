@@ -574,3 +574,28 @@
 - 修复后等待仍受 AbortSignal 和 10 秒 watchdog 约束；模式/主题/缩放/resize/卸载会取消事务，明确页面错误或 Canvas 快照失败立即走原有无动画真实导航。只有仍可能成功的 pending 才等待，因此不会用预建整书 Canvas 或错误页换取动画。
 - 500 页真实冷开验收现在从已保存的 Double + Smooth 启动，在 Double DOM 首次可见后不等待 current/target ready 就立即 Next；Chromium/DPR2 均捕获准确 page 1 → page 2–3，视觉中间帧同时显示旧页与目标页。Smooth/Cover/Realistic 共用同一 snapshot 等待管线，后续热机循环继续分别验证三种 mode、几何与准确目标 Canvas。
 - React 层无需增加“等待 ready”的额外 state/effect 或整书预热：现有 `PageTransitionController` 已提供串行请求、最终方向合并和 AbortSignal。把 pending/failed 判定留在快照边界即可减少重渲染，并保持 PDF runtime 懒加载与有限 3 spread/6 Canvas 窗口。
+
+## 2026-07-15 大阶段 13.1/13.2：UI 概念设计输入
+
+- 四张用户参考图共同锁定一种“编辑感本地书房”方向：真白/暖白内容背景、深墨蓝导航、低饱和青绿主强调、克制赤陶色导入动作、琥珀色焦点环、纤细边框与很浅的环境阴影。
+- 桌面书架强调宽松留白、封面主导、Grid/List 切换、排序和导入；不应继续把每项堆成过度厚重的卡片。移动书架保留三列封面优先布局，标题/作者/进度构成稳定纵向节奏。
+- 桌面阅读器采用“窄全局栏 + 上下文侧栏 + 阅读舞台 + 按需设置面板”；移动阅读器把目录/书签/批注/搜索合并进左侧 sheet，把阅读设置放进底部 sheet，保持正文优先。
+- EPUB 图片查看器使用深色聚焦层、可见缩放百分比、缩放/重置/关闭和鼠标滚轮/触控板/拖拽提示；其结构应同时覆盖窄屏底部工具栏。
+- 动效只服务空间连续性、状态反馈和防止突变：按钮 pointer-down 立即 0.97 缩放；popover 从触发器 origin-aware 进入；移动 drawer 使用可中断 spring、速度交接与 rubber-banding；高频键盘动作不加进出动画；reduced-motion 使用短 crossfade。
+- 四张图仅是风格/结构参考，不是逐像素实现规格；后续概念必须补齐当前应用真实存在的 TXT、EPUB、PDF 三格式差异、空/错/加载状态、选择菜单、搜索结果、书签/批注、PDF 缩放与连续/分页控制等界面。
+- 首轮 12 张概念的结构 QA 表明，直接把四张参考图同时用于所有画板会放大参考图的已知生成偏差：书架 List/响应式画板混入 Contents/Bookmarks/Notes/Search，TXT/PDF/图片查看器/640 阅读器重复出现书架 rail，EPUB 设置重新出现 Reset defaults，移动设置重新出现 Fade。
+- 这些偏差不是可接受的创意自由：本目录既有校正规则已经固定“阅读器只保留一个侧栏”、书架 rail 只含 Shelf/Recent、EPUB/TXT 不含 Fade、不新增 Reset defaults。后续迭代改用已通过的 `01-bookshelf-grid-desktop.png` 和 `05-epub-reader-desktop.png` 作为结构锚点，减少错误结构从原始参考重复迁移。
+- 首轮通过方向：书架 Grid 的封面主导布局、selected + origin-aware menu、系统状态 2x2、编辑感配色与克制阴影成立；阅读器四区层级、TXT 双页排版、PDF 页面材质、选择/笔记浮层以及图片查看器的深色聚焦层可继续沿用。
+- v2 纠偏结果：书架活动 rail 只保留 Shelf/Recent；桌面和响应式阅读器统一为单侧栏/单抽屉；设置只暴露当前格式能力；图片查看器覆盖真实 EPUB reader；移动设置只保留 None/Realistic/Cover/Smooth，不再出现 Fade/Slide/Reset defaults。
+- 静态主屏不足以审核交互感觉，因此把动效作为独立分镜：popover 0→80→160ms origin-aware，drawer 0→140→260ms interruptible spring，Grid/List 0→100→200ms layout animation，page 0→140→280ms direction-aware；reduced motion 用 160ms crossfade。
+- 控件状态板把按钮逻辑锁定为 default/hover/pressed/focus/disabled/loading，并明确 pointer-down 0.97 press feedback、3px amber focus、首个 tooltip 延迟/相邻 tooltip 立即，以及普通菜单到破坏性确认的两级路径。
+
+## 2026-07-16 大阶段 13.1/13.2：批准与实施规格锁定
+
+- 用户已明确批准全部 15 张活动画板；`docs/design/v0.2/stage13-concepts/README.md` 从评审候选升级为 13.1/13.2 的正式视觉实施契约。
+- 13.1 的 01–04 原尺寸复核显示：桌面书架是深色结构 rail + 开放式书架 workspace，不是大卡片仪表盘；Grid 使用封面与信息并排的 3×2 密度，List 使用紧凑横向行并保持相同信息层级。
+- 核心颜色锁定为 `#FCFBF8` workspace、`#1F3035` structural chrome、`#235F62` selected/progress、`#B94B35` import action、`#F2B84B` focus 与 `#DFE1DE` border；utility surface 保持真白，不能把全部界面泛化成暖纸色。
+- 书架系统态必须是同一真实壳体内的 loading skeleton、empty、load error/retry、importing 与三种 import feedback；这些不是独立演示页，也不能用装饰 badge 代替明确状态反馈。
+- 响应式契约是 900/640 保留 rail，375 移除 rail 并把 Grid/List 与导入压缩为 44px 触控控件；Grid/List 两种移动布局都不能出现 body 横向滚动。
+- 概念中的书名、作者和封面只用于设计演示。产品实现必须继续渲染真实用户书库数据，并复刻容器、排版、进度、菜单与状态语法，不能内置演示书籍。
+- 动效按共享 token 实施：press 100–140ms/0.97、popover 150–180ms origin-aware、Grid/List 180–220ms layout/crossfade；键盘触发即时、reduced-motion 只保留 120–180ms opacity/color feedback。

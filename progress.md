@@ -1962,3 +1962,24 @@
 - **Browser：** 应用内浏览器修复前后均确认 `http://127.0.0.1:1420/`、标题 `Ebook Reader`、非空书架 DOM、无框架错误层、console warning/error 0，Grid/List 真实切换状态正确。首次启动命令误把 Vite 只绑定到 `::1`，浏览器访问 127.0.0.1 被拒；改用正确参数重启后恢复。修复后旧 tab 截图一次 `Page.captureScreenshot` 超时，按故障流程换新 tab 后截图成功。
 - **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 155）；Playwright 15/15 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
 - **包体/边界：** 书架入口 67.22 kB gzip、ReaderShell 51.77 kB gzip，PDF runtime 127.30 kB gzip 且继续懒加载；未新增依赖、schema、格式、版本或 Release。
+
+## 2026-07-15 大阶段 13.1/13.2：UI 概念设计与审核
+
+- **状态：** in_progress（concept review）。
+- **范围：** 只做书架与阅读器全功能界面概念、响应式方案和动效规格；用户批准前不修改 React/CSS，不创建实现提交，不开始 13.3。
+- **输入：** 已读取阶段 13 契约并以 `view_image` 原始分辨率复核用户提供的 4 张桌面/移动参考图。
+- **方法：** 使用 Build Web Apps 完整概念优先流程，结合 `frontend-design` 的明确视觉方向、`emil-design-eng` 的高频动效克制、`animation-vocabulary` 的术语、`apple-design` 的可中断手势/材料层级，并通过 `imagegen` 生成逐屏设计图。
+- **已确定方向：** 编辑感本地书房；真白/暖白内容面、深墨蓝结构导航、青绿主强调、赤陶色导入动作、琥珀焦点环；桌面四区阅读器与移动 drawer/bottom sheet 共用一套组件语法。
+- **首轮资产：** 已生成并保存 12 张概念画板到 `docs/design/v0.2/stage13-concepts/`，覆盖书架主态/列表/系统态/响应式及 EPUB/TXT/PDF/侧栏/设置/浮层/图片查看器/移动阅读器。
+- **首轮 QA：** 01、03、10 的结构可用；其余相关画板发现双导航、书架 rail 混入阅读器入口、Reset defaults、Fade 或格式控制重复等生成偏差，正在以通过画板为结构锚点做定向重生成。用户审核前不会把这些偏差写成实施契约。
+- **纠偏完成：** 02、04–09、11、12 已生成 v2，并以 01/05 的通过结构为锚点消除书架 rail 混入阅读入口、阅读器双导航、Reset defaults、Fade 和格式控制重复。首轮未版本化文件仅保留为生成历史，不再是活动概念。
+- **补充画板：** 新增 13 阅读器系统状态、14 动效分镜、15 控件交互状态；活动评审集共 15 张，索引、token、动效和交互逻辑见 `docs/design/v0.2/stage13-concepts/README.md`。
+- **当前状态：** concept_review_waiting_user；等待用户逐图批准或提出修改。未改产品 React/CSS，未开始 13.3。
+
+## 2026-07-16 大阶段 13.1/13.2：批准与实施启动
+
+- **批准：** 用户批准 15/15 张活动画板，无需继续概念迭代；状态更新为 `approved_for_implementation`。
+- **分支顺序：** 先封存 `codex/stage13-ui-concepts` 并 `--no-ff` 合入 `codex/v0.2.0-integration`，再创建 `codex/stage13-bookshelf-polish`；13.1 完成后才创建 13.2 分支。
+- **13.1 视觉基线：** 已用 `view_image` 原尺寸复核 01 Grid、02 List/actions、03 system states、04 responsive 四张批准图，记录 token、布局、真实数据边界与动效约束。
+- **技能约束：** Build Web Apps 将批准稿视为生产规格并要求最终批准图/浏览器截图直接比对；frontend-design/React best practices 约束组件结构；Emil/Apple 规范 press、popover、layout transition、手势和 reduced-motion；Browser 优先执行渲染 QA。
+- **停止边界：** 只完成 13.1/13.2；不开始 13.3，不改版本、不发布 Release。
