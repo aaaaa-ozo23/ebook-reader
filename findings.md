@@ -565,3 +565,12 @@
 - 修复方向应保留共享动画种类、持续时间和 current/target identity，只把三种共享 timing curve 改为中点对称的缓入缓出；这样 PDF/TXT/EPUB 仍复用同一实现，并让 50% 时 current 可见比例落在可辨认范围。新 E2E 需永久断言中间帧几何，不能只检查装饰层 opacity。
 - 修复后中间帧截图出现明确视觉差异：Smooth 左侧仍为 page 10、右侧已揭示 page 12；Cover 在两半之间显示移动阴影边缘；Realistic 显示带背面纹理、阴影和倾斜变形的卷页片。此前截图在同一时刻几乎只剩 page 12–13。暂停 WAAPI 后的 Chromium full-page 合成仍会把阅读舞台外区域捕获成黑块，这是既有截图暂停路径现象，实际动画层内部内容与几何正常，门禁不依赖黑块区域。
 - 修复后的自动化不只检查动画层存在：current 快照固定为 page 10–11、target 固定为 page 12–13，50% 时 current 宽度必须处于 15%–85%，Smooth target 必须有 transform，Cover edge 与 Realistic sheet 必须同时具备可见 opacity 和非空 transform；结束后仍落到准确 target spread。
+
+## 2026-07-15 大阶段 12.10：PDF Double 冷启动动画修复
+
+- 用户报告的“等待一段时间后恢复”与安全回退路径吻合：Double 动画事务会先等待 current spread，再等待 target spread；任一准确双 Canvas 快照在固定 600ms 内未 ready 就返回 null，控制器随后只执行真实导航，视觉表现就是 None。
+- 现有 500 页验收在进入动画循环前已经完成 Continuous 滚动、远跳、主题重绘并显式等待 page 10/11 与 12/13 ready，因此只覆盖热机邻接 Canvas，无法证明首次打开 PDF 后的首个相邻 spread 能在快照期限内完成。
+- `capturePdfSpreadSnapshot()` 的单一 `null` 还混合了两类状态：未挂载/未 ready 属于可等待的 pending，而 Canvas identity、backing store、2D context、像素复制或页面渲染错误属于不可恢复的 failed。冷启动修复必须区分两者，否则单纯延长超时会让真实快照失败也卡住导航。
+- 修复后等待仍受 AbortSignal 和 10 秒 watchdog 约束；模式/主题/缩放/resize/卸载会取消事务，明确页面错误或 Canvas 快照失败立即走原有无动画真实导航。只有仍可能成功的 pending 才等待，因此不会用预建整书 Canvas 或错误页换取动画。
+- 500 页真实冷开验收现在从已保存的 Double + Smooth 启动，在 Double DOM 首次可见后不等待 current/target ready 就立即 Next；Chromium/DPR2 均捕获准确 page 1 → page 2–3，视觉中间帧同时显示旧页与目标页。Smooth/Cover/Realistic 共用同一 snapshot 等待管线，后续热机循环继续分别验证三种 mode、几何与准确目标 Canvas。
+- React 层无需增加“等待 ready”的额外 state/effect 或整书预热：现有 `PageTransitionController` 已提供串行请求、最终方向合并和 AbortSignal。把 pending/failed 判定留在快照边界即可减少重渲染，并保持 PDF runtime 懒加载与有限 3 spread/6 Canvas 窗口。

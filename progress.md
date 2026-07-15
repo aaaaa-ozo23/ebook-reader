@@ -1941,3 +1941,24 @@
 - **Browser：** 修复前后本地书架页面身份/首屏/console 均正常；首次修复后截图遇到一次 `Page.captureScreenshot` 超时，按 Browser 故障指南换新 tab 后复核成功，console warning/error 0。隔离会话无 seeded PDF，目标动画由项目 fixture 验证。
 - **全量门禁：** `pnpm.cmd check` passed（core 8、desktop 152）；Playwright 15/15 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
 - **包体/边界：** 书架入口 67.21 kB gzip、ReaderShell 51.66 kB gzip，PDF runtime 继续懒加载；未新增依赖、schema、格式、版本或 Release。
+
+## 2026-07-15 大阶段 12.10：PDF Double 冷启动动画修复
+
+- **状态：** complete
+- **分支：** `codex/stage12-pdf-double-cold-start-transitions`，从已推送的 `main` `848892f` 创建；继续保留用户未跟踪 `AGENTS.md`。
+- **用户复现：** 刚进入 App 首次打开 PDF 后，Double 的 Smooth/Cover/Realistic 仍短暂表现为 None；等待一段时间后同一操作才有动画。上一轮只在 PDF 已加载并跳到 page 10 后验证中间帧，没有覆盖冷启动首次相邻导航。
+- **目标流：** App 冷启动 → 首次打开 PDF → Double 首个 spread 可见 → 立即 Next → 准确目标 spread 动画必须可见；不得依赖后台预热等待。
+- **边界：** 保留准确 Canvas identity、渲染失败/reduced-motion 的无动画安全回退和 280/320/650ms 共享效果；不通过延长全局加载、预建整书页面或显示占位快照规避竞态。
+- **检索问题：** 首轮组合检索沿用了不存在的 `apps/desktop/src/reader/pdf` 与 `apps/desktop/src/reader/PdfPageSurface.tsx` 路径，因此 `rg` 返回 exit 1；真实 PDF 视图模块位于 `apps/desktop/src/pdf/`，后续只按 `rg --files` 返回的路径读取，不重复该失败命令。
+- **基线失败：** 新增冷 worker 单测在旧实现上稳定失败：推进到 900ms 后准确 page 2–3 Canvas 才 ready，但 600ms 定时器已经把 snapshot 解析为 `null`。这直接复现了用户看到的无动画安全回退。
+- **首轮 E2E 方案调整：** 首次尝试通过 DOM 把目标 surface 的 ready 属性强制保持 900ms，但冷开期间 React 可能重挂载 surface，定时器持有旧节点，测试最终只证明真实导航到 page 2–3，未捕获动画层。已删除该非真实模拟；E2E 改为 Double 首次出现后立即 Next，900ms 确定性由底层快照单测覆盖。
+- **实现细化：** 快照结果拆分为 pending/ready/failed。只有未挂载或 Canvas 尚未 ready 才进入最长 10 秒的可取消冷启动等待；页内错误、Canvas identity/backing/context/drawImage 失败立即返回无动画导航，不把永久失败误当成慢渲染。
+- **过程错误：** 更新 E2E 与跟踪文件的首个组合 patch 因 Prettier 已重排断言而上下文不匹配，未产生部分写入；读取精确代码后按实际格式重新应用。
+- **第二轮 E2E 定位修正：** 冷开测试把 `data-page-transition` 误断言在外层 `main`，实际属性位于内部 PDF content region；页面已是 Double，失败发生在 Next 前。现改为在 reader 内精确定位 `[data-page-transition="slide"]`，保留模式前置门禁后重跑。
+- **冷开动画通过/后续断言调整：** 修正定位后，首次 Double Next 已捕获 page 1 → page 2–3 Smooth 展示层与中间帧；用例随后因旧流程仍期待 Continuous 返回 Single 而失败。由于本轮 fixture 初始并记住 Double，正确契约是恢复 Double；测试现先断言 Double，再显式切 Single 继续原有 3 Canvas/后续 Double 门禁。
+- **后续宽度状态修正：** 冷开段已关闭目录；旧流程在稍后切 Double 前再次点击 Contents 会重新打开侧栏，把 frame 压到 920px 阈值以下并正确临时降级 Single。删除该重复点击后保持桌面宽度，再验证 Double 六 Canvas；不修改产品窄窗降级逻辑。
+- **定向通过：** PageTransitionLayer + App 77 tests passed；Chromium 与 DPR2 的 500 页 PDF 均通过。首次 Double 容器出现后立即 Next，展示层 current 为 page 1、target 为 page 2–3，50% Smooth 中间帧与最终 Pages 2–3 均准确。
+- **视觉证据：** `view_image` 复核冷开截图，左半仍显示 Virtual PDF Page 1，右半已揭示 Virtual PDF Page 2，Double 控件保持选中且底栏/页码/缩放无布局跳动；证明首次打开后的第一笔导航不是 None。
+- **Browser：** 应用内浏览器修复前后均确认 `http://127.0.0.1:1420/`、标题 `Ebook Reader`、非空书架 DOM、无框架错误层、console warning/error 0，Grid/List 真实切换状态正确。首次启动命令误把 Vite 只绑定到 `::1`，浏览器访问 127.0.0.1 被拒；改用正确参数重启后恢复。修复后旧 tab 截图一次 `Page.captureScreenshot` 超时，按故障流程换新 tab 后截图成功。
+- **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 155）；Playwright 15/15 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
+- **包体/边界：** 书架入口 67.22 kB gzip、ReaderShell 51.77 kB gzip，PDF runtime 127.30 kB gzip 且继续懒加载；未新增依赖、schema、格式、版本或 Release。

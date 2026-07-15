@@ -16,6 +16,7 @@ const originalAnimate = HTMLElement.prototype.animate;
 
 afterEach(() => {
   HTMLElement.prototype.animate = originalAnimate;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   document.body.replaceChildren();
 });
@@ -137,6 +138,69 @@ describe("isolated page transition layer", () => {
       ),
     ).toEqual(["4", "5"]);
     expect(drawImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps waiting for a cold PDF double spread past the old startup deadline", async () => {
+    vi.useFakeTimers();
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const host = document.createElement("div");
+    host.innerHTML = `<div class="reader-pdf-spread" data-spread-start="2">
+      <div class="reader-pdf-page-surface" data-render-ready="false">
+        <canvas data-page-number="2" width="10" height="10"></canvas>
+      </div>
+      <div class="reader-pdf-page-surface" data-render-ready="false">
+        <canvas data-page-number="3" width="10" height="10"></canvas>
+      </div>
+    </div>`;
+
+    const pendingSnapshot = capturePdfSpreadSnapshotAfterRender(host, 2);
+    await vi.advanceTimersByTimeAsync(900);
+    host
+      .querySelectorAll<HTMLElement>(".reader-pdf-page-surface")
+      .forEach((surface) => {
+        surface.dataset.renderReady = "true";
+      });
+
+    const snapshot = await pendingSnapshot;
+
+    expect(snapshot?.node).toHaveAttribute("data-spread-start", "2");
+    expect(drawImage).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops the cold PDF wait when the exact spread reports a render error", async () => {
+    const host = document.createElement("div");
+    host.innerHTML = `<div class="reader-pdf-spread" data-spread-start="2">
+      <div class="reader-pdf-page-surface" data-render-ready="false">
+        <canvas data-page-number="2" width="10" height="10"></canvas>
+      </div>
+    </div>`;
+
+    const pendingSnapshot = capturePdfSpreadSnapshotAfterRender(host, 2);
+    const error = document.createElement("div");
+    error.className = "reader-pdf-page-error";
+    host.querySelector(".reader-pdf-page-surface")?.append(error);
+
+    await expect(pendingSnapshot).resolves.toBeNull();
+  });
+
+  it("keeps the cold PDF wait cancellable and bounded", async () => {
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    const abortController = new AbortController();
+    const abortedSnapshot = capturePdfSpreadSnapshotAfterRender(
+      host,
+      2,
+      abortController.signal,
+    );
+    abortController.abort();
+    await expect(abortedSnapshot).resolves.toBeNull();
+
+    const timedOutSnapshot = capturePdfSpreadSnapshotAfterRender(host, 2);
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(timedOutSnapshot).resolves.toBeNull();
   });
 
   it("animates smooth as a full-width two-page movement", async () => {

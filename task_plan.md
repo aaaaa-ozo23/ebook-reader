@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.9 PDF Double 动画视觉修复：complete；已确认旧共享 easing 令三种动画在前半程过早完成，改用中点对称曲线并补齐 PDF transition host。Double 的 Smooth/Cover/Realistic 已通过准确 current/target Canvas、50% 中间帧几何、DPR2、全量 Playwright 与 Windows 打包验证。
+大阶段 12.10 PDF Double 冷启动动画修复：complete；已把快照状态拆分为 pending/ready/failed，冷启动 pending 在可取消的 10 秒窗口内等待准确 Canvas，明确渲染/快照失败仍立即安全回退。500 页 PDF 首次打开后立即 Double Next 已在 Chromium/DPR2 验证准确 page 1 → page 2–3 与可见中间帧，并通过完整 Web/Rust/Tauri 门禁。
 
 ## 分支策略
 
@@ -482,6 +482,7 @@
 
 | 12.8 阅读模式修复 | `codex/stage12-reader-mode-fixes` | 修复 PDF Double 动画快照/事务降级；TXT 记住上次 paginated Single/Double | Double 的 Smooth/Cover/Realistic 有准确 current/target 展示层；TXT Continuous 往返与重启均恢复上次分页视图 |
 | 12.9 PDF Double 动画视觉修复 | `codex/stage12-pdf-double-animation-visual-fix` | 复现展示层存在但视觉静止的问题；按中间帧几何与像素验证 Double 三种动画 | complete；50% 帧与 None 明显不同，current/target 页号及最终落页准确 |
+| 12.10 PDF Double 冷启动动画修复 | `codex/stage12-pdf-double-cold-start-transitions` | 覆盖首次进入 App、首次打开 PDF 后立即翻页；消除首批 spread 未就绪导致的无动画回退 | complete；冷开立即翻页有准确 current/target 与可见中间帧，三种热机动画及失败回退不回归 |
 
 ## 大阶段 13：产品收口与数据安全
 
