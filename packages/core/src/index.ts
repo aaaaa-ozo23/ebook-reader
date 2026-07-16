@@ -1,5 +1,6 @@
 export type BookFormat = "epub" | "txt" | "pdf";
 export type BookCoverStatus = "pending" | "ready" | "fallback";
+export type BookAvailability = "available" | "missing";
 
 export type AnnotationKind = "highlight" | "note";
 
@@ -47,6 +48,7 @@ export interface Book {
   fileHash: string;
   coverPath?: string;
   coverStatus: BookCoverStatus;
+  availability?: BookAvailability;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
@@ -209,6 +211,45 @@ export interface BackupResult {
   fileName?: string;
   bytesWritten: number;
   manifest?: BackupManifest;
+}
+
+export interface BackupPreview {
+  operationId: string;
+  fileName: string;
+  manifest: BackupManifest;
+  archiveBytes: number;
+  warnings: string[];
+}
+
+export interface RestorePreview extends BackupPreview {
+  newBooks: number;
+  matchedBooks: number;
+  missingFiles: number;
+  conflictRecords: number;
+  canRestore: boolean;
+}
+
+export type RestoreItemStatus =
+  | "restored"
+  | "merged"
+  | "local-kept"
+  | "missing-file"
+  | "skipped"
+  | "failed";
+
+export interface RestoreResultItem {
+  category: "book" | "progress" | "bookmark" | "annotation" | "setting" | "file";
+  id: string;
+  label: string;
+  status: RestoreItemStatus;
+  message: string;
+}
+
+export interface RestoreResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  counts: Record<RestoreItemStatus, number>;
+  items: RestoreResultItem[];
 }
 
 export interface Annotation {

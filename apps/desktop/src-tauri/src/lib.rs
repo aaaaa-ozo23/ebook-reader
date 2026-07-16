@@ -27,6 +27,46 @@ async fn export_backup(
 }
 
 #[tauri::command]
+async fn inspect_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    path: String,
+) -> Result<backup::RestorePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::inspect_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&path),
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-inspection-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn restore_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    path: String,
+) -> Result<backup::RestoreResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::restore_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&path),
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-restore-task-failed] {error}"))?
+}
+
+#[tauri::command]
 fn cancel_data_operation(
     operations: tauri::State<'_, backup::DataOperationRegistry>,
     operation_id: String,
@@ -290,6 +330,8 @@ pub fn run() {
             update_annotation,
             delete_annotation,
             export_backup,
+            inspect_backup,
+            restore_backup,
             cancel_data_operation,
             take_pending_open_files
         ])

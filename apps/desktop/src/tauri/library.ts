@@ -184,25 +184,23 @@ function getFallbackBooks(): Book[] {
   }
 
   try {
-    return (JSON.parse(rawBooks) as Book[]).map(normalizeBookCoverState);
+    return (JSON.parse(rawBooks) as Book[]).map(normalizeBookState);
   } catch {
     return [];
   }
 }
 
-function normalizeBookCoverState(book: Book): Book {
-  if (book.coverStatus !== undefined) {
-    return book;
-  }
-
+function normalizeBookState(book: Book): Book {
   return {
     ...book,
+    availability: book.availability ?? "available",
     coverStatus:
-      book.coverPath !== undefined
+      book.coverStatus ??
+      (book.coverPath !== undefined
         ? "ready"
         : book.format === "txt"
           ? "fallback"
-          : "pending",
+          : "pending"),
   };
 }
 

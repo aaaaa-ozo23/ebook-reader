@@ -86,6 +86,11 @@ test("keeps focus, reduced-motion and desktop-runtime errors understandable", as
   await expect(page.getByRole("alert")).toContainText(
     "Backup requires the Tauri desktop runtime.",
   );
+  await page.getByRole("button", { name: "Choose backup" }).click();
+  await expect(page.getByRole("alert")).toContainText("Restore stopped safely");
+  await expect(page.getByRole("alert")).toContainText(
+    "Backup requires the Tauri desktop runtime.",
+  );
   await page.getByRole("button", { name: "Close settings" }).click();
   await expect(page.getByRole("heading", { name: "Ebook Reader" })).toBeVisible();
   expect(consoleIssues).toEqual([]);

@@ -635,6 +635,14 @@
 - 长任务使用 operation ID + `AtomicBool` 协作取消，Rust 命令放入 blocking worker，避免同步 invoke 阻塞取消请求；临时文件与目标文件同目录，成功才 rename，失败/取消删除残留且数据库只读。
 - Settings 新页面继续使用批准的暖纸/深墨/青绿/琥珀系统；桌面 1280×720 首屏完整，375 为 fixed 全屏 sheet，44 px target、reduced-motion、焦点恢复与 axe serious/critical=0 均由专用 Playwright 覆盖。
 - Browser 隔离运行没有 Tauri runtime，因此真实点击导出验证的是明确的桌面运行时错误恢复；文件对话框、原子写入、ZIP 往返和取消由 Rust/Vitest/原生桥测试承担，未用浏览器 fallback 伪造成功。
+
+## 2026-07-16 大阶段 13.4：备份恢复
+
+- ZIP 预检在读取 JSON 或解压前遍历原始 entry name，拒绝路径穿越、反斜杠/盘符、重复项、目录项、条目/总大小上限和压缩比异常；manifest payload 还必须通过声明大小与 SHA-256 双重校验。
+- 文件与数据库采用两阶段恢复：内容先进入 app-data staging，只将校验后的新内容寻址文件移入书库，再开启 SQLite transaction；任何取消、合并或 commit 错误都会删除本轮新增文件。
+- 书籍 ID 通过 `file_hash` 映射到已有本地 ID；UUID/key 记录只接受严格更新的 `updatedAt`，相同时间保留本地，annotation tombstone 与普通记录完全同规则。
+- 无原书的恢复记录保留缺失的 managed path 和完整阅读数据，书架显示 `File needed`；导入同 hash 文件会命中既有 repair 路径，并经 Rust 测试证明 progress 与书签身份不丢失。
+- Rust `zip` writer 本身拒绝生成重复文件名，因此重复条目门禁测试直接覆盖生产使用的 entry 注册器；外部 ZIP reader 仍会逐项调用同一门禁。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

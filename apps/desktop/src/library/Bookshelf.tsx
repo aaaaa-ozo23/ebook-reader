@@ -465,6 +465,7 @@ function BookCard({
   );
   const progressPercent = progress === undefined ? 0 : Math.round(progress * 100);
   const activityLabel = getBookActivityLabel(book, progress);
+  const isUnavailable = book.availability === "missing";
   const cardStyle = {
     "--book-index": Math.min(index, 8),
     "--book-progress": `${progressPercent}%`,
@@ -473,7 +474,7 @@ function BookCard({
 
   return (
     <article
-      className={`book-card${isMenuOpen ? " book-card--menu-open" : ""}`}
+      className={`book-card${isMenuOpen ? " book-card--menu-open" : ""}${isUnavailable ? " book-card--missing" : ""}`}
       style={cardStyle}
       aria-label={`${book.title} book`}
       onContextMenu={handleContextMenu}
@@ -481,8 +482,8 @@ function BookCard({
       <button
         type="button"
         className="book-card__cover-button"
-        aria-label="Continue"
-        disabled={isOpening || isRemoving}
+        aria-label={isUnavailable ? "File needed" : "Continue"}
+        disabled={isOpening || isRemoving || isUnavailable}
         onClick={handleOpenBook}
       >
         <BookCover book={book} />
@@ -494,7 +495,7 @@ function BookCard({
             <button
               type="button"
               className="book-card__title-button"
-              disabled={isOpening || isRemoving}
+              disabled={isOpening || isRemoving || isUnavailable}
               onClick={handleOpenBook}
             >
               <h2 className="book-card__title">{book.title}</h2>
@@ -647,7 +648,7 @@ function BookActionMenu({
 
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleKeyDown);
-    menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
 
     return () => {
       window.removeEventListener("pointerdown", handlePointerDown);
@@ -673,12 +674,13 @@ function BookActionMenu({
       <button
         type="button"
         role="menuitem"
+        disabled={menu.book.availability === "missing"}
         onClick={() => {
           onClose();
           onOpen(menu.book);
         }}
       >
-        Open
+        {menu.book.availability === "missing" ? "File needed" : "Open"}
       </button>
       <span className="book-action-menu__divider" aria-hidden="true" />
       <button
@@ -777,6 +779,7 @@ function RemoveBookDialog({
 }
 
 function getBookActivityLabel(book: Book, progress?: number): string {
+  if (book.availability === "missing") return "File needed";
   if (progress !== undefined) {
     const percentage = Math.round(progress * 100);
     return percentage >= 100 ? "Finished" : `${percentage}% read`;

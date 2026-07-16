@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import type { BackupOptions, BackupResult, OperationProgress } from "@reader/core";
+import type {
+  BackupOptions,
+  BackupResult,
+  OperationProgress,
+  RestorePreview,
+  RestoreResult,
+} from "@reader/core";
 
 import {
   cancelDataOperation,
   exportBackup,
+  inspectBackup,
   listenForDataOperationProgress,
   pickBackupDestination,
+  pickBackupFile,
+  restoreBackup,
 } from "../tauri/backup";
 
 import "./SettingsCenter.css";
@@ -16,12 +25,22 @@ const DEFAULT_OPTIONS: BackupOptions = {
   includeBooks: false,
 };
 
-export function SettingsCenter({ onClose }: { onClose: () => void }) {
+export function SettingsCenter({
+  onClose,
+  onLibraryChanged = () => undefined,
+}: {
+  onClose: () => void;
+  onLibraryChanged?: () => void;
+}) {
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
   const [result, setResult] = useState<BackupResult | null>(null);
+  const [restorePath, setRestorePath] = useState<string | null>(null);
+  const [restorePreview, setRestorePreview] = useState<RestorePreview | null>(null);
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorSource, setErrorSource] = useState<"export" | "restore">("export");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const activeOperationIdRef = useRef<string | null>(null);
   const titleId = useId();
@@ -55,6 +74,7 @@ export function SettingsCenter({ onClose }: { onClose: () => void }) {
   }, [onClose, operationId]);
 
   const handleExport = useCallback(async () => {
+    setErrorSource("export");
     setError(null);
     setResult(null);
     let destination: string | null;
@@ -95,6 +115,73 @@ export function SettingsCenter({ onClose }: { onClose: () => void }) {
       await cancelDataOperation(operationId);
     }
   }, [operationId]);
+
+  const handleInspectRestore = useCallback(async () => {
+    setErrorSource("restore");
+    setError(null);
+    setRestorePreview(null);
+    setRestoreResult(null);
+    let path: string | null;
+    try {
+      path = await pickBackupFile();
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+      return;
+    }
+    if (path === null) return;
+
+    const nextOperationId = createOperationId("restore-inspect");
+    activeOperationIdRef.current = nextOperationId;
+    setRestorePath(path);
+    setOperationId(nextOperationId);
+    setProgress({
+      operationId: nextOperationId,
+      kind: "backup-restore",
+      phase: "verifying",
+      completed: 0,
+      total: 1,
+      message: "Checking backup safety",
+    });
+    try {
+      setRestorePreview(await inspectBackup(nextOperationId, path));
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+      setRestorePath(null);
+    } finally {
+      activeOperationIdRef.current = null;
+      setOperationId(null);
+      setProgress(null);
+    }
+  }, []);
+
+  const handleRestore = useCallback(async () => {
+    if (restorePath === null || restorePreview === null) return;
+    const nextOperationId = createOperationId("restore");
+    activeOperationIdRef.current = nextOperationId;
+    setErrorSource("restore");
+    setError(null);
+    setRestoreResult(null);
+    setOperationId(nextOperationId);
+    setProgress({
+      operationId: nextOperationId,
+      kind: "backup-restore",
+      phase: "preparing",
+      completed: 0,
+      total: 1,
+      message: "Preparing a safe staging area",
+    });
+    try {
+      const nextResult = await restoreBackup(nextOperationId, restorePath);
+      setRestoreResult(nextResult);
+      if (nextResult.status === "completed") onLibraryChanged();
+    } catch (nextError) {
+      setError(errorMessage(nextError));
+    } finally {
+      activeOperationIdRef.current = null;
+      setOperationId(null);
+      setProgress(null);
+    }
+  }, [onLibraryChanged, restorePath, restorePreview]);
 
   const percentage =
     progress === null || progress.total <= 0
@@ -208,7 +295,9 @@ export function SettingsCenter({ onClose }: { onClose: () => void }) {
             />
           </fieldset>
 
-          {progress !== null && operationId !== null ? (
+          {progress !== null &&
+          operationId !== null &&
+          progress.kind === "backup-export" ? (
             <div className="backup-progress" role="status" aria-live="polite">
               <div className="backup-progress__copy">
                 <strong>{progress.message}</strong>
@@ -243,7 +332,7 @@ export function SettingsCenter({ onClose }: { onClose: () => void }) {
               <span>Backup canceled. No partial archive was kept.</span>
             </div>
           ) : null}
-          {error !== null ? (
+          {error !== null && errorSource === "export" ? (
             <div className="backup-result backup-result--error" role="alert">
               <strong>Backup failed</strong>
               <span>{error}</span>
@@ -261,6 +350,154 @@ export function SettingsCenter({ onClose }: { onClose: () => void }) {
               <ExportIcon />
               Choose location &amp; export
             </button>
+          </footer>
+        </section>
+
+        <section className="settings-card" aria-labelledby="restore-card-title">
+          <div className="settings-card__title">
+            <div className="settings-card__icon" aria-hidden="true">
+              <RestoreIcon />
+            </div>
+            <div>
+              <h2 id="restore-card-title">Restore a backup</h2>
+              <p>
+                Every archive is checked for unsafe paths, size limits, version
+                compatibility, and checksum integrity before anything changes.
+              </p>
+            </div>
+          </div>
+
+          {restorePreview !== null ? (
+            <div className="restore-preview" aria-label="Restore preview">
+              <div className="restore-preview__heading">
+                <div>
+                  <strong>{restorePreview.fileName}</strong>
+                  <span>
+                    Format v{restorePreview.manifest.formatVersion} · exported{" "}
+                    {formatDate(restorePreview.manifest.exportedAt)}
+                  </span>
+                </div>
+                <span className="restore-preview__safe">
+                  <ShieldIcon /> Safe to restore
+                </span>
+              </div>
+              <dl className="restore-preview__stats">
+                <RestoreStat label="New books" value={restorePreview.newBooks} />
+                <RestoreStat label="Matched" value={restorePreview.matchedBooks} />
+                <RestoreStat label="Files needed" value={restorePreview.missingFiles} />
+                <RestoreStat label="Conflicts" value={restorePreview.conflictRecords} />
+              </dl>
+              <p className="restore-preview__rule">
+                Newer records win. Equal timestamps keep the local copy. Missing book
+                files remain repairable by importing the same file later.
+              </p>
+              {restorePreview.warnings.map((warning) => (
+                <p className="restore-preview__warning" key={warning}>
+                  {warning}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          {progress !== null &&
+          operationId !== null &&
+          progress.kind === "backup-restore" ? (
+            <div className="backup-progress" role="status" aria-live="polite">
+              <div className="backup-progress__copy">
+                <strong>{progress.message}</strong>
+                <span>{percentage}%</span>
+              </div>
+              <div className="backup-progress__track" aria-hidden="true">
+                <i style={{ transform: `scaleX(${percentage / 100})` }} />
+              </div>
+              <button
+                type="button"
+                className="settings-button settings-button--secondary"
+                onClick={() => void handleCancel()}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : null}
+
+          {restoreResult !== null ? (
+            <div className="restore-report" role="status" aria-live="polite">
+              <div className="restore-report__title">
+                <SuccessIcon />
+                <div>
+                  <strong>
+                    {restoreResult.status === "completed"
+                      ? "Restore complete"
+                      : "Restore canceled"}
+                  </strong>
+                  <span>
+                    Each retained, merged, and missing item is reported below.
+                  </span>
+                </div>
+              </div>
+              <div className="restore-report__counts">
+                {Object.entries(restoreResult.counts).map(([status, count]) => (
+                  <span key={status}>
+                    <strong>{count}</strong> {status}
+                  </span>
+                ))}
+              </div>
+              <ul>
+                {restoreResult.items.slice(0, 12).map((item) => (
+                  <li key={`${item.category}-${item.id}`}>
+                    <span>
+                      <strong>{item.label}</strong>
+                      <small>{item.message}</small>
+                    </span>
+                    <em data-status={item.status}>{item.status}</em>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {error !== null && errorSource === "restore" ? (
+            <div className="backup-result backup-result--error" role="alert">
+              <strong>Restore stopped safely</strong>
+              <span>{error}</span>
+            </div>
+          ) : null}
+
+          <footer className="settings-card__footer">
+            <p>Changes begin only after inspection and your explicit confirmation.</p>
+            {restorePreview === null ? (
+              <button
+                type="button"
+                className="settings-button settings-button--secondary"
+                disabled={operationId !== null}
+                onClick={() => void handleInspectRestore()}
+              >
+                <RestoreIcon /> Choose backup
+              </button>
+            ) : (
+              <div className="settings-button-group">
+                <button
+                  type="button"
+                  className="settings-button settings-button--secondary"
+                  disabled={operationId !== null}
+                  onClick={() => {
+                    setRestorePath(null);
+                    setRestorePreview(null);
+                    setRestoreResult(null);
+                  }}
+                >
+                  Choose another
+                </button>
+                <button
+                  type="button"
+                  className="settings-button settings-button--primary"
+                  disabled={!restorePreview.canRestore || operationId !== null}
+                  onClick={() => void handleRestore()}
+                >
+                  Confirm &amp; restore
+                </button>
+              </div>
+            )}
           </footer>
         </section>
       </section>
@@ -303,10 +540,19 @@ function BackupOption({
   );
 }
 
-function createOperationId(): string {
+function RestoreStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
+}
+
+function createOperationId(prefix = "backup"): string {
   return (
     globalThis.crypto?.randomUUID?.() ??
-    `backup-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`
   );
 }
 
@@ -320,6 +566,11 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDate(timestamp: string): string {
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleDateString();
 }
 
 function SvgIcon({ children }: { children: ReactNode }) {
@@ -368,6 +619,12 @@ const ExportIcon = () => (
   <SvgIcon>
     <path d="M12 3v12M8 7l4-4 4 4" />
     <path d="M5 14v6h14v-6" />
+  </SvgIcon>
+);
+const RestoreIcon = () => (
+  <SvgIcon>
+    <path d="M4 7v13h16V7M3 4h18v3H3" />
+    <path d="M12 17V9M8.5 13.5 12 17l3.5-3.5" />
   </SvgIcon>
 );
 const CheckIcon = () => (
