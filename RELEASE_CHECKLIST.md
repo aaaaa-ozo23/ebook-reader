@@ -62,7 +62,7 @@ must have current-run evidence; draft artifacts alone do not authorize a tag or 
 
 ## Branch and publication boundary
 
-- [ ] Stage branch is merged with `--no-ff` into `codex/v0.2.0-integration` and pushed.
-- [ ] `release/v0.2.0` is created from that integration head and pushed.
+- [x] Stage branch is merged with `--no-ff` into `codex/v0.2.0-integration` and pushed.
+- [x] `release/v0.2.0` is created from that integration head and pushed.
 - [x] Workflow is manual, contents-read-only, and uploads draft workflow artifacts only.
 - [x] No formal tag or GitHub Release is created or published in this stage.
