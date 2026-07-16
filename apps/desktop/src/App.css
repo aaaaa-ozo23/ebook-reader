@@ -260,6 +260,27 @@ button:disabled {
   padding-top: 16px;
 }
 
+.library-settings-button {
+  display: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid var(--ds-color-border);
+  border-radius: 7px;
+  background: #ffffff;
+  color: var(--ds-color-ink);
+}
+
+.library-settings-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
 .view-toggle {
   display: inline-flex;
   min-height: 56px;
@@ -1511,6 +1532,10 @@ button:disabled {
     grid-row: 1;
     flex-direction: row;
     gap: 8px;
+  }
+
+  .library-settings-button {
+    display: grid;
   }
 
   .view-toggle {

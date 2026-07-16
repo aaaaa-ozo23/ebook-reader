@@ -2020,3 +2020,14 @@
 - [x] 最终 `pnpm.cmd check`（core 8、desktop 160）、Cargo fmt/Rust 36、Playwright 21/21。
 - [x] `git diff --check` 通过；实现提交 `81857ed` 已推送并 `--no-ff` 合入 `codex/v0.2.0-integration`。
 - [x] 保持 13.3 未开始，未改版本/schema/依赖/格式，未发布 Release。
+
+## 2026-07-16 大阶段 13.3：备份导出
+
+- **状态：** complete；分支 `codex/stage13-backup-export`，从集成基线 `331101b` 创建。
+- **契约：** core 新增 `BackupManifest`、`BackupOptions`、`BackupResult`、payload descriptor 与统一 `OperationProgress`；v1 archive 固定 manifest/data/可选 covers/books，数据与封面默认开启、原书默认关闭。
+- **数据库：** 新增 `0004_backup_portability.sql`，回填并强制 bookmarks `updated_at`；migration runner 改为只执行未应用版本。
+- **后端：** 新增后台 operation registry、结构化 progress event、取消令牌、可移植 SQL snapshot、SHA-256、同目录临时 ZIP 与成功原子 rename；错误/取消清理临时文件且不修改数据库。
+- **前端：** 书架 desktop/mobile 增加 Settings 入口；新增 lazy Data & Backup 设置中心、未加密提示、三组选项、进度/取消/结果状态和桌面运行时错误恢复；reader lazy boundary 不变。
+- **文档：** 新增 `docs/backup-and-restore.md` 和 `stage13-data-settings-fidelity.md`，更新隐私说明与三份执行台账。
+- **验证：** core/desktop production build passed；desktop 20 files / 164 tests passed；Rust 41 tests passed；专用 Playwright Chromium 2/2、DPR2 2/2 passed，覆盖 1280/900/640/375、focus、reduced-motion、axe serious/critical=0；Browser 页面身份、DOM、console=0、桌面/375 截图和 fallback 错误交互通过。
+- **边界：** 版本仍为 0.1.0；未开始 13.4，未创建 tag 或 Release，用户未跟踪 `.codex/` 与 `AGENTS.md` 保持不变。

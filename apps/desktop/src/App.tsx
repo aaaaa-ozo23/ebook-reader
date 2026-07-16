@@ -36,6 +36,12 @@ const LazyReaderShell = lazy(() =>
   })),
 );
 
+const LazySettingsCenter = lazy(() =>
+  import("./settings/DataBackupSettings").then((module) => ({
+    default: module.SettingsCenter,
+  })),
+);
+
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -47,6 +53,7 @@ function App() {
   const [libraryView, setLibraryView] = useState<LibraryView>("shelf");
   const [progressByBookId, setProgressByBookId] = useState<BookProgressSummary>({});
   const [readerBook, setReaderBook] = useState<Book | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
     null,
   );
@@ -454,6 +461,20 @@ function App() {
     );
   }
 
+  if (isSettingsOpen) {
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading settings...
+          </main>
+        }
+      >
+        <LazySettingsCenter onClose={() => setIsSettingsOpen(false)} />
+      </Suspense>
+    );
+  }
+
   return (
     <Bookshelf
       activeLibraryView={libraryView}
@@ -474,6 +495,7 @@ function App() {
       onDismissFeedback={handleDismissFeedback}
       onImportBook={handleImportBook}
       onOpenBook={handleOpenBook}
+      onOpenSettings={() => setIsSettingsOpen(true)}
       onRequestRemoval={requestBookRemoval}
       onRetryLibrary={loadLibrary}
       onSelectLibraryView={handleSelectLibraryView}

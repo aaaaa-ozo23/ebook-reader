@@ -49,6 +49,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "reader_experience",
         sql: include_str!("../migrations/0003_reader_experience.sql"),
     },
+    Migration {
+        version: 4,
+        name: "backup_portability",
+        sql: include_str!("../migrations/0004_backup_portability.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -400,6 +405,7 @@ pub struct Bookmark {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -474,9 +480,9 @@ struct TextLine {
     text: String,
 }
 
-struct AppStoragePaths {
-    database_path: PathBuf,
-    library_dir: PathBuf,
+pub(crate) struct AppStoragePaths {
+    pub(crate) database_path: PathBuf,
+    pub(crate) library_dir: PathBuf,
 }
 
 pub fn app_health(app: &AppHandle) -> anyhow::Result<AppHealth> {
@@ -691,7 +697,7 @@ pub fn init_app_database(app: &AppHandle) -> anyhow::Result<PathBuf> {
     Ok(storage_paths.database_path)
 }
 
-fn init_app_storage(app: &AppHandle) -> anyhow::Result<AppStoragePaths> {
+pub(crate) fn init_app_storage(app: &AppHandle) -> anyhow::Result<AppStoragePaths> {
     let storage_paths = resolve_app_storage_paths(app)?;
 
     init_database_at(&storage_paths.database_path)?;
@@ -1191,7 +1197,7 @@ pub fn list_bookmarks_at(database_path: &Path, book_id: &str) -> anyhow::Result<
     find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
 
     let mut statement = conn.prepare(
-        "SELECT id, book_id, locator_json, label, created_at
+        "SELECT id, book_id, locator_json, label, created_at, updated_at
         FROM bookmarks
         WHERE book_id = ?1
         ORDER BY created_at DESC, id ASC",
@@ -1216,25 +1222,28 @@ pub fn create_bookmark_at(
         find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
     normalize_locator_for_book(book.format, &mut locator)?;
 
+    let now = current_timestamp(&conn)?;
     let bookmark = Bookmark {
         id: Uuid::new_v4().to_string(),
         book_id: book_id.to_string(),
         locator,
         label: normalize_bookmark_label(label),
-        created_at: current_timestamp(&conn)?,
+        created_at: now.clone(),
+        updated_at: now,
     };
     let locator_json =
         serde_json::to_string(&bookmark.locator).context("failed to serialize bookmark locator")?;
 
     conn.execute(
-        "INSERT INTO bookmarks (id, book_id, locator_json, label, created_at)
-        VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO bookmarks (id, book_id, locator_json, label, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             &bookmark.id,
             &bookmark.book_id,
             locator_json,
             bookmark.label.as_deref(),
             &bookmark.created_at,
+            &bookmark.updated_at,
         ],
     )?;
 
@@ -1402,8 +1411,23 @@ fn configure_connection(conn: &Connection) -> rusqlite::Result<()> {
 
 fn run_migrations(conn: &mut Connection) -> rusqlite::Result<()> {
     let transaction = conn.transaction()?;
+    transaction.execute_batch(
+        "CREATE TABLE IF NOT EXISTS schema_migrations (
+            version INTEGER PRIMARY KEY,
+            name TEXT NOT NULL,
+            applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );",
+    )?;
 
     for migration in MIGRATIONS {
+        let already_applied = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+            params![migration.version],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if already_applied {
+            continue;
+        }
         transaction.execute_batch(migration.sql)?;
         transaction.execute(
             "INSERT OR IGNORE INTO schema_migrations (version, name) VALUES (?1, ?2)",
@@ -1953,6 +1977,7 @@ fn row_to_bookmark(row: &Row<'_>) -> rusqlite::Result<Bookmark> {
         locator,
         label: row.get(3)?,
         created_at: row.get(4)?,
+        updated_at: row.get(5)?,
     })
 }
 
@@ -2304,7 +2329,7 @@ mod tests {
     };
 
     #[test]
-    fn migration_v3_creates_expected_tables_and_is_idempotent() {
+    fn migration_v4_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2335,8 +2360,17 @@ mod tests {
             .expect("count migration records");
 
         assert_eq!(table_count, 8);
-        assert_eq!(migration_count, 3);
-        assert_eq!(schema_version(&conn).expect("schema version"), 3);
+        let bookmark_updated_at_columns: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count bookmark updated_at columns");
+
+        assert_eq!(migration_count, 4);
+        assert_eq!(schema_version(&conn).expect("schema version"), 4);
+        assert_eq!(bookmark_updated_at_columns, 1);
     }
 
     #[test]

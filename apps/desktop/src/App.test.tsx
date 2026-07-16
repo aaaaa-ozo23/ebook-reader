@@ -632,6 +632,7 @@ describe("App", () => {
       locator,
       label,
       createdAt: "2026-06-21T10:00:00.000Z",
+      updatedAt: "2026-06-21T10:00:00.000Z",
     }));
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
