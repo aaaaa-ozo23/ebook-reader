@@ -54,6 +54,29 @@ export interface Book {
   lastOpenedAt?: string;
 }
 
+export type BookCoverOrigin = "automatic" | "user" | "fallback";
+
+export interface BookDetails {
+  book: Book;
+  automaticTitle: string;
+  automaticAuthor?: string;
+  automaticCoverPath?: string;
+  coverOrigin: BookCoverOrigin;
+  titleOverrideUpdatedAt?: string;
+  authorOverrideUpdatedAt?: string;
+  coverOverrideUpdatedAt?: string;
+}
+
+export type MetadataOverridePatch =
+  | { action: "unchanged" }
+  | { action: "set"; value: string }
+  | { action: "reset" };
+
+export interface BookMetadataOverridePatch {
+  title: MetadataOverridePatch;
+  author: MetadataOverridePatch;
+}
+
 export type ImportBookStatus = "imported" | "duplicate" | "repaired";
 
 export interface ImportBookResult {

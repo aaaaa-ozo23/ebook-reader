@@ -643,6 +643,14 @@
 - 书籍 ID 通过 `file_hash` 映射到已有本地 ID；UUID/key 记录只接受严格更新的 `updatedAt`，相同时间保留本地，annotation tombstone 与普通记录完全同规则。
 - 无原书的恢复记录保留缺失的 managed path 和完整阅读数据，书架显示 `File needed`；导入同 hash 文件会命中既有 repair 路径，并经 Rust 测试证明 progress 与书签身份不丢失。
 - Rust `zip` writer 本身拒绝生成重复文件名，因此重复条目门禁测试直接覆盖生产使用的 entry 注册器；外部 ZIP reader 仍会逐项调用同一门禁。
+
+## 2026-07-16 大阶段 13.5：元数据与封面编辑
+
+- `books` 继续保存自动提取值；`book_user_metadata` 只保存 title/author/cover 的独立覆盖值与时间，列表查询以 `COALESCE` 生成有效显示值。
+- patch 使用 `unchanged`/`set`/`reset` 显式动作，空作者可以作为有意覆盖值，避免 `null` 同时表示“不改”和“恢复”。
+- 前端 2:3 裁切输出 600×900 WebP；Rust 再次识别 PNG/JPEG/WebP、真实解码、限制 40M pixels，并重新编码为 `.user.webp`。
+- reset 只删除用户封面；自动封面缺失时 EPUB/PDF 回到 pending 队列、TXT 回到 fallback。删除书籍清理自动/用户封面。
+- `.erbackup` v1 的 PortableBook 增加向后兼容可选字段，restore 按每字段时间 newer-wins、tie-local。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

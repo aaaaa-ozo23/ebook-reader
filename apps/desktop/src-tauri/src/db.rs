@@ -22,6 +22,8 @@ const DB_FILE_NAME: &str = "ebook-reader.sqlite3";
 const LIBRARY_DIR_NAME: &str = "library";
 const COVER_DIR_NAME: &str = "covers";
 const MAX_COVER_BYTES: usize = 2 * 1024 * 1024;
+const MAX_USER_COVER_BYTES: usize = 10 * 1024 * 1024;
+const MAX_USER_COVER_PIXELS: u64 = 40_000_000;
 const MAX_READER_CACHE_BYTES: usize = 4 * 1024 * 1024;
 const READER_LAYOUT_SETTING_KEY: &str = "reader_layout";
 const READER_EXPERIENCE_SETTING_KEY: &str = "reader_experience";
@@ -53,6 +55,11 @@ const MIGRATIONS: &[Migration] = &[
         version: 4,
         name: "backup_portability",
         sql: include_str!("../migrations/0004_backup_portability.sql"),
+    },
+    Migration {
+        version: 5,
+        name: "book_user_metadata",
+        sql: include_str!("../migrations/0005_book_user_metadata.sql"),
     },
 ];
 
@@ -181,6 +188,42 @@ pub struct Book {
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_opened_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BookCoverOrigin {
+    Automatic,
+    User,
+    Fallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookDetails {
+    pub book: Book,
+    pub automatic_title: String,
+    pub automatic_author: Option<String>,
+    pub automatic_cover_path: Option<String>,
+    pub cover_origin: BookCoverOrigin,
+    pub title_override_updated_at: Option<String>,
+    pub author_override_updated_at: Option<String>,
+    pub cover_override_updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "action", rename_all = "lowercase")]
+pub enum TextOverridePatch {
+    Unchanged,
+    Set { value: String },
+    Reset,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BookMetadataOverridePatch {
+    pub title: TextOverridePatch,
+    pub author: TextOverridePatch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -506,6 +549,48 @@ pub fn app_health(app: &AppHandle) -> anyhow::Result<AppHealth> {
 pub fn list_books(app: &AppHandle) -> anyhow::Result<Vec<Book>> {
     let database_path = init_app_database(app)?;
     list_books_at(&database_path)
+}
+
+pub fn get_book_details(app: &AppHandle, book_id: &str) -> anyhow::Result<BookDetails> {
+    let database_path = init_app_database(app)?;
+    get_book_details_at(&database_path, book_id)
+}
+
+pub fn save_book_metadata_overrides(
+    app: &AppHandle,
+    book_id: &str,
+    patch: BookMetadataOverridePatch,
+) -> anyhow::Result<BookDetails> {
+    let database_path = init_app_database(app)?;
+    save_book_metadata_overrides_at(&database_path, book_id, patch)
+}
+
+pub fn save_user_book_cover(
+    app: &AppHandle,
+    book_id: &str,
+    image_bytes: Vec<u8>,
+) -> anyhow::Result<BookDetails> {
+    let storage = init_app_storage(app)?;
+    save_user_book_cover_at(
+        &storage.database_path,
+        &storage.library_dir,
+        book_id,
+        &image_bytes,
+    )
+}
+
+pub fn reset_book_overrides(
+    app: &AppHandle,
+    book_id: &str,
+    fields: Vec<String>,
+) -> anyhow::Result<BookDetails> {
+    let storage = init_app_storage(app)?;
+    reset_book_overrides_at(
+        &storage.database_path,
+        &storage.library_dir,
+        book_id,
+        &fields,
+    )
 }
 
 pub fn import_book<P: AsRef<Path>>(app: &AppHandle, path: P) -> anyhow::Result<ImportBookResult> {
@@ -845,9 +930,9 @@ pub fn import_book_at<P: AsRef<Path>>(
 
 pub fn mark_book_opened_at(database_path: &Path, book_id: &str) -> anyhow::Result<Book> {
     init_database_at(database_path)?;
+    let details = get_book_details_at(database_path, book_id)?;
     let conn = open_database(database_path)?;
-    let book =
-        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let book = details.book.clone();
 
     if !Path::new(&book.library_path).is_file() {
         bail!("library copy is missing; re-import the original file to repair this book");
@@ -881,9 +966,9 @@ pub fn remove_book_at(
         )
     })?;
 
+    let details = get_book_details_at(database_path, book_id)?;
     let conn = open_database(database_path)?;
-    let book =
-        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let book = details.book.clone();
     let library_path = PathBuf::from(&book.library_path);
     let removed_library_path = path_to_string(&library_path);
 
@@ -903,6 +988,14 @@ pub fn remove_book_at(
             fs::remove_file(&cover_path).with_context(|| {
                 format!("failed to delete cached cover at {}", cover_path.display())
             })?;
+        }
+    }
+
+    if let Some(automatic_cover) = details.automatic_cover_path.as_deref() {
+        let automatic_cover_path = PathBuf::from(automatic_cover);
+        if automatic_cover_path.exists() && Some(automatic_cover) != book.cover_path.as_deref() {
+            assert_library_file_is_within_dir(&automatic_cover_path, library_dir)?;
+            fs::remove_file(automatic_cover_path)?;
         }
     }
 
@@ -2080,19 +2173,19 @@ fn select_books(conn: &Connection) -> anyhow::Result<Vec<Book>> {
     let mut statement = conn.prepare(
         "SELECT
             id,
-            title,
-            author,
+            COALESCE((SELECT user_title FROM book_user_metadata WHERE book_id = books.id), title),
+            COALESCE((SELECT user_author FROM book_user_metadata WHERE book_id = books.id), author),
             format,
             source_path,
             library_path,
             file_hash,
-            cover_path,
+            COALESCE((SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id), cover_path),
             created_at,
             updated_at,
             last_opened_at,
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
-                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+                CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
             )
         FROM books
         ORDER BY COALESCE(last_opened_at, created_at) DESC, created_at DESC, id ASC",
@@ -2109,19 +2202,19 @@ fn find_book_by_hash(conn: &Connection, file_hash: &str) -> rusqlite::Result<Opt
     conn.query_row(
         "SELECT
             id,
-            title,
-            author,
+            COALESCE((SELECT user_title FROM book_user_metadata WHERE book_id = books.id), title),
+            COALESCE((SELECT user_author FROM book_user_metadata WHERE book_id = books.id), author),
             format,
             source_path,
             library_path,
             file_hash,
-            cover_path,
+            COALESCE((SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id), cover_path),
             created_at,
             updated_at,
             last_opened_at,
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
-                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+                CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
             )
         FROM books
         WHERE file_hash = ?1",
@@ -2135,19 +2228,19 @@ fn find_book_by_id(conn: &Connection, book_id: &str) -> rusqlite::Result<Option<
     conn.query_row(
         "SELECT
             id,
-            title,
-            author,
+            COALESCE((SELECT user_title FROM book_user_metadata WHERE book_id = books.id), title),
+            COALESCE((SELECT user_author FROM book_user_metadata WHERE book_id = books.id), author),
             format,
             source_path,
             library_path,
             file_hash,
-            cover_path,
+            COALESCE((SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id), cover_path),
             created_at,
             updated_at,
             last_opened_at,
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
-                CASE WHEN cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
+                CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
             )
         FROM books
         WHERE id = ?1",
@@ -2194,6 +2287,221 @@ fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
         last_opened_at: row.get(10)?,
         cover_status: BookCoverStatus::from_database(&row.get::<_, String>(11)?)?,
     })
+}
+
+pub fn get_book_details_at(database_path: &Path, book_id: &str) -> anyhow::Result<BookDetails> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    let book =
+        find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let metadata: (
+        String,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+    ) = conn.query_row(
+        "SELECT books.title, books.author, books.cover_path,
+                metadata.user_cover_path, metadata.title_updated_at,
+                metadata.author_updated_at, metadata.cover_updated_at
+         FROM books
+         LEFT JOIN book_user_metadata metadata ON metadata.book_id = books.id
+         WHERE books.id = ?1",
+        params![book_id],
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        },
+    )?;
+    Ok(BookDetails {
+        book,
+        automatic_title: metadata.0,
+        automatic_author: metadata.1,
+        automatic_cover_path: metadata.2.clone(),
+        cover_origin: if metadata.3.is_some() {
+            BookCoverOrigin::User
+        } else if metadata.2.is_some() {
+            BookCoverOrigin::Automatic
+        } else {
+            BookCoverOrigin::Fallback
+        },
+        title_override_updated_at: metadata.4,
+        author_override_updated_at: metadata.5,
+        cover_override_updated_at: metadata.6,
+    })
+}
+
+pub fn save_book_metadata_overrides_at(
+    database_path: &Path,
+    book_id: &str,
+    patch: BookMetadataOverridePatch,
+) -> anyhow::Result<BookDetails> {
+    init_database_at(database_path)?;
+    let mut conn = open_database(database_path)?;
+    find_book_by_id(&conn, book_id)?.with_context(|| format!("book not found: {book_id}"))?;
+    let now = current_timestamp(&conn)?;
+    let transaction = conn.transaction()?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO book_user_metadata (book_id) VALUES (?1)",
+        params![book_id],
+    )?;
+    match patch.title {
+        TextOverridePatch::Unchanged => {}
+        TextOverridePatch::Set { value } => {
+            let value = value.trim();
+            if value.is_empty() || value.chars().count() > 500 {
+                bail!("title override must contain 1 to 500 characters");
+            }
+            transaction.execute(
+                "UPDATE book_user_metadata SET user_title = ?1, title_updated_at = ?2 WHERE book_id = ?3",
+                params![value, &now, book_id],
+            )?;
+        }
+        TextOverridePatch::Reset => {
+            transaction.execute(
+                "UPDATE book_user_metadata SET user_title = NULL, title_updated_at = ?1 WHERE book_id = ?2",
+                params![&now, book_id],
+            )?;
+        }
+    }
+    match patch.author {
+        TextOverridePatch::Unchanged => {}
+        TextOverridePatch::Set { value } => {
+            let value = value.trim();
+            if value.chars().count() > 500 {
+                bail!("author override must be at most 500 characters");
+            }
+            transaction.execute(
+                "UPDATE book_user_metadata SET user_author = ?1, author_updated_at = ?2 WHERE book_id = ?3",
+                params![value, &now, book_id],
+            )?;
+        }
+        TextOverridePatch::Reset => {
+            transaction.execute(
+                "UPDATE book_user_metadata SET user_author = NULL, author_updated_at = ?1 WHERE book_id = ?2",
+                params![&now, book_id],
+            )?;
+        }
+    }
+    transaction.commit()?;
+    get_book_details_at(database_path, book_id)
+}
+
+pub fn save_user_book_cover_at(
+    database_path: &Path,
+    library_dir: &Path,
+    book_id: &str,
+    image_bytes: &[u8],
+) -> anyhow::Result<BookDetails> {
+    init_database_at(database_path)?;
+    if image_bytes.is_empty() || image_bytes.len() > MAX_USER_COVER_BYTES {
+        bail!("custom cover must be between 1 byte and 10 MiB");
+    }
+    let format = image::guess_format(image_bytes).context("custom cover format is invalid")?;
+    if !matches!(
+        format,
+        image::ImageFormat::Png | image::ImageFormat::Jpeg | image::ImageFormat::WebP
+    ) {
+        bail!("custom cover must be PNG, JPEG, or WebP");
+    }
+    let decoded = image::load_from_memory_with_format(image_bytes, format)
+        .context("custom cover could not be decoded")?;
+    let pixels = u64::from(decoded.width()) * u64::from(decoded.height());
+    if decoded.width() == 0 || decoded.height() == 0 || pixels > MAX_USER_COVER_PIXELS {
+        bail!("custom cover dimensions exceed the safe decoding limit");
+    }
+    let rgba = decoded.to_rgba8();
+    let mut normalized = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut normalized).encode(
+        &rgba,
+        rgba.width(),
+        rgba.height(),
+        image::ExtendedColorType::Rgba8,
+    )?;
+
+    fs::create_dir_all(library_dir.join(COVER_DIR_NAME))?;
+    let details = get_book_details_at(database_path, book_id)?;
+    let destination = library_dir
+        .join(COVER_DIR_NAME)
+        .join(format!("{}.user.webp", details.book.file_hash));
+    let temporary = destination.with_extension("user.webp.tmp");
+    fs::write(&temporary, normalized)?;
+    if destination.exists() {
+        fs::remove_file(&destination)?;
+    }
+    fs::rename(&temporary, &destination)?;
+
+    let conn = open_database(database_path)?;
+    let now = current_timestamp(&conn)?;
+    conn.execute(
+        "INSERT INTO book_user_metadata (book_id, user_cover_path, cover_updated_at)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT(book_id) DO UPDATE SET user_cover_path = excluded.user_cover_path,
+            cover_updated_at = excluded.cover_updated_at",
+        params![book_id, path_to_string(&destination), now],
+    )?;
+    get_book_details_at(database_path, book_id)
+}
+
+pub fn reset_book_overrides_at(
+    database_path: &Path,
+    library_dir: &Path,
+    book_id: &str,
+    fields: &[String],
+) -> anyhow::Result<BookDetails> {
+    let details = get_book_details_at(database_path, book_id)?;
+    let allowed = ["title", "author", "cover"];
+    if fields
+        .iter()
+        .any(|field| !allowed.contains(&field.as_str()))
+    {
+        bail!("override field is invalid");
+    }
+    let conn = open_database(database_path)?;
+    let now = current_timestamp(&conn)?;
+    conn.execute(
+        "INSERT OR IGNORE INTO book_user_metadata (book_id) VALUES (?1)",
+        params![book_id],
+    )?;
+    if fields.iter().any(|field| field == "title") {
+        conn.execute("UPDATE book_user_metadata SET user_title = NULL, title_updated_at = ?1 WHERE book_id = ?2", params![&now, book_id])?;
+    }
+    if fields.iter().any(|field| field == "author") {
+        conn.execute("UPDATE book_user_metadata SET user_author = NULL, author_updated_at = ?1 WHERE book_id = ?2", params![&now, book_id])?;
+    }
+    if fields.iter().any(|field| field == "cover") {
+        if details.cover_origin == BookCoverOrigin::User {
+            if let Some(path) = details.book.cover_path.as_deref().map(PathBuf::from) {
+                if path.exists() {
+                    assert_library_file_is_within_dir(&path, library_dir)?;
+                    fs::remove_file(path)?;
+                }
+            }
+        }
+        conn.execute("UPDATE book_user_metadata SET user_cover_path = NULL, cover_updated_at = ?1 WHERE book_id = ?2", params![&now, book_id])?;
+        if details.automatic_cover_path.is_none() {
+            let status = if details.book.format == BookFormat::Txt {
+                "fallback"
+            } else {
+                "pending"
+            };
+            conn.execute(
+                "INSERT INTO book_cover_state (book_id, status, updated_at) VALUES (?1, ?2, ?3)
+                 ON CONFLICT(book_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at",
+                params![book_id, status, &now],
+            )?;
+        }
+    }
+    get_book_details_at(database_path, book_id)
 }
 
 fn validate_cover_image(image_bytes: &[u8], image_format: &str) -> anyhow::Result<&'static str> {
@@ -2329,22 +2637,24 @@ mod tests {
 
     use super::{
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
-        get_reader_cache_at, get_reader_experience_preferences_at,
+        get_book_details_at, get_reader_cache_at, get_reader_experience_preferences_at,
         get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
         import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
         mark_book_cover_fallback_at, mark_book_opened_at, open_txt_book_at, remove_book_at,
-        save_book_cover_at, save_reader_cache_at, save_reader_experience_preferences_at,
+        reset_book_overrides_at, save_book_cover_at, save_book_metadata_overrides_at,
+        save_reader_cache_at, save_reader_experience_preferences_at,
         save_reader_layout_preferences_at, save_reader_theme_at, save_reading_progress_at,
-        schema_version, update_annotation_at, AnnotationKind, BookCoverStatus, BookFormat,
+        save_user_book_cover_at, schema_version, update_annotation_at, AnnotationKind,
+        BookCoverOrigin, BookCoverStatus, BookFormat, BookMetadataOverridePatch,
         EpubExperiencePreferences, EpubLocator, EpubViewMode, ImportBookStatus, Locator,
         PageTransitionMode, PdfExperiencePreferences, PdfLocator, PdfPaginatedViewMode, PdfRect,
         PdfViewMode, PdfZoomMode, ReaderExperiencePreferences, ReaderLayoutPreferences,
-        ReaderTheme, ReaderThemeMode, TxtExperiencePreferences, TxtLocator, TxtPaginatedViewMode,
-        TxtViewMode, DB_FILE_NAME,
+        ReaderTheme, ReaderThemeMode, TextOverridePatch, TxtExperiencePreferences, TxtLocator,
+        TxtPaginatedViewMode, TxtViewMode, DB_FILE_NAME,
     };
 
     #[test]
-    fn migration_v4_creates_expected_tables_and_is_idempotent() {
+    fn migration_v5_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2362,7 +2672,8 @@ mod tests {
                     'annotations',
                     'app_settings',
                     'book_cover_state',
-                    'reader_cache'
+                    'reader_cache',
+                    'book_user_metadata'
                 )",
                 [],
                 |row| row.get(0),
@@ -2374,7 +2685,7 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 8);
+        assert_eq!(table_count, 9);
         let bookmark_updated_at_columns: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
@@ -2383,8 +2694,8 @@ mod tests {
             )
             .expect("count bookmark updated_at columns");
 
-        assert_eq!(migration_count, 4);
-        assert_eq!(schema_version(&conn).expect("schema version"), 4);
+        assert_eq!(migration_count, 5);
+        assert_eq!(schema_version(&conn).expect("schema version"), 5);
         assert_eq!(bookmark_updated_at_columns, 1);
     }
 
@@ -3492,6 +3803,63 @@ mod tests {
         let (encoded, _, had_errors) = encoding.encode(text);
         assert!(!had_errors);
         encoded.into_owned()
+    }
+
+    #[test]
+    fn metadata_overrides_and_custom_cover_reset_independently() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("automatic.pdf");
+        fs::write(&source_path, b"%PDF-1.4\nmetadata fixture").expect("source");
+        let imported = import_book_at(&database_path, &library_dir, &source_path).expect("import");
+
+        let edited = save_book_metadata_overrides_at(
+            &database_path,
+            &imported.book.id,
+            BookMetadataOverridePatch {
+                title: TextOverridePatch::Set {
+                    value: "User title".to_string(),
+                },
+                author: TextOverridePatch::Set {
+                    value: "User author".to_string(),
+                },
+            },
+        )
+        .expect("metadata override");
+        assert_eq!(edited.book.title, "User title");
+        assert_eq!(edited.book.author.as_deref(), Some("User author"));
+        assert_eq!(edited.automatic_title, "automatic");
+
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(60, 90)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .expect("png");
+        let covered = save_user_book_cover_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            png.get_ref(),
+        )
+        .expect("user cover");
+        assert_eq!(covered.cover_origin, BookCoverOrigin::User);
+        let user_cover = PathBuf::from(covered.book.cover_path.as_deref().expect("cover path"));
+        assert!(user_cover.is_file());
+        assert!(user_cover.to_string_lossy().ends_with(".user.webp"));
+
+        let reset = reset_book_overrides_at(
+            &database_path,
+            &library_dir,
+            &imported.book.id,
+            &["title".to_string(), "cover".to_string()],
+        )
+        .expect("reset");
+        assert_eq!(reset.book.title, "automatic");
+        assert_eq!(reset.book.author.as_deref(), Some("User author"));
+        assert_eq!(reset.cover_origin, BookCoverOrigin::Fallback);
+        assert_eq!(reset.book.cover_status, BookCoverStatus::Pending);
+        assert!(!user_cover.exists());
+        assert!(get_book_details_at(&database_path, &imported.book.id).is_ok());
     }
 
     fn import_and_open_txt(text: &str) -> super::TxtDocument {

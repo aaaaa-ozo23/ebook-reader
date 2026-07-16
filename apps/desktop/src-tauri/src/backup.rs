@@ -242,6 +242,18 @@ struct PortableBook {
     created_at: String,
     updated_at: String,
     last_opened_at: Option<String>,
+    #[serde(default)]
+    user_title: Option<String>,
+    #[serde(default)]
+    title_override_updated_at: Option<String>,
+    #[serde(default)]
+    user_author: Option<String>,
+    #[serde(default)]
+    author_override_updated_at: Option<String>,
+    #[serde(default)]
+    user_cover: bool,
+    #[serde(default)]
+    cover_override_updated_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -987,7 +999,11 @@ fn merge_restore_data(
                 &local_library_path
             };
             let effective_cover = if local_cover_path.is_none() && restored_cover_path.is_some() {
-                restored_cover_path.as_deref()
+                if book.user_cover {
+                    None
+                } else {
+                    restored_cover_path.as_deref()
+                }
             } else {
                 local_cover_path.as_deref()
             };
@@ -1038,6 +1054,16 @@ fn merge_restore_data(
                     "Local book was newer or equal"
                 },
             ));
+            merge_book_overrides(
+                transaction,
+                book,
+                &local_id,
+                if book.user_cover {
+                    restored_cover_path.as_deref()
+                } else {
+                    None
+                },
+            )?;
         } else {
             let local_id = if is_uuid_like(&book.id) {
                 book.id.clone()
@@ -1063,7 +1089,11 @@ fn merge_restore_data(
                     &book.format,
                     &expected_library_path,
                     &book.file_hash,
-                    restored_cover_path.as_deref(),
+                    if book.user_cover {
+                        None
+                    } else {
+                        restored_cover_path.as_deref()
+                    },
                     &book.created_at,
                     &book.updated_at,
                     book.last_opened_at.as_deref(),
@@ -1096,6 +1126,16 @@ fn merge_restore_data(
                     "File needed; reading data was retained"
                 },
             ));
+            merge_book_overrides(
+                transaction,
+                book,
+                &local_id,
+                if book.user_cover {
+                    restored_cover_path.as_deref()
+                } else {
+                    None
+                },
+            )?;
         }
     }
 
@@ -1109,6 +1149,40 @@ fn merge_restore_data(
     merge_annotations(transaction, &data.annotations, &book_id_map, &mut items)?;
     merge_settings(transaction, &data.settings, &mut items)?;
     Ok(items)
+}
+
+fn merge_book_overrides(
+    transaction: &Transaction<'_>,
+    book: &PortableBook,
+    local_book_id: &str,
+    user_cover_path: Option<&str>,
+) -> anyhow::Result<()> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO book_user_metadata (book_id) VALUES (?1)",
+        params![local_book_id],
+    )?;
+    if let Some(updated_at) = &book.title_override_updated_at {
+        transaction.execute(
+            "UPDATE book_user_metadata SET user_title = ?1, title_updated_at = ?2
+             WHERE book_id = ?3 AND (title_updated_at IS NULL OR title_updated_at < ?2)",
+            params![book.user_title.as_deref(), updated_at, local_book_id],
+        )?;
+    }
+    if let Some(updated_at) = &book.author_override_updated_at {
+        transaction.execute(
+            "UPDATE book_user_metadata SET user_author = ?1, author_updated_at = ?2
+             WHERE book_id = ?3 AND (author_updated_at IS NULL OR author_updated_at < ?2)",
+            params![book.user_author.as_deref(), updated_at, local_book_id],
+        )?;
+    }
+    if let Some(updated_at) = &book.cover_override_updated_at {
+        transaction.execute(
+            "UPDATE book_user_metadata SET user_cover_path = ?1, cover_updated_at = ?2
+             WHERE book_id = ?3 AND (cover_updated_at IS NULL OR cover_updated_at < ?2)",
+            params![user_cover_path, updated_at, local_book_id],
+        )?;
+    }
+    Ok(())
 }
 
 fn merge_progress(
@@ -1450,13 +1524,17 @@ fn collect_portable_data(
     let mut file_payloads = Vec::new();
     let mut statement = conn.prepare(
         "SELECT books.id, books.title, books.author, books.format, books.library_path,
-                books.file_hash, books.cover_path, books.created_at, books.updated_at,
+                books.file_hash, COALESCE(metadata.user_cover_path, books.cover_path), books.created_at, books.updated_at,
                 books.last_opened_at,
                 COALESCE(book_cover_state.status,
-                  CASE WHEN books.cover_path IS NOT NULL THEN 'ready'
+                  CASE WHEN metadata.user_cover_path IS NOT NULL OR books.cover_path IS NOT NULL THEN 'ready'
                        WHEN books.format = 'txt' THEN 'fallback' ELSE 'pending' END)
+                , metadata.user_title, metadata.title_updated_at,
+                  metadata.user_author, metadata.author_updated_at,
+                  metadata.user_cover_path IS NOT NULL, metadata.cover_updated_at
          FROM books
          LEFT JOIN book_cover_state ON book_cover_state.book_id = books.id
+         LEFT JOIN book_user_metadata metadata ON metadata.book_id = books.id
          ORDER BY books.id",
     )?;
     let books = statement
@@ -1523,6 +1601,12 @@ fn portable_book_from_row(
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             last_opened_at: row.get(9)?,
+            user_title: row.get(11)?,
+            title_override_updated_at: row.get(12)?,
+            user_author: row.get(13)?,
+            author_override_updated_at: row.get(14)?,
+            user_cover: row.get(15)?,
+            cover_override_updated_at: row.get(16)?,
         },
         row.get(4)?,
         row.get(6)?,

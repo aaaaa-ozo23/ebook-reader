@@ -48,6 +48,7 @@ interface BookshelfProps {
   onCloseBookMenu: () => void;
   onConfirmRemoval: () => void;
   onDismissFeedback: () => void;
+  onEditBook: (book: Book) => void;
   onImportBook: () => void;
   onOpenBook: (book: Book) => void;
   onOpenSettings: () => void;
@@ -80,6 +81,7 @@ export function Bookshelf({
   onCloseBookMenu,
   onConfirmRemoval,
   onDismissFeedback,
+  onEditBook,
   onImportBook,
   onOpenBook,
   onOpenSettings,
@@ -137,6 +139,7 @@ export function Bookshelf({
         <BookActionMenu
           menu={bookActionMenu}
           onClose={onCloseBookMenu}
+          onEdit={onEditBook}
           onOpen={onOpenBook}
           onRemove={onRequestRemoval}
         />
@@ -619,11 +622,13 @@ function FeedbackToast({
 function BookActionMenu({
   menu,
   onClose,
+  onEdit,
   onOpen,
   onRemove,
 }: {
   menu: BookActionMenuState | null;
   onClose: () => void;
+  onEdit: (book: Book) => void;
   onOpen: (book: Book) => void;
   onRemove: (book: Book) => void;
 }) {
@@ -681,6 +686,16 @@ function BookActionMenu({
         }}
       >
         {menu.book.availability === "missing" ? "File needed" : "Open"}
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        onClick={() => {
+          onClose();
+          onEdit(menu.book);
+        }}
+      >
+        Edit details
       </button>
       <span className="book-action-menu__divider" aria-hidden="true" />
       <button
