@@ -37,6 +37,8 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'license audit failed' }
   & node scripts\release\verify-release-security.mjs
   if ($LASTEXITCODE -ne 0) { throw 'pre-build security verification failed' }
+  & pnpm.cmd verify:release
+  if ($LASTEXITCODE -ne 0) { throw 'release metadata verification failed' }
 
   $syftOutput = & powershell -ExecutionPolicy Bypass -File scripts\release\install-syft.ps1
   if ($LASTEXITCODE -ne 0) { throw 'Syft installation failed' }
@@ -82,7 +84,7 @@ try {
   Write-Utf8NoBom (Join-Path $output 'latest.json') ($latest | ConvertTo-Json -Depth 6)
 
   $sourceSbom = Join-Path $output 'sbom-source.cdx.json'
-  & $syft "dir:$root" --exclude './.git' --exclude './node_modules' --exclude './.tools' --exclude './release-artifacts' -o "cyclonedx-json=$sourceSbom"
+  & $syft "dir:$root" --source-name 'ebook-reader' --source-version $Version --exclude './.git' --exclude './node_modules' --exclude './.tools' --exclude './release-artifacts' -o "cyclonedx-json=$sourceSbom"
   if ($LASTEXITCODE -ne 0) { throw 'source SBOM generation failed' }
 
   $artifactStaging = Join-Path $output '.artifact-sbom-input'
@@ -90,17 +92,18 @@ try {
   Copy-Item (Join-Path $output $nsisName) $artifactStaging
   Copy-Item (Join-Path $output $msiName) $artifactStaging
   $artifactSbom = Join-Path $output 'sbom-windows-artifacts.cdx.json'
-  & $syft "dir:$artifactStaging" -o "cyclonedx-json=$artifactSbom"
+  & $syft "dir:$artifactStaging" --source-name 'ebook-reader-windows-artifacts' --source-version $Version -o "cyclonedx-json=$artifactSbom"
   if ($LASTEXITCODE -ne 0) { throw 'artifact SBOM generation failed' }
   Remove-Item -LiteralPath $artifactStaging -Recurse -Force
 
   $authenticode = @($nsisName, $msiName) | ForEach-Object {
     $path = Join-Path $output $_
     $signature = Get-AuthenticodeSignature -LiteralPath $path
+    $status = $signature.Status.ToString()
     [ordered]@{
       file = $_
-      status = $signature.Status.ToString()
-      statusMessage = $signature.StatusMessage
+      status = $status
+      statusMessage = if ($status -eq 'Valid') { 'Authenticode signature is valid.' } elseif ($status -eq 'NotSigned') { 'Artifact is not Authenticode signed.' } else { 'Authenticode validation did not succeed.' }
       signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }
     }
   }

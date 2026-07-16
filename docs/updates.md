@@ -34,5 +34,13 @@ production identifier or production user data.
 The updater signature is not Windows Authenticode. RC installers remain explicitly unsigned by
 Authenticode unless a commercial Code Signing certificate is supplied.
 
+Never copy the updater private key into the repository, logs, SBOM input, workflow artifacts, or
+release bundles. Before an RC is accepted, the maintainer must confirm a separate offline backup
+and record only that confirmation—not the backup location or secret—in the private release log.
+
+For rollback, uninstall the newer build and install a previously trusted artifact only after
+exporting a portable backup. The installer rejects in-place downgrades; do not delete the app-data
+directory during uninstall. See [Upgrade and rollback](upgrade-and-rollback.md).
+
 Implementation follows the official [Tauri updater](https://v2.tauri.app/plugin/updater/) and
 [Windows code-signing](https://v2.tauri.app/distribute/sign/windows/) guidance.

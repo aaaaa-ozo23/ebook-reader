@@ -64,6 +64,8 @@ Cancellation stops new work and performs the same cleanup.
 - Annotation `deletedAt` tombstones participate in that comparison so deleted notes do not
   reappear.
 - Settings match by key with the same timestamp rule; `lastOpenedAt` keeps the newer value.
+- User title, author, and cover overrides merge independently by field timestamp; resetting one
+  field does not clear the others or replace the extracted automatic metadata.
 - If an original file is absent and no matching local file exists, the book remains visible as
   `availability: "missing"` with **File needed**. Importing the same hash later repairs the managed
   file while preserving its progress, bookmarks and annotations.

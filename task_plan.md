@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 13.8 发布安全与签名：complete。可重复双 flavor release 脚本、Syft 1.44.0 双重 checksum 门禁、CycloneDX SBOM、license/secret/schema/Authenticode 检查和手动 draft workflow 已完成；下一阶段为 13.9 v0.2 发布候选。
+大阶段 13.9 v0.2 发布候选：repository complete。版本、文档、全量自动化门禁和本地 draft RC 产物已完成；原生 updater 安装 smoke、NSIS/MSI 安装矩阵与私钥离线备份仍需在隔离 Windows 验收环境人工关闭，未打 tag、未创建 GitHub Release。
 
 ## 分支策略
 
@@ -500,7 +500,7 @@
 | 13.6 文件夹与拖放导入（complete） | `codex/stage13-batch-import` | 支持拖放文件/文件夹、递归扫描 EPUB/TXT/PDF、预览、去重、取消和逐项结果 | 大批量导入不阻塞 UI；非法/重复/丢失文件隔离；不跟随符号链接越界 |
 | 13.7 应用内更新（complete） | `codex/stage13-app-updater` | 接入 Tauri updater、签名清单、检查/下载/安装状态和手动回退说明 | 无更新、下载失败、签名失败、取消、重启安装和数据库兼容路径通过 |
 | 13.8 发布安全与签名（complete） | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
-| 13.9 v0.2 发布候选 | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | RC 仅含已验收功能；全套门禁和安装矩阵通过；发布需用户明确授权后执行 |
+| 13.9 v0.2 发布候选（repository complete；native acceptance pending） | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | 自动化与 draft artifacts 已通过；隔离 updater smoke、安装矩阵和离线密钥备份保持显式未完成，发布需用户明确授权后执行 |
 
 ### 阶段 13.1/13.2 设计评审前置记录
 

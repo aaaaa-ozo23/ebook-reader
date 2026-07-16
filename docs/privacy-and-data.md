@@ -19,7 +19,7 @@ the app stores:
 
 | Path | Contents |
 |------|----------|
-| `ebook-reader.sqlite3` | Book metadata, reading progress, bookmarks, annotations, preferences, cover state, and versioned reader caches |
+| `ebook-reader.sqlite3` | Automatic and user-overridden book metadata, reading progress, bookmarks, annotations, preferences, cover state, and versioned reader caches |
 | `library/` | Private app-managed copies of imported EPUB, TXT, and PDF files |
 | `library/covers/` | Locally extracted EPUB covers and locally rendered PDF first-page thumbnails |
 
@@ -65,8 +65,11 @@ contract.
 
 ## Network and logs
 
-The current MVP has no feature that sends imported books, reading activity, annotations, or
-diagnostic events to a server. It also does not create a persistent application log file. Normal
+The app never sends imported books, reading activity, annotations, or diagnostic events to a
+server. Manual update checks—and optional once-daily checks—request only the signed release
+metadata from the locked HTTPS GitHub endpoint. Download starts only after user action and update
+installation always requires confirmation. Update-check timestamps remain machine-local and are
+excluded from portable backups. The app does not create a persistent application log file. Normal
 operating-system, WebView, crash-reporting, or developer-tool behavior is controlled by the local
 platform and is outside the app's own data model.
 

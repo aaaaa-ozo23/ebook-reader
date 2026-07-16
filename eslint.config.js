@@ -10,6 +10,8 @@ export default tseslint.config(
       "**/dist/**",
       "**/coverage/**",
       "**/node_modules/**",
+      ".tools/**",
+      "release-artifacts/**",
       "**/target/**",
       "**/src-tauri/gen/**",
       "**/*.tsbuildinfo",
