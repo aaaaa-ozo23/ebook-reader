@@ -2041,3 +2041,12 @@
 - **产品：** Data & Backup 增加安全预览、冲突统计、显式确认、进度/取消和逐项结果；missing 书架状态禁止误打开并显示 File needed；375 保持全屏 sheet 与 44px target。
 - **验证：** desktop production build、20 files/166 Vitest、Rust 46 tests（含攻击 ZIP、checksum/size、missing repair/newer local）通过；专用 Playwright 覆盖四视口、reduced-motion、焦点、axe serious/critical 与浏览器 runtime 错误。
 - **边界：** 版本仍为 0.1.0；未开始 13.5、未创建 tag/Release，`.codex/` 与 `AGENTS.md` 未改动。
+
+## 2026-07-16 大阶段 13.5：元数据与封面编辑
+
+- **状态：** complete；分支 `codex/stage13-book-metadata-editor`，从 13.4 集成合并 `5ad00d0` 创建。
+- **数据库/Core：** migration 0005、BookDetails/BookCoverOrigin、显式 set/reset/unchanged patch；列表与 reader 接收 effective book，同时保留自动值。
+- **封面：** PNG/JPEG/WebP ≤10 MiB；前端 2:3 crop/zoom/position → 600×900 WebP，后端 signature/decode/40M pixel 限制；reset/delete 清理正确。
+- **UI：** overflow 增加 Edit details；桌面 modal/移动 sheet 延续暖纸、深墨、青绿、琥珀、44px、焦点与 reduced-motion 契约。
+- **备份：** v1 导出/恢复字段覆盖值与独立时间，旧 v1 缺失字段仍可恢复；user/automatic cover path 不混写。
+- **验证：** `pnpm.cmd check`、Rust 47 tests（含 field reset/custom cover）、格式门禁通过；版本保持 0.1.0，未开始 13.6。

@@ -1,4 +1,10 @@
-import type { Book, ImportBookResult, RemoveBookResult } from "@reader/core";
+import type {
+  Book,
+  BookDetails,
+  BookMetadataOverridePatch,
+  ImportBookResult,
+  RemoveBookResult,
+} from "@reader/core";
 
 const DESKTOP_RUNTIME_ERROR = "This action requires the Tauri desktop runtime.";
 const FALLBACK_BOOKS_KEY = "reader:fallback:books";
@@ -73,6 +79,45 @@ export async function removeBook(bookId: string): Promise<RemoveBookResult> {
   }
 
   return invokeCommand<RemoveBookResult>("remove_book", { bookId });
+}
+
+export async function getBookDetails(bookId: string): Promise<BookDetails> {
+  if (!hasTauriRuntime()) {
+    const book = getFallbackBooks().find((candidate) => candidate.id === bookId);
+    if (book === undefined) throw new Error(DESKTOP_RUNTIME_ERROR);
+    return {
+      book,
+      automaticTitle: book.title,
+      automaticAuthor: book.author,
+      automaticCoverPath: book.coverPath,
+      coverOrigin: book.coverPath === undefined ? "fallback" : "automatic",
+    };
+  }
+  return invokeCommand<BookDetails>("get_book_details", { bookId });
+}
+
+export async function saveBookMetadataOverrides(
+  bookId: string,
+  patch: BookMetadataOverridePatch,
+): Promise<BookDetails> {
+  if (!hasTauriRuntime()) throw new Error(DESKTOP_RUNTIME_ERROR);
+  return invokeCommand<BookDetails>("save_book_metadata_overrides", { bookId, patch });
+}
+
+export async function saveUserBookCover(
+  bookId: string,
+  imageBytes: number[],
+): Promise<BookDetails> {
+  if (!hasTauriRuntime()) throw new Error(DESKTOP_RUNTIME_ERROR);
+  return invokeCommand<BookDetails>("save_user_book_cover", { bookId, imageBytes });
+}
+
+export async function resetBookOverrides(
+  bookId: string,
+  fields: Array<"title" | "author" | "cover">,
+): Promise<BookDetails> {
+  if (!hasTauriRuntime()) throw new Error(DESKTOP_RUNTIME_ERROR);
+  return invokeCommand<BookDetails>("reset_book_overrides", { bookId, fields });
 }
 
 export async function saveBookCover(

@@ -100,6 +100,38 @@ fn remove_book(app: tauri::AppHandle, book_id: String) -> Result<db::RemoveBookR
 }
 
 #[tauri::command]
+fn get_book_details(app: tauri::AppHandle, book_id: String) -> Result<db::BookDetails, String> {
+    db::get_book_details(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_book_metadata_overrides(
+    app: tauri::AppHandle,
+    book_id: String,
+    patch: db::BookMetadataOverridePatch,
+) -> Result<db::BookDetails, String> {
+    db::save_book_metadata_overrides(&app, &book_id, patch).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_user_book_cover(
+    app: tauri::AppHandle,
+    book_id: String,
+    image_bytes: Vec<u8>,
+) -> Result<db::BookDetails, String> {
+    db::save_user_book_cover(&app, &book_id, image_bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reset_book_overrides(
+    app: tauri::AppHandle,
+    book_id: String,
+    fields: Vec<String>,
+) -> Result<db::BookDetails, String> {
+    db::reset_book_overrides(&app, &book_id, fields).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn save_book_cover(
     app: tauri::AppHandle,
     book_id: String,
@@ -309,6 +341,10 @@ pub fn run() {
             import_book,
             mark_book_opened,
             remove_book,
+            get_book_details,
+            save_book_metadata_overrides,
+            save_user_book_cover,
+            reset_book_overrides,
             save_book_cover,
             mark_book_cover_fallback,
             open_txt_book,
