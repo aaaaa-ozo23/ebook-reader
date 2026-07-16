@@ -157,6 +157,58 @@ export interface Bookmark<TLocator extends Locator = Locator> {
   locator: TLocator;
   label?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupOptions {
+  includeData: boolean;
+  includeCovers: boolean;
+  includeBooks: boolean;
+}
+
+export type DataOperationKind = "backup-export" | "backup-restore" | "batch-import";
+export type OperationProgressPhase =
+  | "preparing"
+  | "reading"
+  | "writing"
+  | "verifying"
+  | "committing"
+  | "complete"
+  | "canceled";
+
+export interface OperationProgress {
+  operationId: string;
+  kind: DataOperationKind;
+  phase: OperationProgressPhase;
+  completed: number;
+  total: number;
+  message: string;
+}
+
+export interface BackupPayloadDescriptor {
+  path: string;
+  size: number;
+  sha256: string;
+}
+
+export interface BackupManifest {
+  formatIdentifier: "ebook-reader-backup";
+  formatVersion: 1;
+  appVersion: string;
+  schemaVersion: number;
+  exportedAt: string;
+  options: BackupOptions;
+  recordCounts: Record<string, number>;
+  payloads: BackupPayloadDescriptor[];
+}
+
+export interface BackupResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  outputPath?: string;
+  fileName?: string;
+  bytesWritten: number;
+  manifest?: BackupManifest;
 }
 
 export interface Annotation {

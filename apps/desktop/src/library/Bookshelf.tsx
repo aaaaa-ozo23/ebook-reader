@@ -50,6 +50,7 @@ interface BookshelfProps {
   onDismissFeedback: () => void;
   onImportBook: () => void;
   onOpenBook: (book: Book) => void;
+  onOpenSettings: () => void;
   onRequestRemoval: (book: Book) => void;
   onRetryLibrary: () => void;
   onSelectLibraryView: (view: LibraryView) => void;
@@ -81,6 +82,7 @@ export function Bookshelf({
   onDismissFeedback,
   onImportBook,
   onOpenBook,
+  onOpenSettings,
   onRequestRemoval,
   onRetryLibrary,
   onSelectLibraryView,
@@ -97,6 +99,7 @@ export function Bookshelf({
       <LibraryRail
         activeView={activeLibraryView}
         bookCount={books.length}
+        onOpenSettings={onOpenSettings}
         onSelectView={onSelectLibraryView}
       />
       <section className="library-workspace" aria-labelledby="library-title">
@@ -108,6 +111,7 @@ export function Bookshelf({
           libraryError={libraryError}
           viewMode={viewMode}
           onImportBook={onImportBook}
+          onOpenSettings={onOpenSettings}
           onSetViewMode={onSetViewMode}
         />
         <ShelfBody
@@ -151,10 +155,12 @@ function LibraryRail({
   activeView,
   bookCount,
   onSelectView,
+  onOpenSettings,
 }: {
   activeView: LibraryView;
   bookCount: number;
   onSelectView: (view: LibraryView) => void;
+  onOpenSettings: () => void;
 }) {
   return (
     <aside className="library-rail" aria-label="Library navigation">
@@ -184,6 +190,12 @@ function LibraryRail({
           </span>
           <span>Recent</span>
         </button>
+        <button type="button" className="rail-link" onClick={onOpenSettings}>
+          <span className="rail-link__icon" aria-hidden="true">
+            <SettingsIcon />
+          </span>
+          <span>Settings</span>
+        </button>
       </nav>
       <p className="rail-count" aria-label={`${bookCount} books in library`}>
         {bookCount}
@@ -200,6 +212,7 @@ function LibraryHeader({
   libraryError,
   viewMode,
   onImportBook,
+  onOpenSettings,
   onSetViewMode,
 }: {
   activeLibraryView: LibraryView;
@@ -209,6 +222,7 @@ function LibraryHeader({
   libraryError: string | null;
   viewMode: ViewMode;
   onImportBook: () => void;
+  onOpenSettings: () => void;
   onSetViewMode: (mode: ViewMode, animate: boolean) => void;
 }) {
   const statusLabel = isLoading
@@ -237,6 +251,14 @@ function LibraryHeader({
         </div>
       </div>
       <div className="library-actions">
+        <button
+          type="button"
+          className="library-settings-button"
+          aria-label="Settings"
+          onClick={onOpenSettings}
+        >
+          <SettingsIcon />
+        </button>
         <div className="view-toggle" role="group" aria-label="View mode">
           {(["grid", "list"] as const).map((mode) => (
             <button
@@ -783,6 +805,15 @@ function RecentIcon() {
   return (
     <svg viewBox="0 0 24 24">
       <path d="M12 7v5l3 2M4.8 8.2A8 8 0 1 1 4 12M4 5v3.5h3.5" />
+    </svg>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19 12a7 7 0 0 0-.1-1l2-1.6-2-3.4-2.5 1A7 7 0 0 0 14.8 6L14.5 3h-5L9.2 6A7 7 0 0 0 7.6 7L5.1 6l-2 3.4L5.1 11a7 7 0 0 0 0 2L3 14.6l2 3.4 2.6-1a7 7 0 0 0 1.6 1l.3 3h5l.3-3a7 7 0 0 0 1.6-1l2.6 1 2-3.4-2.1-1.6c.1-.3.1-.7.1-1Z" />
     </svg>
   );
 }

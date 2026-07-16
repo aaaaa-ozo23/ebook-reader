@@ -1,7 +1,38 @@
+mod backup;
 mod db;
 mod file_open;
 
 use tauri::{Emitter, Manager};
+
+#[tauri::command]
+async fn export_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    output_path: String,
+    options: backup::BackupOptions,
+) -> Result<backup::BackupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::export_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&output_path),
+            options,
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn cancel_data_operation(
+    operations: tauri::State<'_, backup::DataOperationRegistry>,
+    operation_id: String,
+) -> bool {
+    operations.cancel(&operation_id)
+}
 
 #[tauri::command]
 fn app_health(app: tauri::AppHandle) -> Result<db::AppHealth, String> {
@@ -205,6 +236,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(pending_open_files)
+        .manage(backup::DataOperationRegistry::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let paths = file_open::collect_book_paths(args);
 
@@ -257,6 +289,8 @@ pub fn run() {
             create_annotation,
             update_annotation,
             delete_annotation,
+            export_backup,
+            cancel_data_operation,
             take_pending_open_files
         ])
         .run(tauri::generate_context!())
