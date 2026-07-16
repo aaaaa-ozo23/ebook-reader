@@ -2050,3 +2050,10 @@
 - **UI：** overflow 增加 Edit details；桌面 modal/移动 sheet 延续暖纸、深墨、青绿、琥珀、44px、焦点与 reduced-motion 契约。
 - **备份：** v1 导出/恢复字段覆盖值与独立时间，旧 v1 缺失字段仍可恢复；user/automatic cover path 不混写。
 - **验证：** `pnpm.cmd check`、Rust 47 tests（含 field reset/custom cover）、格式门禁通过；版本保持 0.1.0，未开始 13.6。
+
+## 2026-07-16 大阶段 13.6：文件夹与拖放导入
+
+- **状态：** complete；分支 `codex/stage13-batch-import`，从 13.5 集成合并 `3ed2bd0` 创建。
+- **服务：** 新增统一 scan/import Rust 服务、operation progress/cancel、32 层/10,000 项/canonical containment/reparse 门禁；单文件和文件关联复用同一服务。
+- **UI：** `Import book` split menu 保留单文件快捷行为，增加 files/folder picker、原生 drag/drop overlay、可选 preview、逐项结果与移动 sheet。
+- **验证：** core/desktop build、169 Vitest、Rust 49 tests、格式门禁通过；版本保持 0.1.0，下一阶段为 13.7。

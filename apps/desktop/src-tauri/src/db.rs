@@ -593,15 +593,6 @@ pub fn reset_book_overrides(
     )
 }
 
-pub fn import_book<P: AsRef<Path>>(app: &AppHandle, path: P) -> anyhow::Result<ImportBookResult> {
-    let storage_paths = init_app_storage(app)?;
-    import_book_at(
-        &storage_paths.database_path,
-        &storage_paths.library_dir,
-        path,
-    )
-}
-
 pub fn mark_book_opened(app: &AppHandle, book_id: &str) -> anyhow::Result<Book> {
     let database_path = init_app_database(app)?;
     mark_book_opened_at(&database_path, book_id)

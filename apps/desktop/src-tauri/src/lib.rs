@@ -1,4 +1,5 @@
 mod backup;
+mod batch_import;
 mod db;
 mod file_open;
 
@@ -86,7 +87,38 @@ fn list_books(app: tauri::AppHandle) -> Result<Vec<db::Book>, String> {
 
 #[tauri::command]
 fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
-    db::import_book(&app, std::path::PathBuf::from(path)).map_err(|error| error.to_string())
+    batch_import::import_single(&app, std::path::Path::new(&path))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn scan_import_paths(
+    app: tauri::AppHandle,
+    operation_id: String,
+    paths: Vec<String>,
+) -> Result<batch_import::BatchPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        batch_import::scan_import_paths(&app, &operations, &operation_id, paths)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[batch-scan-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn import_batch(
+    app: tauri::AppHandle,
+    operation_id: String,
+    paths: Vec<String>,
+) -> Result<batch_import::BatchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        batch_import::import_batch(&app, &operations, &operation_id, paths)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[batch-import-task-failed] {error}"))?
 }
 
 #[tauri::command]
@@ -339,6 +371,8 @@ pub fn run() {
             app_health,
             list_books,
             import_book,
+            scan_import_paths,
+            import_batch,
             mark_book_opened,
             remove_book,
             get_book_details,

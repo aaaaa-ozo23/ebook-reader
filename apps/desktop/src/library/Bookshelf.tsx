@@ -50,6 +50,8 @@ interface BookshelfProps {
   onDismissFeedback: () => void;
   onEditBook: (book: Book) => void;
   onImportBook: () => void;
+  onImportFiles: () => void;
+  onImportFolder: () => void;
   onOpenBook: (book: Book) => void;
   onOpenSettings: () => void;
   onRequestRemoval: (book: Book) => void;
@@ -83,6 +85,8 @@ export function Bookshelf({
   onDismissFeedback,
   onEditBook,
   onImportBook,
+  onImportFiles,
+  onImportFolder,
   onOpenBook,
   onOpenSettings,
   onRequestRemoval,
@@ -113,6 +117,8 @@ export function Bookshelf({
           libraryError={libraryError}
           viewMode={viewMode}
           onImportBook={onImportBook}
+          onImportFiles={onImportFiles}
+          onImportFolder={onImportFolder}
           onOpenSettings={onOpenSettings}
           onSetViewMode={onSetViewMode}
         />
@@ -215,6 +221,8 @@ function LibraryHeader({
   libraryError,
   viewMode,
   onImportBook,
+  onImportFiles,
+  onImportFolder,
   onOpenSettings,
   onSetViewMode,
 }: {
@@ -225,9 +233,12 @@ function LibraryHeader({
   libraryError: string | null;
   viewMode: ViewMode;
   onImportBook: () => void;
+  onImportFiles: () => void;
+  onImportFolder: () => void;
   onOpenSettings: () => void;
   onSetViewMode: (mode: ViewMode, animate: boolean) => void;
 }) {
+  const [isImportMenuOpen, setIsImportMenuOpen] = useState(false);
   const statusLabel = isLoading
     ? "Loading..."
     : libraryError === null
@@ -275,20 +286,55 @@ function LibraryHeader({
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="import-button"
-          data-loading={isImporting || undefined}
-          disabled={isImporting || isLoading}
-          onClick={onImportBook}
-        >
-          {isImporting ? (
-            <span className="import-button__spinner" aria-hidden="true" />
-          ) : (
-            <PlusIcon className="import-button__icon" />
-          )}
-          {isImporting ? "Importing..." : "Import book"}
-        </button>
+        <div className="import-split">
+          <button
+            type="button"
+            className="import-button"
+            data-loading={isImporting || undefined}
+            disabled={isImporting || isLoading}
+            onClick={onImportBook}
+          >
+            {isImporting ? (
+              <span className="import-button__spinner" aria-hidden="true" />
+            ) : (
+              <PlusIcon className="import-button__icon" />
+            )}
+            {isImporting ? "Importing..." : "Import book"}
+          </button>
+          <button
+            type="button"
+            className="import-split__toggle"
+            aria-label="More import options"
+            aria-expanded={isImportMenuOpen}
+            onClick={() => setIsImportMenuOpen((open) => !open)}
+          >
+            <ChevronDownIcon />
+          </button>
+          {isImportMenuOpen ? (
+            <div className="import-split__menu" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setIsImportMenuOpen(false);
+                  onImportFiles();
+                }}
+              >
+                Import files
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setIsImportMenuOpen(false);
+                  onImportFolder();
+                }}
+              >
+                Import folder
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </header>
   );
