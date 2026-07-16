@@ -668,6 +668,15 @@
 - NSIS build flavor 启用 updater artifact；MSI flavor 通过编译期轨道关闭所有 updater 命令，避免 MSI/NSIS 混装。
 - 每日检查偏好写入 `app_settings` 并可随备份合并；最后检查时间只留在 machine-local storage，不进入 `.erbackup`。
 - 私钥生成在用户级 Codex secrets 目录并经 ACL 验证只有当前 Windows 用户读写；仓库仅含公钥与 canonical fingerprint。
+
+## 2026-07-16 大阶段 13.8：发布安全与签名
+
+- Syft 固定为 v1.44.0；官方 checksum manifest 的 SHA-256 先以 release 页面记录值验证，Windows ZIP 再按已验证 manifest 中的条目校验，实际 binary version 为 1.44.0。
+- Syft 默认会联网检查自身更新并尝试写用户 cache，沙箱下会引入 150 秒延迟；release 环境固定 `SYFT_CHECK_FOR_APP_UPDATE=false` 且把 cache 定向到忽略的 `.tools/`。
+- source/lockfiles 与最终 NSIS/MSI artifact 分别输出 CycloneDX 1.6；smoke source scan 识别 1301 components。
+- 冻结安装审计覆盖 291 个唯一 JS packages 与 529 个外部 Cargo packages，均有 license metadata 或 license file。
+- Windows CurrentUser/LocalMachine 证书库均无 Code Signing certificate；RC 必须报告 Authenticode `NotSigned` 与 SmartScreen 警告，不能把 updater minisign 混称为系统签名。
+- workflow 仅允许 `workflow_dispatch`、contents read 和短期 draft artifact upload，不包含 tag 或 GitHub Release 写入路径。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

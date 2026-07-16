@@ -17,7 +17,11 @@ const env = {
   EBOOK_READER_BUILD_FLAVOR: flavor,
 };
 
-if (flavor === "nsis" && !env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
+if (
+  flavor === "nsis" &&
+  !env.TAURI_SIGNING_PRIVATE_KEY &&
+  !env.TAURI_SIGNING_PRIVATE_KEY_PATH
+) {
   const home = env.USERPROFILE ?? env.HOME;
   const defaultKey = home
     ? join(home, ".codex", "secrets", "ebook-reader-updater.key")
@@ -27,9 +31,13 @@ if (flavor === "nsis" && !env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
   }
 }
 
-if (flavor === "nsis" && !env.TAURI_SIGNING_PRIVATE_KEY_PATH) {
+if (
+  flavor === "nsis" &&
+  !env.TAURI_SIGNING_PRIVATE_KEY &&
+  !env.TAURI_SIGNING_PRIVATE_KEY_PATH
+) {
   console.error(
-    "NSIS updater builds require TAURI_SIGNING_PRIVATE_KEY_PATH. The private key must remain outside the repository.",
+    "NSIS updater builds require TAURI_SIGNING_PRIVATE_KEY or TAURI_SIGNING_PRIVATE_KEY_PATH. The private key must remain outside the repository.",
   );
   process.exit(3);
 }

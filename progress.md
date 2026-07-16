@@ -2065,3 +2065,11 @@
 - **后端/轨道：** 官方 Rust updater API、30s check timeout、可取消 check/download、内存验签后 install；NSIS updater / MSI manual 双 flavor。
 - **UI：** Settings 增加 Updates 桌面页与移动 sheet 导航，覆盖完整状态、每日 opt-in、下载进度、取消和不可取消安装确认。
 - **验证：** `pnpm.cmd check`（core 8、desktop 173）、Rust 51 tests；Updates 专用 Playwright Chromium 3/3 含 1280/375、axe serious/critical、无横向溢出。测试进程仍有既存 Vite teardown hang，但所有用例完成通过。
+
+## 2026-07-16 大阶段 13.8：发布安全与签名
+
+- **状态：** complete；分支 `codex/stage13-release-security`，从 13.7 集成合并 `e794cb9` 创建。
+- **工具链：** 固定并实际校验/安装 Syft 1.44.0；新增 release orchestrator、license audit、security/schema verifier、SHA256SUMS/latest/SBOM/manifest/acceptance report 生成。
+- **安全：** 私钥 marker 与 key/cert 文件双范围扫描；生产 endpoint/HTTPS/fingerprint 门禁；CurrentUser/LocalMachine 均无 Code Signing cert，RC 固定 unsigned Authenticode 降级。
+- **CI：** 手动 workflow 只上传 14 天 draft artifact，无 push trigger、无 tag、无 Release 写权限。
+- **验证：** license audit 291 JS / 529 Cargo、unknown=0；security verifier、PowerShell/Node syntax、Syft CycloneDX 1.6 smoke（1301 components）通过；版本保持 0.1.0，下一阶段为 13.9。
