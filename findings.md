@@ -651,6 +651,14 @@
 - 前端 2:3 裁切输出 600×900 WebP；Rust 再次识别 PNG/JPEG/WebP、真实解码、限制 40M pixels，并重新编码为 `.user.webp`。
 - reset 只删除用户封面；自动封面缺失时 EPUB/PDF 回到 pending 队列、TXT 回到 fallback。删除书籍清理自动/用户封面。
 - `.erbackup` v1 的 PortableBook 增加向后兼容可选字段，restore 按每字段时间 newer-wins、tie-local。
+
+## 2026-07-16 大阶段 13.6：文件夹与拖放导入
+
+- 主 `Import book` 继续走既有单文件快捷入口；split menu 暴露 `Import files` 与 `Import folder`，避免把熟悉动作强制改成多选对话框。
+- 单文件、文件关联、批量文件、文件夹和拖放最终都复用 `batch_import` Rust 服务与 `db::import_book_at`，duplicate/repair/managed-copy 规则只有一个来源。
+- 递归扫描固定 depth 32 / items 10,000；canonical path 必须留在选择根，symlink 与 Windows reparse point 在进入目录前拒绝，支持格式只允许 EPUB/TXT/PDF。
+- preview 逐项显示 valid/duplicate/unsupported/missing/error，并允许取消选择；提交按项隔离失败，取消只停止新任务，已开始的原子导入完成后保留或清理。
+- Tauri drag/drop 只打开轻量模糊 overlay 和统一 preview，不会静默导入用户拖入内容。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

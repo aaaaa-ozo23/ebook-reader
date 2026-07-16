@@ -34,7 +34,7 @@ pub struct DataOperationRegistry {
 }
 
 impl DataOperationRegistry {
-    fn register(&self, operation_id: &str) -> anyhow::Result<Arc<AtomicBool>> {
+    pub(crate) fn register(&self, operation_id: &str) -> anyhow::Result<Arc<AtomicBool>> {
         let mut operations = self.operations.lock().map_err(|_| {
             anyhow::anyhow!("[operation-registry-poisoned] operation registry unavailable")
         })?;
@@ -46,7 +46,7 @@ impl DataOperationRegistry {
         Ok(canceled)
     }
 
-    fn finish(&self, operation_id: &str) {
+    pub(crate) fn finish(&self, operation_id: &str) {
         if let Ok(mut operations) = self.operations.lock() {
             operations.remove(operation_id);
         }

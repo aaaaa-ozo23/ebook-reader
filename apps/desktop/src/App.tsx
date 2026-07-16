@@ -18,6 +18,7 @@ import {
   type ViewMode,
 } from "./library/Bookshelf";
 import { BookDetailsEditor } from "./library/BookDetailsEditor";
+import { BatchImportDialog } from "./library/BatchImportDialog";
 import {
   loadBookProgressSummaries,
   type BookProgressSummary,
@@ -30,6 +31,11 @@ import {
   pickBookFile,
   removeBook,
 } from "./tauri/library";
+import {
+  listenForBookDrops,
+  pickImportFiles,
+  pickImportFolder,
+} from "./tauri/batchImport";
 
 const LazyReaderShell = lazy(() =>
   import("./components/ReaderShell").then((module) => ({
@@ -55,6 +61,8 @@ function App() {
   const [progressByBookId, setProgressByBookId] = useState<BookProgressSummary>({});
   const [readerBook, setReaderBook] = useState<Book | null>(null);
   const [bookBeingEdited, setBookBeingEdited] = useState<Book | null>(null);
+  const [batchImportPaths, setBatchImportPaths] = useState<string[] | null>(null);
+  const [isDropActive, setIsDropActive] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
     null,
@@ -110,6 +118,23 @@ function App() {
     return () => {
       isAppMountedRef.current = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    void listenForBookDrops((event) => {
+      setIsDropActive(event.type === "enter");
+      if (event.type === "drop" && event.paths.length > 0)
+        setBatchImportPaths(event.paths);
+    }).then((unlisten) => {
+      stop = unlisten;
+    });
+    return () => stop?.();
+  }, []);
+
+  const openBatchPicker = useCallback(async (kind: "files" | "folder") => {
+    const paths = kind === "files" ? await pickImportFiles() : await pickImportFolder();
+    if (paths.length > 0) setBatchImportPaths(paths);
   }, []);
 
   const loadLibrary = useCallback(async () => {
@@ -501,6 +526,8 @@ function App() {
         onDismissFeedback={handleDismissFeedback}
         onEditBook={(book) => setBookBeingEdited(book)}
         onImportBook={handleImportBook}
+        onImportFiles={() => void openBatchPicker("files")}
+        onImportFolder={() => void openBatchPicker("folder")}
         onOpenBook={handleOpenBook}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onRequestRemoval={requestBookRemoval}
@@ -510,11 +537,25 @@ function App() {
         onShowBookMenu={showBookActionMenu}
       />
       <BookDetailsEditor
-        key={bookBeingEdited?.id ?? "closed"}
+        key={`details-${bookBeingEdited?.id ?? "closed"}`}
         book={bookBeingEdited}
         onClose={() => setBookBeingEdited(null)}
         onSaved={(book) => setBooks((current) => upsertBook(current, book))}
       />
+      <BatchImportDialog
+        key={`batch-${batchImportPaths?.join("|") ?? "closed"}`}
+        paths={batchImportPaths}
+        onClose={() => setBatchImportPaths(null)}
+        onImported={(importedBooks) =>
+          setBooks((current) => importedBooks.reduce(upsertBook, current))
+        }
+      />
+      {isDropActive ? (
+        <div className="book-drop-overlay" role="status">
+          <strong>Drop to review books</strong>
+          <span>EPUB, TXT, PDF, or a folder</span>
+        </div>
+      ) : null}
     </>
   );
 }

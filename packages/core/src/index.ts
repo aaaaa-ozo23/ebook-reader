@@ -84,6 +84,41 @@ export interface ImportBookResult {
   book: Book;
 }
 
+export type BatchImportItemStatus =
+  | "valid"
+  | "duplicate"
+  | "unsupported"
+  | "missing"
+  | "error"
+  | "imported"
+  | "repaired"
+  | "canceled";
+
+export interface BatchImportPreviewItem {
+  path: string;
+  name: string;
+  status: BatchImportItemStatus;
+  selected: boolean;
+  fileHash?: string;
+  message?: string;
+}
+
+export interface BatchImportPreview {
+  operationId: string;
+  items: BatchImportPreviewItem[];
+  truncated: boolean;
+}
+
+export interface BatchImportResultItem extends BatchImportPreviewItem {
+  book?: Book;
+}
+
+export interface BatchImportResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  items: BatchImportResultItem[];
+}
+
 export interface RemoveBookResult {
   book: Book;
   removedLibraryPath: string;
