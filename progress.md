@@ -2031,3 +2031,13 @@
 - **文档：** 新增 `docs/backup-and-restore.md` 和 `stage13-data-settings-fidelity.md`，更新隐私说明与三份执行台账。
 - **验证：** core/desktop production build passed；desktop 20 files / 164 tests passed；Rust 41 tests passed；专用 Playwright Chromium 2/2、DPR2 2/2 passed，覆盖 1280/900/640/375、focus、reduced-motion、axe serious/critical=0；Browser 页面身份、DOM、console=0、桌面/375 截图和 fallback 错误交互通过。
 - **边界：** 版本仍为 0.1.0；未开始 13.4，未创建 tag 或 Release，用户未跟踪 `.codex/` 与 `AGENTS.md` 保持不变。
+
+## 2026-07-16 大阶段 13.4：备份恢复
+
+- **状态：** complete；分支 `codex/stage13-backup-restore`，从备份导出合并基线 `88fb97a` 创建。
+- **安全：** 安全预检覆盖 traversal、重复/目录 entry、major version、声明/实际 payload 集合、size/SHA-256、条目/总展开大小与 compression ratio；未知可选字段由 serde 默认忽略。
+- **事务：** staging 提取、内容寻址文件提交、SQLite merge 和失败清理构成两阶段恢复；取消使用同一 operation registry/progress channel。
+- **合并：** books 按 hash、本地 ID 优先；progress/bookmark/annotation UUID 与 setting key 按严格 newer-wins、tie-local；lastOpened 取较新；deletedAt tombstone 保留。
+- **产品：** Data & Backup 增加安全预览、冲突统计、显式确认、进度/取消和逐项结果；missing 书架状态禁止误打开并显示 File needed；375 保持全屏 sheet 与 44px target。
+- **验证：** desktop production build、20 files/166 Vitest、Rust 46 tests（含攻击 ZIP、checksum/size、missing repair/newer local）通过；专用 Playwright 覆盖四视口、reduced-motion、焦点、axe serious/critical 与浏览器 runtime 错误。
+- **边界：** 版本仍为 0.1.0；未开始 13.5、未创建 tag/Release，`.codex/` 与 `AGENTS.md` 未改动。

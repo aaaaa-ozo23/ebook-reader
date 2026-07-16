@@ -470,7 +470,10 @@ function App() {
           </main>
         }
       >
-        <LazySettingsCenter onClose={() => setIsSettingsOpen(false)} />
+        <LazySettingsCenter
+          onClose={() => setIsSettingsOpen(false)}
+          onLibraryChanged={() => void loadLibrary()}
+        />
       </Suspense>
     );
   }

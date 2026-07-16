@@ -79,6 +79,13 @@ pub enum BookCoverStatus {
     Fallback,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BookAvailability {
+    Available,
+    Missing,
+}
+
 impl BookCoverStatus {
     fn from_database(value: &str) -> rusqlite::Result<Self> {
         match value {
@@ -169,6 +176,7 @@ pub struct Book {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<String>,
     pub cover_status: BookCoverStatus,
+    pub availability: BookAvailability,
     pub created_at: String,
     pub updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -821,6 +829,7 @@ pub fn import_book_at<P: AsRef<Path>>(
         file_hash,
         cover_path: None,
         cover_status,
+        availability: BookAvailability::Available,
         created_at: now.clone(),
         updated_at: now,
         last_opened_at: None,
@@ -2164,6 +2173,7 @@ fn find_annotation_by_id(
 
 fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
     let format_value: String = row.get(3)?;
+    let library_path: String = row.get(5)?;
 
     Ok(Book {
         id: row.get(0)?,
@@ -2171,7 +2181,12 @@ fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
         author: row.get(2)?,
         format: BookFormat::from_database(&format_value)?,
         source_path: row.get(4)?,
-        library_path: row.get(5)?,
+        availability: if Path::new(&library_path).is_file() {
+            BookAvailability::Available
+        } else {
+            BookAvailability::Missing
+        },
+        library_path,
         file_hash: row.get(6)?,
         cover_path: row.get(7)?,
         created_at: row.get(8)?,

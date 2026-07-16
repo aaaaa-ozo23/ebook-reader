@@ -653,6 +653,16 @@ button:disabled {
   transition: width var(--ds-motion-ui) var(--ds-ease-in-out);
 }
 
+.book-card--missing .book-card__cover {
+  filter: grayscale(0.45);
+  opacity: 0.72;
+}
+
+.book-card--missing .book-card__progress > span:first-child {
+  color: #a4563f;
+  font-weight: 750;
+}
+
 @media (min-width: 1101px) {
   .book-shelf--grid .book-card__progress {
     position: relative;
