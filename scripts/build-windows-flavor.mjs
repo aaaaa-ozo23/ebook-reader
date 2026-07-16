@@ -1,5 +1,5 @@
 /* global console, process */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -14,6 +14,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const desktop = join(root, "apps", "desktop");
 const env = {
   ...process.env,
+  CI: process.env.CI ?? "true",
   EBOOK_READER_BUILD_FLAVOR: flavor,
 };
 
@@ -31,6 +32,29 @@ if (
   }
 }
 
+if (flavor === "nsis" && env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD === undefined) {
+  env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "";
+}
+
+if (
+  flavor === "nsis" &&
+  !env.TAURI_SIGNING_PRIVATE_KEY &&
+  env.TAURI_SIGNING_PRIVATE_KEY_PATH
+) {
+  const signingKeyName = ["TAURI", "SIGNING", "PRIVATE", "KEY"].join("_");
+  try {
+    env[signingKeyName] = readFileSync(
+      env.TAURI_SIGNING_PRIVATE_KEY_PATH,
+      "utf8",
+    ).trim();
+  } catch (error) {
+    console.error(
+      `Could not read the updater signing key from the configured path: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    process.exit(3);
+  }
+}
+
 if (
   flavor === "nsis" &&
   !env.TAURI_SIGNING_PRIVATE_KEY &&
@@ -45,7 +69,7 @@ if (
 const executable = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const result = spawnSync(
   executable,
-  ["tauri", "build", "--config", `src-tauri/tauri.${flavor}.conf.json`],
+  ["tauri", "build", "--ci", "--config", `src-tauri/tauri.${flavor}.conf.json`],
   { cwd: desktop, env, stdio: "inherit", shell: process.platform === "win32" },
 );
 

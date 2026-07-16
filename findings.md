@@ -677,6 +677,15 @@
 - 冻结安装审计覆盖 291 个唯一 JS packages 与 529 个外部 Cargo packages，均有 license metadata 或 license file。
 - Windows CurrentUser/LocalMachine 证书库均无 Code Signing certificate；RC 必须报告 Authenticode `NotSigned` 与 SmartScreen 警告，不能把 updater minisign 混称为系统签名。
 - workflow 仅允许 `workflow_dispatch`、contents read 和短期 draft artifact upload，不包含 tag 或 GitHub Release 写入路径。
+
+## 2026-07-16 大阶段 13.9：v0.2 发布候选
+
+- root/core/desktop/Cargo/Tauri/release verifier 统一到 0.2.0；Cargo.lock 只更新 workspace root crate 版本。
+- Tauri CLI 只消费 `TAURI_SIGNING_PRIVATE_KEY`；本机路径包装必须在内存读取后注入该变量，并使用 `--ci` 与显式空密码避免非交互签名等待。
+- Syft cache 会被通用 ESLint 扫描，发布缓存与 draft artifacts 必须同时进入 Git/Prettier/ESLint 的工具输出边界，保证 release 脚本可重复运行。
+- 500 页 PDF 性能用例不应在复用 TXT/EPUB 浏览器进程的基础项目重复执行；独立 DPR2 项目保留严格 50ms 门槛，连续页 metrics 更新按 animation frame 合并，最终全量 26/26。
+- SBOM 必须显式提供稳定 source name/version；Authenticode 状态消息需要归一化，防止把构建机绝对路径写入可分发 artifact。
+- 当前机器没有安全的隔离安装用户/VM、受信本地 updater HTTPS 测试证书或用户指定的离线密钥备份介质；这些 native/manual 项不能用当前工作区自动化结果替代。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

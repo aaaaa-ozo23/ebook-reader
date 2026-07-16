@@ -49,6 +49,7 @@ export function PdfContinuousView({
   renderVersion,
 }: PdfContinuousViewProps) {
   const [metricsVersion, setMetricsVersion] = useState(0);
+  const metricsFrameRef = useRef<number | null>(null);
   const suppressScrollTrackingUntilRef = useRef(0);
   const scrollFrameRef = useRef<number | null>(null);
   const pageContentWidth = Math.max(240, availableWidth - 28);
@@ -83,8 +84,23 @@ export function PdfContinuousView({
 
   const handleMetrics = useCallback((metrics: PdfPageMetrics) => {
     void metrics;
-    setMetricsVersion((version) => version + 1);
+    if (metricsFrameRef.current !== null) {
+      return;
+    }
+    metricsFrameRef.current = window.requestAnimationFrame(() => {
+      metricsFrameRef.current = null;
+      setMetricsVersion((version) => version + 1);
+    });
   }, []);
+
+  useEffect(
+    () => () => {
+      if (metricsFrameRef.current !== null) {
+        window.cancelAnimationFrame(metricsFrameRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     virtualizer.measure();
@@ -95,12 +111,12 @@ export function PdfContinuousView({
     const pageIndex = Math.max(0, Math.min(position.totalPages - 1, position.page - 1));
     const requestedRatio = position.locator.pageOffsetRatio;
 
-    void adapter.getPageMetrics(position.page).then(() => {
+    void adapter.getPageMetrics(position.page).then((metrics) => {
       if (!isCurrent) {
         return;
       }
 
-      setMetricsVersion((version) => version + 1);
+      handleMetrics(metrics);
       suppressScrollTrackingUntilRef.current = performance.now() + 240;
       virtualizer.scrollToIndex(pageIndex, { align: "start" });
 

@@ -2073,3 +2073,11 @@
 - **安全：** 私钥 marker 与 key/cert 文件双范围扫描；生产 endpoint/HTTPS/fingerprint 门禁；CurrentUser/LocalMachine 均无 Code Signing cert，RC 固定 unsigned Authenticode 降级。
 - **CI：** 手动 workflow 只上传 14 天 draft artifact，无 push trigger、无 tag、无 Release 写权限。
 - **验证：** license audit 291 JS / 529 Cargo、unknown=0；security verifier、PowerShell/Node syntax、Syft CycloneDX 1.6 smoke（1301 components）通过；版本保持 0.1.0，下一阶段为 13.9。
+
+## 2026-07-16 大阶段 13.9：v0.2 发布候选
+
+- **状态：** repository complete / native acceptance pending；分支 `codex/stage13-v0.2-release-candidate`，从 13.8 集成合并 `e528380` 创建。
+- **版本/文档：** root/core/desktop/Cargo/Tauri/verifier 全部 0.2.0；CHANGELOG、README、隐私、备份、更新、release security、升级/回滚和 RC checklist 已收口。
+- **自动化：** frozen install；`pnpm.cmd check`（core 8、desktop 173）；Rust 51；Playwright 26/26（单 worker、DPR2 独立 500 页 PDF、50ms 门槛）；license 291/529 unknown=0；version/security/diff gates 全部通过。
+- **draft RC：** NSIS、MSI、NSIS `.sig`、`latest.json`、CycloneDX source/artifact SBOM、SHA256SUMS、license/authenticode/artifact/acceptance reports 已生成到忽略目录；Authenticode 为 `NotSigned`。
+- **未伪造通过：** updater 私钥离线备份、独立 identifier 原生安装 smoke 和 NSIS/MSI 安装/升级/卸载矩阵需要隔离 Windows 环境，继续在 `RELEASE_CHECKLIST.md` 保持 unchecked；无 tag、无 GitHub Release。

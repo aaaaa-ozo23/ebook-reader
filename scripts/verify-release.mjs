@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const expectedVersion = "0.1.0";
+const expectedVersion = "0.2.0";
 
 const readJson = async (path) =>
   JSON.parse(await readFile(resolve(root, path), "utf8"));
@@ -21,6 +21,7 @@ const cargoVersion = cargoManifest.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 const cargoLicense = cargoManifest.match(/^license\s*=\s*"([^"]+)"/m)?.[1];
 const versions = {
   "package.json": rootPackage.version,
+  "packages/core/package.json": corePackage.version,
   "apps/desktop/package.json": desktopPackage.version,
   "apps/desktop/src-tauri/Cargo.toml": cargoVersion,
   "apps/desktop/src-tauri/tauri.conf.json": tauriConfig.version,
@@ -72,7 +73,7 @@ for (const path of [
   "CHANGELOG.md",
   "THIRD_PARTY_NOTICES.md",
   "RELEASE_CHECKLIST.md",
-  "apps/desktop/src-tauri/icons/app-icon-v0.1.0.png",
+  "apps/desktop/src-tauri/icons/icon.png",
 ]) {
   try {
     await readFile(resolve(root, path));

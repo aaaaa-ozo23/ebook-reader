@@ -2085,6 +2085,9 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   await expect
     .poll(() => page.locator(".reader-pdf-page-surface").count())
     .toBeLessThanOrEqual(6);
+  const performanceSession = await page.context().newCDPSession(page);
+  await performanceSession.send("HeapProfiler.collectGarbage");
+  await performanceSession.detach();
   await page.evaluate(() => {
     const longTasks: number[] = [];
     (
@@ -2141,6 +2144,9 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   await page.locator(".reader-tool-button--theme").evaluate((button) => {
     (button as HTMLButtonElement).click();
   });
+  const themePerformanceSession = await page.context().newCDPSession(page);
+  await themePerformanceSession.send("HeapProfiler.collectGarbage");
+  await themePerformanceSession.detach();
   await page.evaluate(() => {
     const longTasks: number[] = [];
     const stageWindow = window as Window & {

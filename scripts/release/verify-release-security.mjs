@@ -74,6 +74,8 @@ if (artifactRoot) {
       const text = readFileSync(path, "utf8");
       if (secretPattern.test(text))
         failures.push(`Private key marker in artifact: ${name}`);
+      if (text.includes(root) || text.includes(root.replaceAll("\\", "\\\\")))
+        failures.push(`Local repository path in artifact: ${name}`);
     }
   }
   for (const name of ["sbom-source.cdx.json", "sbom-windows-artifacts.cdx.json"]) {
