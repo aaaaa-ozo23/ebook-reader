@@ -71,5 +71,16 @@
         "installMode": "currentUser"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI5QzMyRDRDNjIxQjBGMDQKUldRRUR4dGlUQzNES1l4Zk51RjZhbmVMRmY2TlVFSmFuOFZDRy82QXdCOTZwZVFvKzYzak43M1EK",
+      "endpoints": [
+        "https://github.com/aaaaa-ozo23/ebook-reader/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

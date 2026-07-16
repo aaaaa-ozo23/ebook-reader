@@ -2,6 +2,7 @@ mod backup;
 mod batch_import;
 mod db;
 mod file_open;
+mod updater;
 
 use tauri::{Emitter, Manager};
 
@@ -73,6 +74,54 @@ fn cancel_data_operation(
     operation_id: String,
 ) -> bool {
     operations.cancel(&operation_id)
+}
+
+#[tauri::command]
+fn updater_capability() -> updater::UpdaterCapability {
+    updater::capability()
+}
+
+#[tauri::command]
+async fn check_for_update(
+    app: tauri::AppHandle,
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+) -> Result<updater::UpdateCheckResult, updater::UpdaterError> {
+    updater::check_for_update(app, &updater_state).await
+}
+
+#[tauri::command]
+async fn download_update(
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+    on_event: tauri::ipc::Channel<updater::UpdateDownloadEvent>,
+) -> Result<updater::UpdateActionResult, updater::UpdaterError> {
+    updater::download_update(&updater_state, on_event).await
+}
+
+#[tauri::command]
+fn cancel_update_download(updater_state: tauri::State<'_, updater::UpdaterState>) -> bool {
+    updater_state.cancel()
+}
+
+#[tauri::command]
+fn install_downloaded_update(
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+) -> Result<updater::UpdateActionResult, updater::UpdaterError> {
+    updater::install_downloaded_update(&updater_state)
+}
+
+#[tauri::command]
+fn get_update_preferences(
+    app: tauri::AppHandle,
+) -> Result<updater::UpdatePreferences, updater::UpdaterError> {
+    updater::get_preferences(&app)
+}
+
+#[tauri::command]
+fn save_update_preferences(
+    app: tauri::AppHandle,
+    preferences: updater::UpdatePreferences,
+) -> Result<updater::UpdatePreferences, updater::UpdaterError> {
+    updater::save_preferences(&app, preferences)
 }
 
 #[tauri::command]
@@ -341,6 +390,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(pending_open_files)
         .manage(backup::DataOperationRegistry::default())
+        .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let paths = file_open::collect_book_paths(args);
 
@@ -363,6 +413,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             db::init_app_database(app.handle())?;
             Ok(())
@@ -403,6 +454,13 @@ pub fn run() {
             inspect_backup,
             restore_backup,
             cancel_data_operation,
+            updater_capability,
+            check_for_update,
+            download_update,
+            cancel_update_download,
+            install_downloaded_update,
+            get_update_preferences,
+            save_update_preferences,
             take_pending_open_files
         ])
         .run(tauri::generate_context!())

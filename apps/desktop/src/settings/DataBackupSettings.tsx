@@ -16,6 +16,7 @@ import {
   pickBackupFile,
   restoreBackup,
 } from "../tauri/backup";
+import { UpdatesSettings } from "./UpdatesSettings";
 
 import "./SettingsCenter.css";
 
@@ -32,6 +33,7 @@ export function SettingsCenter({
   onClose: () => void;
   onLibraryChanged?: () => void;
 }) {
+  const [section, setSection] = useState<"data" | "updates">("data");
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
@@ -210,14 +212,23 @@ export function SettingsCenter({
           <strong>Keep your library yours.</strong>
         </div>
         <nav aria-label="Settings sections">
-          <button type="button" className="settings-nav-item" aria-current="page">
+          <button
+            type="button"
+            className="settings-nav-item"
+            aria-current={section === "data" ? "page" : undefined}
+            onClick={() => setSection("data")}
+          >
             <DatabaseIcon />
             <span>Data &amp; Backup</span>
           </button>
-          <button type="button" className="settings-nav-item" disabled>
+          <button
+            type="button"
+            className="settings-nav-item"
+            aria-current={section === "updates" ? "page" : undefined}
+            onClick={() => setSection("updates")}
+          >
             <UpdateIcon />
             <span>Updates</span>
-            <small>Later</small>
           </button>
         </nav>
       </aside>
@@ -225,10 +236,12 @@ export function SettingsCenter({
       <section className="settings-content">
         <header className="settings-content__header">
           <div>
-            <p>Local-first controls</p>
-            <h1 id={titleId}>Data &amp; Backup</h1>
+            <p>{section === "data" ? "Local-first controls" : "Release track"}</p>
+            <h1 id={titleId}>{section === "data" ? "Data & Backup" : "Updates"}</h1>
             <span>
-              Create a portable copy of your library data whenever you choose.
+              {section === "data"
+                ? "Create a portable copy of your library data whenever you choose."
+                : "You decide when the app checks, downloads, and installs."}
             </span>
           </div>
           <button
@@ -241,265 +254,279 @@ export function SettingsCenter({
           </button>
         </header>
 
-        <div className="backup-notice" role="note">
-          <ShieldIcon />
-          <div>
-            <strong>Backups are not encrypted</strong>
-            <p>
-              They may contain books, annotations, bookmarks, and reading history. Store
-              the file somewhere you trust.
-            </p>
-          </div>
-        </div>
-
-        <section className="settings-card" aria-labelledby="backup-card-title">
-          <div className="settings-card__title">
-            <div className="settings-card__icon" aria-hidden="true">
-              <ArchiveIcon />
-            </div>
-            <div>
-              <h2 id="backup-card-title">Export a backup</h2>
-              <p>
-                The archive contains a versioned manifest and SHA-256 checksums for
-                every payload.
-              </p>
-            </div>
-          </div>
-
-          <fieldset className="backup-options" disabled={operationId !== null}>
-            <legend>Include</legend>
-            <BackupOption
-              checked={options.includeData}
-              description="Library metadata, reading preferences, progress, bookmarks, annotations, and deletion records."
-              label="Core reading data"
-              locked
-              onChange={(checked) =>
-                setOptions((current) => ({ ...current, includeData: checked }))
-              }
-            />
-            <BackupOption
-              checked={options.includeCovers}
-              description="Automatic and custom cover images managed by Ebook Reader."
-              label="Book covers"
-              onChange={(checked) =>
-                setOptions((current) => ({ ...current, includeCovers: checked }))
-              }
-            />
-            <BackupOption
-              checked={options.includeBooks}
-              description="Original EPUB, TXT, and PDF library copies. This can make the backup much larger."
-              label="Original book files"
-              onChange={(checked) =>
-                setOptions((current) => ({ ...current, includeBooks: checked }))
-              }
-            />
-          </fieldset>
-
-          {progress !== null &&
-          operationId !== null &&
-          progress.kind === "backup-export" ? (
-            <div className="backup-progress" role="status" aria-live="polite">
-              <div className="backup-progress__copy">
-                <strong>{progress.message}</strong>
-                <span>{percentage}%</span>
-              </div>
-              <div className="backup-progress__track" aria-hidden="true">
-                <i style={{ transform: `scaleX(${percentage / 100})` }} />
-              </div>
-              <button
-                type="button"
-                className="settings-button settings-button--secondary"
-                onClick={() => void handleCancel()}
-              >
-                Cancel
-              </button>
-            </div>
-          ) : null}
-
-          {result?.status === "completed" ? (
-            <div className="backup-result backup-result--success" role="status">
-              <SuccessIcon />
+        {section === "updates" ? (
+          <UpdatesSettings />
+        ) : (
+          <>
+            <div className="backup-notice" role="note">
+              <ShieldIcon />
               <div>
-                <strong>Backup complete</strong>
-                <span>
-                  {result.fileName} · {formatBytes(result.bytesWritten)}
-                </span>
-              </div>
-            </div>
-          ) : null}
-          {result?.status === "canceled" ? (
-            <div className="backup-result" role="status">
-              <span>Backup canceled. No partial archive was kept.</span>
-            </div>
-          ) : null}
-          {error !== null && errorSource === "export" ? (
-            <div className="backup-result backup-result--error" role="alert">
-              <strong>Backup failed</strong>
-              <span>{error}</span>
-            </div>
-          ) : null}
-
-          <footer className="settings-card__footer">
-            <p>Reader caches and machine-specific paths are always excluded.</p>
-            <button
-              type="button"
-              className="settings-button settings-button--primary"
-              disabled={!canExport || operationId !== null}
-              onClick={() => void handleExport()}
-            >
-              <ExportIcon />
-              Choose location &amp; export
-            </button>
-          </footer>
-        </section>
-
-        <section className="settings-card" aria-labelledby="restore-card-title">
-          <div className="settings-card__title">
-            <div className="settings-card__icon" aria-hidden="true">
-              <RestoreIcon />
-            </div>
-            <div>
-              <h2 id="restore-card-title">Restore a backup</h2>
-              <p>
-                Every archive is checked for unsafe paths, size limits, version
-                compatibility, and checksum integrity before anything changes.
-              </p>
-            </div>
-          </div>
-
-          {restorePreview !== null ? (
-            <div className="restore-preview" aria-label="Restore preview">
-              <div className="restore-preview__heading">
-                <div>
-                  <strong>{restorePreview.fileName}</strong>
-                  <span>
-                    Format v{restorePreview.manifest.formatVersion} · exported{" "}
-                    {formatDate(restorePreview.manifest.exportedAt)}
-                  </span>
-                </div>
-                <span className="restore-preview__safe">
-                  <ShieldIcon /> Safe to restore
-                </span>
-              </div>
-              <dl className="restore-preview__stats">
-                <RestoreStat label="New books" value={restorePreview.newBooks} />
-                <RestoreStat label="Matched" value={restorePreview.matchedBooks} />
-                <RestoreStat label="Files needed" value={restorePreview.missingFiles} />
-                <RestoreStat label="Conflicts" value={restorePreview.conflictRecords} />
-              </dl>
-              <p className="restore-preview__rule">
-                Newer records win. Equal timestamps keep the local copy. Missing book
-                files remain repairable by importing the same file later.
-              </p>
-              {restorePreview.warnings.map((warning) => (
-                <p className="restore-preview__warning" key={warning}>
-                  {warning}
+                <strong>Backups are not encrypted</strong>
+                <p>
+                  They may contain books, annotations, bookmarks, and reading history.
+                  Store the file somewhere you trust.
                 </p>
-              ))}
-            </div>
-          ) : null}
-
-          {progress !== null &&
-          operationId !== null &&
-          progress.kind === "backup-restore" ? (
-            <div className="backup-progress" role="status" aria-live="polite">
-              <div className="backup-progress__copy">
-                <strong>{progress.message}</strong>
-                <span>{percentage}%</span>
               </div>
-              <div className="backup-progress__track" aria-hidden="true">
-                <i style={{ transform: `scaleX(${percentage / 100})` }} />
-              </div>
-              <button
-                type="button"
-                className="settings-button settings-button--secondary"
-                onClick={() => void handleCancel()}
-              >
-                Cancel
-              </button>
             </div>
-          ) : null}
 
-          {restoreResult !== null ? (
-            <div className="restore-report" role="status" aria-live="polite">
-              <div className="restore-report__title">
-                <SuccessIcon />
+            <section className="settings-card" aria-labelledby="backup-card-title">
+              <div className="settings-card__title">
+                <div className="settings-card__icon" aria-hidden="true">
+                  <ArchiveIcon />
+                </div>
                 <div>
-                  <strong>
-                    {restoreResult.status === "completed"
-                      ? "Restore complete"
-                      : "Restore canceled"}
-                  </strong>
-                  <span>
-                    Each retained, merged, and missing item is reported below.
-                  </span>
+                  <h2 id="backup-card-title">Export a backup</h2>
+                  <p>
+                    The archive contains a versioned manifest and SHA-256 checksums for
+                    every payload.
+                  </p>
                 </div>
               </div>
-              <div className="restore-report__counts">
-                {Object.entries(restoreResult.counts).map(([status, count]) => (
-                  <span key={status}>
-                    <strong>{count}</strong> {status}
-                  </span>
-                ))}
-              </div>
-              <ul>
-                {restoreResult.items.slice(0, 12).map((item) => (
-                  <li key={`${item.category}-${item.id}`}>
+
+              <fieldset className="backup-options" disabled={operationId !== null}>
+                <legend>Include</legend>
+                <BackupOption
+                  checked={options.includeData}
+                  description="Library metadata, reading preferences, progress, bookmarks, annotations, and deletion records."
+                  label="Core reading data"
+                  locked
+                  onChange={(checked) =>
+                    setOptions((current) => ({ ...current, includeData: checked }))
+                  }
+                />
+                <BackupOption
+                  checked={options.includeCovers}
+                  description="Automatic and custom cover images managed by Ebook Reader."
+                  label="Book covers"
+                  onChange={(checked) =>
+                    setOptions((current) => ({ ...current, includeCovers: checked }))
+                  }
+                />
+                <BackupOption
+                  checked={options.includeBooks}
+                  description="Original EPUB, TXT, and PDF library copies. This can make the backup much larger."
+                  label="Original book files"
+                  onChange={(checked) =>
+                    setOptions((current) => ({ ...current, includeBooks: checked }))
+                  }
+                />
+              </fieldset>
+
+              {progress !== null &&
+              operationId !== null &&
+              progress.kind === "backup-export" ? (
+                <div className="backup-progress" role="status" aria-live="polite">
+                  <div className="backup-progress__copy">
+                    <strong>{progress.message}</strong>
+                    <span>{percentage}%</span>
+                  </div>
+                  <div className="backup-progress__track" aria-hidden="true">
+                    <i style={{ transform: `scaleX(${percentage / 100})` }} />
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-button settings-button--secondary"
+                    onClick={() => void handleCancel()}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+
+              {result?.status === "completed" ? (
+                <div className="backup-result backup-result--success" role="status">
+                  <SuccessIcon />
+                  <div>
+                    <strong>Backup complete</strong>
                     <span>
-                      <strong>{item.label}</strong>
-                      <small>{item.message}</small>
+                      {result.fileName} · {formatBytes(result.bytesWritten)}
                     </span>
-                    <em data-status={item.status}>{item.status}</em>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+                  </div>
+                </div>
+              ) : null}
+              {result?.status === "canceled" ? (
+                <div className="backup-result" role="status">
+                  <span>Backup canceled. No partial archive was kept.</span>
+                </div>
+              ) : null}
+              {error !== null && errorSource === "export" ? (
+                <div className="backup-result backup-result--error" role="alert">
+                  <strong>Backup failed</strong>
+                  <span>{error}</span>
+                </div>
+              ) : null}
 
-          {error !== null && errorSource === "restore" ? (
-            <div className="backup-result backup-result--error" role="alert">
-              <strong>Restore stopped safely</strong>
-              <span>{error}</span>
-            </div>
-          ) : null}
-
-          <footer className="settings-card__footer">
-            <p>Changes begin only after inspection and your explicit confirmation.</p>
-            {restorePreview === null ? (
-              <button
-                type="button"
-                className="settings-button settings-button--secondary"
-                disabled={operationId !== null}
-                onClick={() => void handleInspectRestore()}
-              >
-                <RestoreIcon /> Choose backup
-              </button>
-            ) : (
-              <div className="settings-button-group">
-                <button
-                  type="button"
-                  className="settings-button settings-button--secondary"
-                  disabled={operationId !== null}
-                  onClick={() => {
-                    setRestorePath(null);
-                    setRestorePreview(null);
-                    setRestoreResult(null);
-                  }}
-                >
-                  Choose another
-                </button>
+              <footer className="settings-card__footer">
+                <p>Reader caches and machine-specific paths are always excluded.</p>
                 <button
                   type="button"
                   className="settings-button settings-button--primary"
-                  disabled={!restorePreview.canRestore || operationId !== null}
-                  onClick={() => void handleRestore()}
+                  disabled={!canExport || operationId !== null}
+                  onClick={() => void handleExport()}
                 >
-                  Confirm &amp; restore
+                  <ExportIcon />
+                  Choose location &amp; export
                 </button>
+              </footer>
+            </section>
+
+            <section className="settings-card" aria-labelledby="restore-card-title">
+              <div className="settings-card__title">
+                <div className="settings-card__icon" aria-hidden="true">
+                  <RestoreIcon />
+                </div>
+                <div>
+                  <h2 id="restore-card-title">Restore a backup</h2>
+                  <p>
+                    Every archive is checked for unsafe paths, size limits, version
+                    compatibility, and checksum integrity before anything changes.
+                  </p>
+                </div>
               </div>
-            )}
-          </footer>
-        </section>
+
+              {restorePreview !== null ? (
+                <div className="restore-preview" aria-label="Restore preview">
+                  <div className="restore-preview__heading">
+                    <div>
+                      <strong>{restorePreview.fileName}</strong>
+                      <span>
+                        Format v{restorePreview.manifest.formatVersion} · exported{" "}
+                        {formatDate(restorePreview.manifest.exportedAt)}
+                      </span>
+                    </div>
+                    <span className="restore-preview__safe">
+                      <ShieldIcon /> Safe to restore
+                    </span>
+                  </div>
+                  <dl className="restore-preview__stats">
+                    <RestoreStat label="New books" value={restorePreview.newBooks} />
+                    <RestoreStat label="Matched" value={restorePreview.matchedBooks} />
+                    <RestoreStat
+                      label="Files needed"
+                      value={restorePreview.missingFiles}
+                    />
+                    <RestoreStat
+                      label="Conflicts"
+                      value={restorePreview.conflictRecords}
+                    />
+                  </dl>
+                  <p className="restore-preview__rule">
+                    Newer records win. Equal timestamps keep the local copy. Missing
+                    book files remain repairable by importing the same file later.
+                  </p>
+                  {restorePreview.warnings.map((warning) => (
+                    <p className="restore-preview__warning" key={warning}>
+                      {warning}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+
+              {progress !== null &&
+              operationId !== null &&
+              progress.kind === "backup-restore" ? (
+                <div className="backup-progress" role="status" aria-live="polite">
+                  <div className="backup-progress__copy">
+                    <strong>{progress.message}</strong>
+                    <span>{percentage}%</span>
+                  </div>
+                  <div className="backup-progress__track" aria-hidden="true">
+                    <i style={{ transform: `scaleX(${percentage / 100})` }} />
+                  </div>
+                  <button
+                    type="button"
+                    className="settings-button settings-button--secondary"
+                    onClick={() => void handleCancel()}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+
+              {restoreResult !== null ? (
+                <div className="restore-report" role="status" aria-live="polite">
+                  <div className="restore-report__title">
+                    <SuccessIcon />
+                    <div>
+                      <strong>
+                        {restoreResult.status === "completed"
+                          ? "Restore complete"
+                          : "Restore canceled"}
+                      </strong>
+                      <span>
+                        Each retained, merged, and missing item is reported below.
+                      </span>
+                    </div>
+                  </div>
+                  <div className="restore-report__counts">
+                    {Object.entries(restoreResult.counts).map(([status, count]) => (
+                      <span key={status}>
+                        <strong>{count}</strong> {status}
+                      </span>
+                    ))}
+                  </div>
+                  <ul>
+                    {restoreResult.items.slice(0, 12).map((item) => (
+                      <li key={`${item.category}-${item.id}`}>
+                        <span>
+                          <strong>{item.label}</strong>
+                          <small>{item.message}</small>
+                        </span>
+                        <em data-status={item.status}>{item.status}</em>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {error !== null && errorSource === "restore" ? (
+                <div className="backup-result backup-result--error" role="alert">
+                  <strong>Restore stopped safely</strong>
+                  <span>{error}</span>
+                </div>
+              ) : null}
+
+              <footer className="settings-card__footer">
+                <p>
+                  Changes begin only after inspection and your explicit confirmation.
+                </p>
+                {restorePreview === null ? (
+                  <button
+                    type="button"
+                    className="settings-button settings-button--secondary"
+                    disabled={operationId !== null}
+                    onClick={() => void handleInspectRestore()}
+                  >
+                    <RestoreIcon /> Choose backup
+                  </button>
+                ) : (
+                  <div className="settings-button-group">
+                    <button
+                      type="button"
+                      className="settings-button settings-button--secondary"
+                      disabled={operationId !== null}
+                      onClick={() => {
+                        setRestorePath(null);
+                        setRestorePreview(null);
+                        setRestoreResult(null);
+                      }}
+                    >
+                      Choose another
+                    </button>
+                    <button
+                      type="button"
+                      className="settings-button settings-button--primary"
+                      disabled={!restorePreview.canRestore || operationId !== null}
+                      onClick={() => void handleRestore()}
+                    >
+                      Confirm &amp; restore
+                    </button>
+                  </div>
+                )}
+              </footer>
+            </section>
+          </>
+        )}
       </section>
     </main>
   );

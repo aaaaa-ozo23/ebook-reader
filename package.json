@@ -16,6 +16,8 @@
     "format:write": "prettier --write .",
     "lint": "eslint .",
     "test": "pnpm -r --if-present test",
+    "tauri:build:nsis": "node scripts/build-windows-flavor.mjs nsis",
+    "tauri:build:msi": "node scripts/build-windows-flavor.mjs msi",
     "verify:release": "node scripts/verify-release.mjs"
   },
   "devDependencies": {
