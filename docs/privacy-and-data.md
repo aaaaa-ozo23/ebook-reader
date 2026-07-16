@@ -51,6 +51,18 @@ Clear the site's storage in the browser's developer tools to remove fallback dat
 
 Back up the app data directory before a manual reset if progress or annotations need to be kept.
 
+## Portable backups
+
+**Settings → Data & Backup** exports a versioned `.erbackup` archive. Core reading data and
+managed covers are included by default; original book files are opt-in. Absolute paths and reader
+caches are never exported. Export writes a temporary file and only publishes the final archive
+after all payloads have been written successfully.
+
+Version 1 archives are not encrypted. They can contain private annotations, reading history,
+cover images, and—when selected—original book files. Users are responsible for storing and
+sharing them securely. See [Backup and restore](backup-and-restore.md) for the portable data
+contract.
+
 ## Network and logs
 
 The current MVP has no feature that sends imported books, reading activity, annotations, or

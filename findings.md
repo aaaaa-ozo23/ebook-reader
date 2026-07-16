@@ -626,6 +626,15 @@
 - **审计结论：** 首轮 13.2 虽通过通用门禁，但未完整复刻 07/12/13/14/15：排版控件被简化、format page view 未进入设置、移动工具栏错误、手势只是 entrance animation、tooltip 时序和格式系统态缺少运行证据。
 - **设置修正：** 四主题使用 `Aa`；字体显示 Lora；Size 保留步进器；Line/Spacing/Margin 改成三段图形控件；EPUB/TXT/PDF 的阅读模式、转场和 Single/Double 与真实偏好/adapter 状态双向联动，Continuous 下显示明确禁用原因。
 - **移动交互：** 375 px topbar 固定为 Back/Contents/Theme/Bookmark/More，More 承载 Notes/Search/Focus；drawer 横向、sheet 纵向按 touch/pen 1:1 跟踪，越界按 0.18 阻尼，释放按位移/速度决定关闭或回弹，pointer capture 失败安全降级。
+
+## 2026-07-16 大阶段 13.3：备份导出
+
+- SQLite migration runner 原先每次启动都会重新执行全部 migration，只因 0001–0003 本身幂等而未暴露问题；0004 的 `ALTER TABLE` 要求先按 `schema_migrations` 跳过已应用版本。迁移现在真正按版本执行，并验证 bookmarks `updated_at` 只存在一列。
+- `.erbackup` v1 使用 `manifest.json` + `data.json` + 可选 `covers/`/`books/`；manifest 为每个 payload 固定 path/size/SHA-256，但不自我签名。书籍与封面继续按 file hash 内容寻址。
+- 可移植快照由显式 SQL 生成，不序列化 `Book` 运行时对象，因此绝对 `source_path`/`library_path`、reader cache 和 updater 时间从结构上无法进入数据文件；软删除 annotation 会保留 tombstone。
+- 长任务使用 operation ID + `AtomicBool` 协作取消，Rust 命令放入 blocking worker，避免同步 invoke 阻塞取消请求；临时文件与目标文件同目录，成功才 rename，失败/取消删除残留且数据库只读。
+- Settings 新页面继续使用批准的暖纸/深墨/青绿/琥珀系统；桌面 1280×720 首屏完整，375 为 fixed 全屏 sheet，44 px target、reduced-motion、焦点恢复与 axe serious/critical=0 均由专用 Playwright 覆盖。
+- Browser 隔离运行没有 Tauri runtime，因此真实点击导出验证的是明确的桌面运行时错误恢复；文件对话框、原子写入、ZIP 往返和取消由 Rust/Vitest/原生桥测试承担，未用浏览器 fallback 伪造成功。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。
