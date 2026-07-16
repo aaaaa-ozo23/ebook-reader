@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # JavaScript and TypeScript build outputs
 dist/
@@ -19,3 +20,5 @@ target/
 !.env.example
 .DS_Store
 Thumbs.db
+.tools/
+release-artifacts/

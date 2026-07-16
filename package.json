@@ -18,6 +18,9 @@
     "test": "pnpm -r --if-present test",
     "tauri:build:nsis": "node scripts/build-windows-flavor.mjs nsis",
     "tauri:build:msi": "node scripts/build-windows-flavor.mjs msi",
+    "release:audit": "node scripts/release/audit-licenses.mjs",
+    "release:security": "node scripts/release/verify-release-security.mjs",
+    "release:rc": "powershell -ExecutionPolicy Bypass -File scripts/release/build-release.ps1",
     "verify:release": "node scripts/verify-release.mjs"
   },
   "devDependencies": {
