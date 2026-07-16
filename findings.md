@@ -659,6 +659,15 @@
 - 递归扫描固定 depth 32 / items 10,000；canonical path 必须留在选择根，symlink 与 Windows reparse point 在进入目录前拒绝，支持格式只允许 EPUB/TXT/PDF。
 - preview 逐项显示 valid/duplicate/unsupported/missing/error，并允许取消选择；提交按项隔离失败，取消只停止新任务，已开始的原子导入完成后保留或清理。
 - Tauri drag/drop 只打开轻量模糊 overlay 和统一 preview，不会静默导入用户拖入内容。
+
+## 2026-07-16 大阶段 13.7：应用内更新
+
+- Tauri v2 updater 强制 minisign 验证且公钥必须内嵌内容、不能是路径；生产 endpoint 仅使用固定 GitHub HTTPS `latest.json`。
+- Rust 将 `Update::download` 与取消 token 放入 `tokio::select!`，取消会 drop 网络 future 和内存 buffer；只有完整下载并验签后才保存可安装 bytes。
+- Windows `install` 开始后应用由 installer 自动退出，因此 UI 把确认安装明确标成不可取消边界。
+- NSIS build flavor 启用 updater artifact；MSI flavor 通过编译期轨道关闭所有 updater 命令，避免 MSI/NSIS 混装。
+- 每日检查偏好写入 `app_settings` 并可随备份合并；最后检查时间只留在 machine-local storage，不进入 `.erbackup`。
+- 私钥生成在用户级 Codex secrets 目录并经 ACL 验证只有当前 Windows 用户读写；仓库仅含公钥与 canonical fingerprint。
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。

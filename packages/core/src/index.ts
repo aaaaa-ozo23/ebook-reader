@@ -339,6 +339,49 @@ export interface ReaderAdapter<TLocator extends Locator = Locator> {
   search?(query: string): Promise<SearchHit<TLocator>[]>;
 }
 
+export type AppUpdateStatus =
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "canceled"
+  | "signature-failure"
+  | "network-failure";
+
+export interface UpdaterCapability {
+  enabled: boolean;
+  track: "nsis" | "msi";
+  endpoint: string;
+}
+
+export interface AppUpdateMetadata {
+  version: string;
+  currentVersion: string;
+  notes?: string;
+  publishedAt?: string;
+}
+
+export interface UpdateCheckResult {
+  status: "up-to-date" | "available" | "canceled";
+  update?: AppUpdateMetadata;
+}
+
+export interface UpdateActionResult {
+  status: "downloaded" | "installing" | "canceled";
+}
+
+export interface UpdateDownloadProgress {
+  downloaded: number;
+  contentLength?: number;
+}
+
+export interface UpdatePreferences {
+  dailyCheck: boolean;
+}
+
 export const defaultReaderTheme: ReaderTheme = {
   mode: "sepia",
   fontFamily: '"Noto Serif SC", "Songti SC", "Microsoft YaHei", Georgia, serif',

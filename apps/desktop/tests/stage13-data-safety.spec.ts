@@ -95,3 +95,35 @@ test("keeps focus, reduced-motion and desktop-runtime errors understandable", as
   await expect(page.getByRole("heading", { name: "Ebook Reader" })).toBeVisible();
   expect(consoleIssues).toEqual([]);
 });
+
+test("keeps Updates manual, responsive, and explicit about runtime failures", async ({
+  page,
+}) => {
+  const consoleIssues = collectConsoleIssues(page);
+  for (const viewport of [
+    { width: 1280, height: 720 },
+    { width: 375, height: 812 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Updates" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Updates", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Downloads are always verified before installation"),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("checkbox", { name: /Check once a day/ }),
+    ).not.toBeChecked();
+    await expect(page.getByRole("button", { name: "Check for updates" })).toBeVisible();
+    const overflow = await page.evaluate(() => ({
+      client: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client);
+    await expectNoSeriousAccessibilityViolations(page);
+  }
+  expect(consoleIssues).toEqual([]);
+});

@@ -2057,3 +2057,11 @@
 - **服务：** 新增统一 scan/import Rust 服务、operation progress/cancel、32 层/10,000 项/canonical containment/reparse 门禁；单文件和文件关联复用同一服务。
 - **UI：** `Import book` split menu 保留单文件快捷行为，增加 files/folder picker、原生 drag/drop overlay、可选 preview、逐项结果与移动 sheet。
 - **验证：** core/desktop build、169 Vitest、Rust 49 tests、格式门禁通过；版本保持 0.1.0，下一阶段为 13.7。
+
+## 2026-07-16 大阶段 13.7：应用内更新
+
+- **状态：** complete；分支 `codex/stage13-app-updater`，从 13.6 集成合并 `078adf5` 创建。
+- **密钥：** 新 minisign 私钥位于用户级 secrets 目录并限制当前用户；仓库只提交 public key 与 SHA-256 fingerprint，离线备份列为 RC 强制人工门禁。
+- **后端/轨道：** 官方 Rust updater API、30s check timeout、可取消 check/download、内存验签后 install；NSIS updater / MSI manual 双 flavor。
+- **UI：** Settings 增加 Updates 桌面页与移动 sheet 导航，覆盖完整状态、每日 opt-in、下载进度、取消和不可取消安装确认。
+- **验证：** `pnpm.cmd check`（core 8、desktop 173）、Rust 51 tests；Updates 专用 Playwright Chromium 3/3 含 1280/375、axe serious/critical、无横向溢出。测试进程仍有既存 Vite teardown hang，但所有用例完成通过。

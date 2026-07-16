@@ -121,6 +121,26 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let active = true;
+    void import("./tauri/updater")
+      .then(async ({ checkForUpdate, getUpdatePreferences }) => {
+        const preferences = await getUpdatePreferences();
+        if (!active || !preferences.dailyCheck) return;
+        const lastCheck = Number(
+          window.localStorage.getItem("reader:update:last-check") ?? "0",
+        );
+        if (Date.now() - lastCheck < 24 * 60 * 60 * 1000) return;
+        window.localStorage.setItem("reader:update:last-check", String(Date.now()));
+        await checkForUpdate();
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let stop: (() => void) | undefined;
     void listenForBookDrops((event) => {
       setIsDropActive(event.type === "enter");
