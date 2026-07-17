@@ -689,3 +689,23 @@
 - **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
 - **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
 - **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。
+## 2026-07-18 大阶段 13 UI fidelity 与 EPUB 批注修复（进行中）
+
+- **目标证据 01–04：** 批准稿要求侧栏 Contents/Bookmarks/Notes/Search 共用同一信息层级：紧凑图标 tab、细青绿 active underline、无额外大标题；Bookmarks/Notes 每项为图标/色块 + 标题 + page/location + 时间，并把 Jump/Delete 收敛为右下图标；Search 使用单行输入、整宽 Search 按钮、按 location 分隔的紧凑结果和明确 loading/empty state。
+- **阅读器设置目标：** desktop settings 固定为轻量分段面板；Theme 为四个等宽色块，Font 为原生感单行下拉，Size 为减号/百分比/加号，Line height/Spacing/Margin 为三段 icon segmented control；page transition 与 Single/Double 只在相应分页格式出现，Reset defaults 位于底部而非挤压核心控制。
+- **选区/书签目标：** 选区工具条必须锚定选择范围、顺序为 Highlight/四色/Note/Copy，不能遮挡正文或漂移；页内已有 bookmark 必须显示在对应内容右侧的琥珀描边书签标记，并与顶部 Bookmark 状态同步。
+- **分页控制目标：** EPUB/TXT 底部以 Previous、当前 chapter/pages、Next 组成主胶囊，Single/Double 为旁置的独立双段控件；PDF 则把 Continuous/Double、缩放、page 输入、Next 和进度合并为一条底栏，不混用两套结构。
+- **现状证据 06–08：** 当前 Notes 把 Jump/Delete 放成高权重大按钮，缺失引用摘录与 page/location；长中文书名和条目字号/换行破坏密度。Search 结果字号过大、横向分栏断裂、滚动条侵入内容。Reading settings 在窄面板里把 transition 做成大卡片网格，导致面板极长，Single/Double 灰显且语义不清；均与批准稿存在材料差异。
+- **实现原则：** 保持暖纸/深墨/青绿/琥珀 token 与 44px target；高频 tab/分页不做入场动画，popover 仅 150–200ms origin-aware scale/fade，drawer/sheet 可中断，reduced-motion 禁用位移和缩放。
+- **现状证据 09–11：** Font 使用系统原生展开样式，Windows 下灰色高亮与无圆角列表直接穿透设计系统；TXT/PDF 底栏信息重复、层级分裂且 Single/Double 被塞进主导航胶囊；同一选区的 `Saved notes` 浮层固定高度不足，中文多条 note 文本被裁切且没有内部垂直滚动。
+- **批准稿 12：** 深墨侧栏目标密度已明确：无冗余大标题，bookmark/note/search item 使用 16px 主文、14px 次文、单一行分隔；动作仅保留 20px 线性图标并靠右，empty state 在列表余量内居中；Search 不把命中片段强制拆成两栏。
+- **EPUB 缺陷假设：** `EpubReaderAdapter` 在内容文档装载时同步 annotations，但点击页内目标读取的 note 集合可能被闭包捕获为旧数组；新增 note 后 React 状态已更新，iframe 内事件/标记却未即时重绑，退出重进才重建 adapter，因此应检查 annotation sync effect 与 iframe click handler 的闭包更新，而不是仅强制刷新页面。
+
+### 完成结论
+
+- **根因确认：** 假设成立。epub.js iframe 内容事件只在 document attach 时注册，原 handler 闭包长期读取首次注册时的 annotations；新增第二条及后续 note 后 SVG underline 仍可点击，但返回旧 note 集合。修复以 latest callback ref 解耦事件注册生命周期，并以 `id + locator + note + color + updatedAt + deletedAt` 复合签名驱动标记同步；相同 CFI 的 note 先分组再绘制一个可命中的 underline。
+- **失败优先证据：** Playwright 在同一选区连续创建到 8 条 note，每次保存后立即点击当前页 underline 并断言刚新增文本可见；旧实现无需退出重进的第一次断言即失败，修复后完整通过。
+- **长列表结论：** `Saved notes` 浮层和 Notes 侧栏都改为 viewport-bounded 内部 scroll container；中文长文本使用 `overflow-wrap:anywhere` 且不再 line-clamp。自动化同时证明 `scrollHeight > clientHeight`，派发 mouse wheel 后 `scrollTop` 真实增加。
+- **视觉对照：** Notes/Search 从大按钮和横向分栏收敛为批准稿的单列密集层级；font dropdown 使用受控圆角 listbox；移动 settings 打开后从 Theme 起始且 Reset 位于控制组尾部；pagination 主胶囊与 Single/Double 不再混成一组。完整差异表见 `docs/design/v0.2/stage13-ui-fidelity-followup.md`。
+- **Browser 能力边界：** 隔离 Browser 成功验证真实 Vite 页面身份、空书架 DOM 与布局；浏览器环境无法完成 Tauri 原生文件选择（返回 Import canceled），因此三格式、批注和滚轮状态由项目 Playwright 生成 fixture 验证，没有伪造原生导入成功。
+- **最终门禁：** `pnpm.cmd check`、Playwright 26/26、Cargo fmt、Rust 51/51、`git diff --check` 全部通过；没有新增 schema、依赖、格式或版本变更。

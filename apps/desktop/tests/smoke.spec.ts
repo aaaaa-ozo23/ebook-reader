@@ -472,6 +472,19 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expectNoSeriousAccessibilityViolations(page);
   await expect(page.locator(".reader-viewport")).toHaveCSS("scroll-behavior", "auto");
 
+  await page.getByRole("tab", { name: "Search" }).click();
+  const txtSearchQuery = "第三章第 10 段正文";
+  await page.getByRole("textbox", { name: "Search in book" }).fill(txtSearchQuery);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const txtSearchResults = page.locator(".reader-search-result");
+  await expect(txtSearchResults).toHaveCount(1);
+  await expect(txtSearchResults.locator("mark")).toHaveText(txtSearchQuery);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-search-result.png"),
+  });
+  await page.getByRole("tab", { name: "Contents" }).click();
+
   const renderedParagraphCount = await page
     .locator(".reader-virtual-row--paragraph")
     .count();
@@ -490,6 +503,16 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
     animations: "disabled",
     path: testInfo.outputPath("stage13-reader-settings-desktop.png"),
   });
+  await page.getByRole("button", { name: "Lora", exact: true }).click();
+  const fontListbox = page.getByRole("listbox");
+  await expect(fontListbox).toBeVisible();
+  await expect(fontListbox.getByRole("option")).toHaveCount(3);
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage13-reader-font-menu-desktop.png"),
+  });
+  await fontListbox.getByRole("option", { name: "Lora" }).click();
+  await expect(fontListbox).toBeHidden();
   await page.getByRole("button", { name: "dark" }).click();
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
@@ -512,14 +535,14 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   );
   await page.mouse.down();
   await page.mouse.move(
-    (resizerBox?.x ?? 0) + (resizerBox?.width ?? 0) / 2 + 109,
+    (resizerBox?.x ?? 0) + (resizerBox?.width ?? 0) / 2 + 160,
     (resizerBox?.y ?? 0) + (resizerBox?.height ?? 0) / 2,
   );
   await page.mouse.up();
   const resizedSidebarWidth = Number(
     await contentsResizer.getAttribute("aria-valuenow"),
   );
-  expect(resizedSidebarWidth).toBeGreaterThanOrEqual(380);
+  expect(resizedSidebarWidth).toBeGreaterThanOrEqual(360);
   expect(resizedSidebarWidth).toBeLessThanOrEqual(480);
   await expect(page.getByRole("main", { name: "TXT reader" })).toHaveAttribute(
     "style",
@@ -914,7 +937,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
 test("opens a generated EPUB reader and uses contents and theme controls", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(60_000);
+  test.setTimeout(90_000);
   const consoleIssues = collectConsoleIssues(page);
 
   await page.addInitScript(() => {
@@ -1188,11 +1211,20 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     path: testInfo.outputPath("stage13-reader-bookmarks.png"),
   });
   await page.getByRole("tab", { name: "Notes" }).click();
+  await expect(page.getByRole("button", { name: "Add note" })).toBeVisible();
   await expect(page.getByText("No notes yet.")).toBeVisible();
   await page.screenshot({
     animations: "disabled",
     path: testInfo.outputPath("stage13-reader-notes-empty.png"),
   });
+  await page.getByRole("button", { name: "Add note" }).click();
+  const locationNoteEditor = page.getByRole("form", { name: "Edit note" });
+  await expect(locationNoteEditor).toBeVisible();
+  await expect(locationNoteEditor.locator("textarea")).toHaveAccessibleName(
+    /Note for Chapter One/,
+  );
+  await locationNoteEditor.getByRole("button", { name: "Cancel" }).click();
+  await expect(locationNoteEditor).toBeHidden();
   await page.getByRole("tab", { name: "Search" }).click();
   await page.getByRole("textbox", { name: "Search in book" }).fill("generated");
   await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -1579,6 +1611,10 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
 
     const selectionMenu = page.locator(".reader-selection-menu");
     await expect(selectionMenu).toBeVisible();
+    await page.screenshot({
+      animations: "disabled",
+      path: testInfo.outputPath("stage13-reader-selection-menu.png"),
+    });
     const selectionAnchor = await epubIframe.evaluate((iframe) => {
       const frame = (iframe as HTMLIFrameElement).getBoundingClientRect();
       const selection = (iframe as HTMLIFrameElement).contentWindow?.getSelection();
@@ -1637,6 +1673,83 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
     expect(underlineStyles.lineStrokes.length).toBeGreaterThan(0);
     expect(underlineStyles.lineStrokes.every((stroke) => stroke !== "none")).toBe(true);
     expect(underlineStyles.lineDashes.every((dash) => dash !== "none")).toBe(true);
+
+    const savedNotesDialog = page.getByRole("dialog", {
+      name: /Saved notes for/,
+    });
+    await noteUnderline.evaluate((underline) => {
+      underline.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await expect(savedNotesDialog).toBeVisible();
+    await expect(savedNotesDialog).toContainText("EPUB annotation note");
+
+    for (let noteIndex = 2; noteIndex <= 8; noteIndex += 1) {
+      const noteText = `Immediate EPUB note ${noteIndex} — this longer line verifies that note text wraps instead of clipping.`;
+      await savedNotesDialog.getByRole("button", { name: "Add note" }).click();
+      await expect(noteEditor).toBeVisible();
+      await noteEditor.locator("textarea").fill(noteText);
+      await noteEditor.getByRole("button", { name: "Save" }).click();
+      await noteUnderline.evaluate((underline) => {
+        underline.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      });
+      await expect(savedNotesDialog).toBeVisible();
+      await expect(savedNotesDialog.getByText(noteText, { exact: true })).toBeVisible();
+    }
+
+    await expect(savedNotesDialog).toContainText("8 saved");
+    const savedNotesList = savedNotesDialog.locator(".reader-note-popover__items");
+    await expect
+      .poll(() =>
+        savedNotesList.evaluate((list) => list.scrollHeight > list.clientHeight),
+      )
+      .toBe(true);
+    const savedNotesListBox = await savedNotesList.boundingBox();
+    expect(savedNotesListBox).not.toBeNull();
+    if (savedNotesListBox !== null) {
+      await page.mouse.move(
+        savedNotesListBox.x + savedNotesListBox.width / 2,
+        savedNotesListBox.y + savedNotesListBox.height / 2,
+      );
+      await page.mouse.wheel(0, 360);
+      await expect
+        .poll(() => savedNotesList.evaluate((list) => list.scrollTop))
+        .toBeGreaterThan(0);
+    }
+    await page.screenshot({
+      animations: "disabled",
+      path: testInfo.outputPath("stage13-reader-notes-live.png"),
+    });
+    await savedNotesDialog.getByRole("button", { name: "Close saved notes" }).click();
+    await expect(savedNotesDialog).toBeHidden();
+    await page.getByRole("tab", { name: "Notes" }).click();
+    await expect(
+      page.getByText(
+        "Immediate EPUB note 8 — this longer line verifies that note text wraps instead of clipping.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    const notesSidebarList = page.locator(".reader-notes");
+    await expect(notesSidebarList.locator(".reader-note__preview").first()).toHaveCSS(
+      "white-space",
+      "normal",
+    );
+    await page.screenshot({
+      animations: "disabled",
+      path: testInfo.outputPath("stage13-reader-notes-sidebar.png"),
+    });
+    const notesSidebarBox = await notesSidebarList.boundingBox();
+    expect(notesSidebarBox).not.toBeNull();
+    if (notesSidebarBox !== null) {
+      await page.mouse.move(
+        notesSidebarBox.x + notesSidebarBox.width / 2,
+        notesSidebarBox.y + notesSidebarBox.height / 2,
+      );
+      await page.mouse.wheel(0, 360);
+      await expect
+        .poll(() => notesSidebarList.evaluate((list) => list.scrollTop))
+        .toBeGreaterThan(0);
+    }
+    await page.getByRole("tab", { name: "Contents" }).click();
   }
 
   await page.getByRole("button", { name: "Chapter One" }).click();

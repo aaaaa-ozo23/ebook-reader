@@ -442,7 +442,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     const chapters = document?.chapters ?? [];
     return new Map(chapters.map((chapter) => [chapter.id, chapter]));
   }, [document]);
-  const visibleBookmarks = bookmarksBookId === book.id ? bookmarks : [];
+  const visibleBookmarks = useMemo(
+    () => (bookmarksBookId === book.id ? bookmarks : []),
+    [book.id, bookmarks, bookmarksBookId],
+  );
   const visibleBookmarkError = bookmarksBookId === book.id ? bookmarkError : null;
   const visibleAnnotations = useMemo(
     () => (annotationsBookId === book.id ? annotations : []),
@@ -453,6 +456,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     currentBookmarkPosition?.bookId === book.id
       ? currentBookmarkPosition.locator
       : null;
+  const currentLocationBookmark = useMemo(
+    () =>
+      currentBookmarkLocator === null
+        ? null
+        : (visibleBookmarks.find((bookmark) =>
+            bookmarkMatchesCurrentLocator(bookmark.locator, currentBookmarkLocator),
+          ) ?? null),
+    [currentBookmarkLocator, visibleBookmarks],
+  );
 
   const closeSidebar = useCallback(() => {
     setIsSidebarOpen(false);
@@ -894,6 +906,44 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         setBookmarkError(getErrorMessage(bookmarkCreateError));
       });
   }, [activeTocItemId, book, currentBookmarkLocator, tocItems]);
+
+  const handleCreateLocationNote = useCallback(() => {
+    const locator = currentBookmarkLocator;
+
+    if (locator === null) {
+      setAnnotationError("Current reading location is not available yet.");
+      return;
+    }
+
+    const selectedText = getBookmarkLabel(book, tocItems, activeTocItemId, locator);
+    const contentLeft = window.matchMedia("(min-width: 900px)").matches
+      ? layoutPreferences.sidebarWidth
+      : 0;
+
+    setAnnotationError(null);
+    setSelectionSnapshot(null);
+    setNotePopover(null);
+    setNoteEditor({
+      color: DEFAULT_HIGHLIGHT_COLOR,
+      contextAfter: locator.contextAfter,
+      contextBefore: locator.contextBefore,
+      draft: "",
+      locator,
+      menuX: contentLeft + (window.innerWidth - contentLeft) / 2,
+      menuY: 116,
+      selectedText,
+    });
+
+    if (window.matchMedia("(max-width: 520px)").matches) {
+      setIsSidebarOpen(false);
+    }
+  }, [
+    activeTocItemId,
+    book,
+    currentBookmarkLocator,
+    layoutPreferences.sidebarWidth,
+    tocItems,
+  ]);
 
   const handleJumpToBookmark = useCallback(
     (bookmark: Bookmark<Locator>) => {
@@ -1404,6 +1454,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
         onCreateBookmark={handleCreateBookmark}
+        onCreateNote={handleCreateLocationNote}
         onDeleteAnnotation={handleDeleteAnnotation}
         onDeleteBookmark={handleDeleteBookmark}
         onJumpToAnnotation={handleJumpToAnnotation}
@@ -1467,8 +1518,15 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               className="reader-tool-button reader-tool-button--bookmark"
               aria-label="Bookmark"
               data-tooltip="Bookmark"
+              aria-pressed={currentLocationBookmark !== null}
               disabled={currentBookmarkLocator === null}
-              onClick={handleCreateBookmark}
+              onClick={() => {
+                if (currentLocationBookmark !== null) {
+                  openSidebarTab("bookmarks");
+                } else {
+                  handleCreateBookmark();
+                }
+              }}
             >
               <ReaderIcon name="bookmark" />
               <span>Bookmark</span>
@@ -1540,6 +1598,17 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             ) : null}
           </div>
         </header>
+        {currentLocationBookmark !== null ? (
+          <button
+            type="button"
+            className="reader-page-bookmark-indicator"
+            aria-label="Current page bookmarked"
+            title="View bookmark"
+            onClick={() => openSidebarTab("bookmarks")}
+          >
+            <ReaderIcon name="bookmark" />
+          </button>
+        ) : null}
         {isChromeHidden ? (
           <button type="button" className="reader-focus-exit" onClick={exitFocusMode}>
             <ReaderIcon name="focus" />
@@ -1718,4 +1787,32 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
       </section>
     </main>
   );
+}
+
+function bookmarkMatchesCurrentLocator(
+  bookmarkLocator: Locator,
+  currentLocator: Locator,
+): boolean {
+  if (bookmarkLocator.kind !== currentLocator.kind) return false;
+  if (bookmarkLocator.kind === "txt" && currentLocator.kind === "txt") {
+    return (
+      bookmarkLocator.chapterId === currentLocator.chapterId &&
+      bookmarkLocator.charOffset === currentLocator.charOffset
+    );
+  }
+  if (bookmarkLocator.kind === "pdf" && currentLocator.kind === "pdf") {
+    return bookmarkLocator.page === currentLocator.page;
+  }
+  if (bookmarkLocator.kind === "epub" && currentLocator.kind === "epub") {
+    if (bookmarkLocator.cfi !== undefined && currentLocator.cfi !== undefined) {
+      return bookmarkLocator.cfi === currentLocator.cfi;
+    }
+    return (
+      bookmarkLocator.href === currentLocator.href &&
+      bookmarkLocator.progression !== undefined &&
+      currentLocator.progression !== undefined &&
+      Math.abs(bookmarkLocator.progression - currentLocator.progression) < 0.0005
+    );
+  }
+  return false;
 }
