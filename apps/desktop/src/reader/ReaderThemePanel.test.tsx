@@ -7,6 +7,43 @@ import { ReaderThemePanel } from "./ReaderThemePanel";
 const MODES: readonly PageTransitionMode[] = ["none", "page-curl", "cover", "slide"];
 
 describe("ReaderThemePanel page transitions", () => {
+  it("uses an in-system font listbox instead of the platform select popup", () => {
+    const onThemeChange = vi.fn();
+    render(
+      <ReaderThemePanel
+        isOpen
+        onClose={vi.fn()}
+        theme={defaultReaderTheme}
+        themeError={null}
+        onThemeChange={onThemeChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Lora" }));
+    expect(screen.getByRole("listbox")).toBeVisible();
+    fireEvent.click(screen.getByRole("option", { name: "Sans" }));
+    expect(onThemeChange).toHaveBeenCalledWith(
+      expect.objectContaining({ fontFamily: expect.stringContaining("Inter") }),
+    );
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("restores the complete reader theme defaults", () => {
+    const onThemeChange = vi.fn();
+    render(
+      <ReaderThemePanel
+        isOpen
+        onClose={vi.fn()}
+        theme={{ ...defaultReaderTheme, fontSize: 26 }}
+        themeError={null}
+        onThemeChange={onThemeChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    expect(onThemeChange).toHaveBeenCalledWith(defaultReaderTheme);
+  });
+
   it("presents the four compatible modes as an accessible radio group", () => {
     renderPanel("none", vi.fn());
 

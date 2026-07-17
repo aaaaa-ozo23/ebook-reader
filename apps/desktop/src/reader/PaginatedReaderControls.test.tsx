@@ -40,6 +40,7 @@ describe("paginated reader controls", () => {
     );
 
     expect(container.querySelectorAll(".reader-epub-control-row")).toHaveLength(1);
+    expect(container.querySelectorAll(".reader-page-navigation")).toHaveLength(1);
     expect(container.querySelectorAll(".reader-epub-progress")).toHaveLength(1);
     expect(screen.getByText("Pages 13-14 / 63")).toBeVisible();
     expect(screen.getByText("21%")).toBeVisible();
