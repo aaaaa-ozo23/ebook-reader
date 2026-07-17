@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import type { Annotation, Bookmark, Locator, SearchHit, TocItem } from "@reader/core";
@@ -51,6 +52,7 @@ interface ReaderSidebarProps {
   onBackToLibrary: () => void;
   onClose: () => void;
   onCreateBookmark: () => void;
+  onCreateNote: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
   onJumpToAnnotation: (annotation: Annotation) => void;
@@ -96,6 +98,7 @@ function ReaderSidebar({
   onBackToLibrary,
   onClose,
   onCreateBookmark,
+  onCreateNote,
   onDeleteAnnotation,
   onDeleteBookmark,
   onJumpToAnnotation,
@@ -299,7 +302,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "contents" ? (
         <>
-          <h2>Contents</h2>
+          <h2 className="sr-only">Contents</h2>
           <nav className="reader-toc" aria-label={label}>
             {flattenedItems.length === 0 ? (
               <p className="reader-sidebar__empty">Loading chapters...</p>
@@ -335,7 +338,7 @@ function ReaderSidebar({
       {activeTab === "bookmarks" ? (
         <section className="reader-sidebar-panel" aria-label="Bookmarks">
           <div className="reader-sidebar-panel__header">
-            <h2>Bookmarks</h2>
+            <h2 className="sr-only">Bookmarks</h2>
             <button
               type="button"
               className="reader-sidebar__action"
@@ -389,14 +392,28 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "notes" ? (
         <section className="reader-sidebar-panel" aria-label="Notes">
-          <h2>Notes</h2>
+          <div className="reader-sidebar-panel__header">
+            <h2 className="sr-only">Notes</h2>
+            <button
+              type="button"
+              className="reader-sidebar__action"
+              onClick={onCreateNote}
+            >
+              <ReaderIcon name="plus" />
+              Add note
+            </button>
+          </div>
           {annotationError !== null ? (
             <p className="reader-sidebar__error" role="alert">
               {annotationError}
             </p>
           ) : null}
           {noteAnnotations.length === 0 ? (
-            <p className="reader-sidebar__empty">No notes yet.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="notes" />
+              <strong>No notes yet.</strong>
+              <span>Notes you add while reading will appear here.</span>
+            </div>
           ) : (
             <div className="reader-notes" role="list">
               {noteAnnotations.map((annotation) => (
@@ -413,7 +430,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "search" ? (
         <section className="reader-sidebar-panel" aria-label="Search">
-          <h2>Search</h2>
+          <h2 className="sr-only">Search</h2>
           <form
             className="reader-search-form"
             onSubmit={(event) => {
@@ -458,10 +475,20 @@ function ReaderSidebar({
               {searchError}
             </p>
           ) : null}
+          {isSearchLoading ? (
+            <p className="reader-search-status" role="status">
+              <span aria-hidden="true" />
+              Searching in book…
+            </p>
+          ) : null}
           {searchQuery.trim() !== "" &&
           !isSearchLoading &&
           searchResults.length === 0 ? (
-            <p className="reader-sidebar__empty">No results.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="search" />
+              <strong>No results.</strong>
+              <span>Try a different keyword or check your spelling.</span>
+            </div>
           ) : null}
           {searchResults.length > 0 ? (
             <div className="reader-search-results" role="list">
@@ -474,8 +501,9 @@ function ReaderSidebar({
                   aria-label={`Go to search result ${hit.excerpt}`}
                   onClick={() => onJumpToSearchResult(hit)}
                 >
-                  <span>{hit.excerpt}</span>
                   <small>{getLocatorLabel(hit.locator)}</small>
+                  <span>{highlightSearchExcerpt(hit.excerpt, searchQuery)}</span>
+                  <ReaderIcon name="external" />
                 </button>
               ))}
             </div>
@@ -491,6 +519,22 @@ function getSidebarIcon(tab: ReaderSidebarTab): ReaderIconName {
   if (tab === "bookmarks") return "bookmark";
   if (tab === "notes") return "notes";
   return "search";
+}
+
+function highlightSearchExcerpt(excerpt: string, query: string): ReactNode {
+  const normalizedQuery = query.trim();
+  if (normalizedQuery === "") return excerpt;
+  const index = excerpt
+    .toLocaleLowerCase()
+    .indexOf(normalizedQuery.toLocaleLowerCase());
+  if (index < 0) return excerpt;
+  return (
+    <>
+      {excerpt.slice(0, index)}
+      <mark>{excerpt.slice(index, index + normalizedQuery.length)}</mark>
+      {excerpt.slice(index + normalizedQuery.length)}
+    </>
+  );
 }
 
 interface ReaderSidebarResizerProps {
@@ -642,20 +686,23 @@ function ReaderNoteItem({ annotation, onDelete, onJump }: ReaderNoteItemProps) {
           onClick={() => onJump(annotation)}
         >
           <span>{excerpt}</span>
-          <small>{formatAnnotationTimestamp(annotation.updatedAt)}</small>
+          {annotation.note !== undefined && annotation.note.trim() !== "" ? (
+            <span className="reader-note__preview">{annotation.note}</span>
+          ) : null}
+          <small>
+            {getLocatorLabel(annotation.locator)} ·{" "}
+            {formatAnnotationTimestamp(annotation.updatedAt)}
+          </small>
         </button>
       </div>
-      {annotation.note !== undefined && annotation.note.trim() !== "" ? (
-        <p className="reader-note__preview">{annotation.note}</p>
-      ) : null}
       <div className="reader-note__actions">
-        <button type="button" onClick={() => onJump(annotation)}>
+        <button type="button" title="Jump" onClick={() => onJump(annotation)}>
           <ReaderIcon name="external" />
-          Jump
+          <span className="sr-only">Jump</span>
         </button>
-        <button type="button" onClick={() => onDelete(annotation.id)}>
+        <button type="button" title="Delete" onClick={() => onDelete(annotation.id)}>
           <ReaderIcon name="trash" />
-          Delete
+          <span className="sr-only">Delete</span>
         </button>
       </div>
     </article>

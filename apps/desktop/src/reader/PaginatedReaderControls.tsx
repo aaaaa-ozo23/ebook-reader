@@ -71,27 +71,31 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
   return (
     <div className="reader-epub-controls" aria-label={ariaLabel}>
       <div className="reader-epub-control-row">
-        <button
-          type="button"
-          className="reader-tool-button"
-          disabled={previousDisabled}
-          onClick={onPrevious}
-        >
-          Previous
-        </button>
-        <div className="reader-epub-status" aria-live="polite">
-          <span>{chapterTitle}</span>
-          <strong>{positionLabel}</strong>
-          <span>{progressLabel}</span>
+        <div className="reader-page-navigation">
+          <button
+            type="button"
+            className="reader-tool-button"
+            disabled={previousDisabled}
+            onClick={onPrevious}
+          >
+            <span aria-hidden="true">‹</span>
+            Previous
+          </button>
+          <div className="reader-epub-status" aria-live="polite">
+            <span>{chapterTitle}</span>
+            <strong>{positionLabel}</strong>
+            <span>{progressLabel}</span>
+          </div>
+          <button
+            type="button"
+            className="reader-tool-button"
+            disabled={nextDisabled}
+            onClick={onNext}
+          >
+            Next
+            <span aria-hidden="true">›</span>
+          </button>
         </div>
-        <button
-          type="button"
-          className="reader-tool-button"
-          disabled={nextDisabled}
-          onClick={onNext}
-        >
-          Next
-        </button>
         <div
           className="reader-epub-mode-toggle"
           role="group"
@@ -121,7 +125,6 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
       </div>
       <div className="reader-epub-progress" style={progressControlStyle}>
         <div className="reader-epub-progress__meta">
-          <span>{chapterTitle}</span>
           <label className="reader-page-field reader-epub-page-field">
             <span>{pageFieldLabel}</span>
             <input

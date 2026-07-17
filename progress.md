@@ -2081,3 +2081,12 @@
 - **自动化：** frozen install；`pnpm.cmd check`（core 8、desktop 173）；Rust 51；Playwright 26/26（单 worker、DPR2 独立 500 页 PDF、50ms 门槛）；license 291/529 unknown=0；version/security/diff gates 全部通过。
 - **draft RC：** NSIS、MSI、NSIS `.sig`、`latest.json`、CycloneDX source/artifact SBOM、SHA256SUMS、license/authenticode/artifact/acceptance reports 已生成到忽略目录；Authenticode 为 `NotSigned`。
 - **未伪造通过：** updater 私钥离线备份、独立 identifier 原生安装 smoke 和 NSIS/MSI 安装/升级/卸载矩阵需要隔离 Windows 环境，继续在 `RELEASE_CHECKLIST.md` 保持 unchecked；无 tag、无 GitHub Release。
+## 2026-07-18 大阶段 13.x：UI fidelity 与 EPUB 批注修复
+
+- **状态：** complete；分支 `codex/stage13-ui-fidelity-followup` 从 `codex/v0.2.0-integration` 的 `507efeb` 创建，等待按 `--no-ff` 流程合回集成分支。
+- **侧栏与检索：** Notes/Search 统一批准稿的信息密度、完整换行摘录、紧凑图标动作、明确空态/加载态；Search 命中词直接高亮，Notes 额外提供基于当前位置的新建入口。
+- **选区与书签：** 选区工具条保持范围锚定与 Highlight/颜色/Note/Copy 顺序；页内 bookmark indicator 与顶部 `aria-pressed`、侧栏列表同步。
+- **设置与分页：** 自定义键盘可用字体 listbox 取代 Windows 原生穿透菜单；Theme/Font/Size/Line height/Spacing/Margin/模式/转场/页视图按桌面与 375 sheet 重新排序；TXT/EPUB 分页主胶囊与旁置 Single/Double 分组对齐批准稿。
+- **EPUB 根因修复：** iframe 页内 underline click handler 之前捕获旧 annotations 数组；现以最新 callback ref 与复合 annotation signature 同步，同一 CFI 多条 note 新增后无需离开页面即可读到。Saved notes 和 Notes 侧栏均有内部纵向滚动、鼠标滚轮与长文本完整换行。
+- **回归证据：** desktop 24 files / 176 Vitest；core 8 tests；Playwright 26/26（含 DPR2、375/640/900/1280、axe、reduced-motion）；Rust 51/51；Cargo fmt、production build、`git diff --check` 全部通过。
+- **边界：** 未改变 EPUB/TXT/PDF 范围、reader lazy boundary、版本号、schema、依赖或发布状态；Browser 隔离页验证真实 Vite 空书架与无横向溢出，带书数据由仓库生成 fixture 负责。

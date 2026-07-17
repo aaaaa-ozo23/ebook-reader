@@ -1364,6 +1364,7 @@ export function EpubReaderContent({
   const themeRef = useRef(theme);
   const transitionModeRef = useRef(transition);
   const tocItemsRef = useRef(tocItems);
+  const onAnnotationActivateRef = useRef(onAnnotationActivate);
   const [error, setError] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState<EpubImageResource | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -1394,6 +1395,10 @@ export function EpubReaderContent({
   useLayoutEffect(() => {
     transitionModeRef.current = transition;
   }, [transition]);
+
+  useLayoutEffect(() => {
+    onAnnotationActivateRef.current = onAnnotationActivate;
+  }, [onAnnotationActivate]);
 
   useLayoutEffect(() => {
     isPageCurlBlockedRef.current = isPageCurlBlocked;
@@ -1784,11 +1789,25 @@ export function EpubReaderContent({
 
     appliedEpubHighlightSignaturesRef.current = nextHighlightSignatures;
 
-    const nextUnderlines = getEpubUnderlineAnnotations(annotations);
+    const nextUnderlineGroups = new Map<
+      string,
+      Array<Annotation & { locator: EpubLocator & { cfi: string } }>
+    >();
+    for (const annotation of getEpubUnderlineAnnotations(annotations)) {
+      const group = nextUnderlineGroups.get(annotation.locator.cfi) ?? [];
+      group.push(annotation);
+      nextUnderlineGroups.set(annotation.locator.cfi, group);
+    }
     const nextUnderlineSignatures = new Map(
-      nextUnderlines.map((annotation) => [
-        annotation.locator.cfi,
-        getEpubAnnotationSignature(annotation),
+      Array.from(nextUnderlineGroups, ([cfi, group]) => [
+        cfi,
+        group
+          .map(
+            (annotation) =>
+              `${annotation.id}:${getEpubAnnotationSignature(annotation)}`,
+          )
+          .sort()
+          .join("||"),
       ]),
     );
 
@@ -1798,11 +1817,12 @@ export function EpubReaderContent({
       }
     }
 
-    for (const annotation of nextUnderlines) {
-      const cfi = annotation.locator.cfi;
+    for (const [cfi, group] of nextUnderlineGroups) {
       const signature = nextUnderlineSignatures.get(cfi);
+      const annotation = group[0];
 
       if (
+        annotation === undefined ||
         signature === undefined ||
         appliedEpubUnderlineSignaturesRef.current.get(cfi) === signature
       ) {
@@ -1813,13 +1833,13 @@ export function EpubReaderContent({
         cfi,
         annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
         (event) => {
-          onAnnotationActivate(annotation, getEventMenuAnchor(event));
+          onAnnotationActivateRef.current(annotation, getEventMenuAnchor(event));
         },
       );
     }
 
     appliedEpubUnderlineSignaturesRef.current = nextUnderlineSignatures;
-  }, [annotations, isAdapterReadyForHighlights, onAnnotationActivate]);
+  }, [annotations, isAdapterReadyForHighlights]);
 
   useEffect(() => {
     if (jumpRequest === null) {

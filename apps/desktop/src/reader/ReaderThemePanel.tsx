@@ -2,14 +2,19 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useRef,
   useState,
-  type ChangeEvent,
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import type { PageTransitionMode, ReaderTheme, ReaderThemeMode } from "@reader/core";
+import {
+  defaultReaderTheme,
+  type PageTransitionMode,
+  type ReaderTheme,
+  type ReaderThemeMode,
+} from "@reader/core";
 import { Button } from "../components/ui/Button";
 import { ReaderIcon } from "./ReaderIcons";
 
@@ -128,6 +133,7 @@ export function ReaderThemePanel({
   onTxtReadingModeChange,
 }: ReaderThemePanelProps) {
   const closeTimerRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
   const sheetGestureRef = useRef<MobileSheetGesture | null>(null);
   const [sheetOffset, setSheetOffset] = useState(0);
   const [sheetMotionMs, setSheetMotionMs] = useState(0);
@@ -139,8 +145,8 @@ export function ReaderThemePanel({
     [onThemeChange, theme],
   );
   const handleFontFamilyChange = useCallback(
-    (event: ChangeEvent<HTMLSelectElement>) => {
-      onThemeChange({ ...theme, fontFamily: event.currentTarget.value });
+    (fontFamily: string) => {
+      onThemeChange({ ...theme, fontFamily });
     },
     [onThemeChange, theme],
   );
@@ -158,6 +164,19 @@ export function ReaderThemePanel({
     },
     [],
   );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const resetPanelScroll = () => {
+      if (window.matchMedia?.("(max-width: 520px)").matches === true) {
+        panelRef.current?.scrollTo?.({ top: 0 });
+      }
+    };
+    panelRef.current?.scrollTo?.({ top: 0 });
+    resetPanelScroll();
+    window.addEventListener("resize", resetPanelScroll);
+    return () => window.removeEventListener("resize", resetPanelScroll);
+  }, [isOpen]);
 
   const handleSheetPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
@@ -249,6 +268,7 @@ export function ReaderThemePanel({
 
   return (
     <aside
+      ref={panelRef}
       className={`reader-theme-panel${isSheetDragging ? " reader-theme-panel--dragging" : ""}`}
       aria-label="Reading settings"
       hidden={!isOpen}
@@ -306,16 +326,13 @@ export function ReaderThemePanel({
       </section>
       <section className="reader-theme-section reader-theme-section--typography">
         <div className="reader-theme-compact-fields">
-          <label className="theme-field theme-field--font">
+          <div className="theme-field theme-field--font">
             <span>Font</span>
-            <select value={theme.fontFamily} onChange={handleFontFamilyChange}>
-              {FONT_OPTIONS.map((option) => (
-                <option key={option.label} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <FontFamilySelect
+              value={theme.fontFamily}
+              onChange={handleFontFamilyChange}
+            />
+          </div>
           <ThemeSlider
             label="Size"
             max={30}
@@ -326,7 +343,7 @@ export function ReaderThemePanel({
           />
         </div>
         <TypographyChoice
-          label="Line"
+          label="Line height"
           value={theme.lineHeight}
           options={[1.5, 1.75, 2]}
           onChange={handleNumberChange("lineHeight")}
@@ -482,7 +499,124 @@ export function ReaderThemePanel({
       {pageTransitionError !== null && pageTransitionError !== undefined ? (
         <p className="theme-error">{pageTransitionError}</p>
       ) : null}
+      <button
+        type="button"
+        className="reader-theme-reset"
+        onClick={() => onThemeChange(defaultReaderTheme)}
+      >
+        Reset to defaults
+      </button>
     </aside>
+  );
+}
+
+interface FontFamilySelectProps {
+  onChange: (value: string) => void;
+  value: string;
+}
+
+function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
+  const listboxId = useId();
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedIndex = Math.max(
+    0,
+    FONT_OPTIONS.findIndex((option) => option.value === value),
+  );
+  const selectedOption = FONT_OPTIONS[selectedIndex] ?? FONT_OPTIONS[0];
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        rootRef.current?.contains(event.target) === false
+      ) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsOpen(false);
+        rootRef.current
+          ?.querySelector<HTMLButtonElement>(".theme-font-select__trigger")
+          ?.focus();
+      }
+    };
+    window.document.addEventListener("pointerdown", handlePointerDown);
+    window.document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.document.removeEventListener("pointerdown", handlePointerDown);
+      window.document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen]);
+
+  const selectIndex = (index: number) => {
+    const option = FONT_OPTIONS[index];
+    if (option === undefined) return;
+    onChange(option.value);
+    setIsOpen(false);
+  };
+
+  return (
+    <div ref={rootRef} className="theme-font-select">
+      <button
+        type="button"
+        className="theme-font-select__trigger"
+        aria-controls={listboxId}
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((open) => !open)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setIsOpen(true);
+          }
+        }}
+      >
+        <span>{selectedOption.label}</span>
+        <i aria-hidden="true" />
+      </button>
+      {isOpen ? (
+        <div id={listboxId} className="theme-font-select__menu" role="listbox">
+          {FONT_OPTIONS.map((option, index) => (
+            <button
+              key={option.label}
+              type="button"
+              role="option"
+              aria-selected={index === selectedIndex}
+              onClick={() => selectIndex(index)}
+              onKeyDown={(event) => {
+                let nextIndex: number | null = null;
+                if (event.key === "ArrowDown")
+                  nextIndex = (index + 1) % FONT_OPTIONS.length;
+                if (event.key === "ArrowUp") {
+                  nextIndex = (index - 1 + FONT_OPTIONS.length) % FONT_OPTIONS.length;
+                }
+                if (event.key === "Home") nextIndex = 0;
+                if (event.key === "End") nextIndex = FONT_OPTIONS.length - 1;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectIndex(index);
+                  return;
+                }
+                if (nextIndex === null) return;
+                event.preventDefault();
+                const optionButtons =
+                  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                    '[role="option"]',
+                  );
+                optionButtons?.[nextIndex]?.focus();
+              }}
+            >
+              <span>{option.label}</span>
+              {index === selectedIndex ? <span aria-hidden="true">✓</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -548,7 +682,7 @@ function handleRadioKeyDown<T extends string>(
 }
 
 interface TypographyChoiceProps {
-  label: "Line" | "Spacing" | "Margin";
+  label: "Line height" | "Spacing" | "Margin";
   onChange: (value: number) => void;
   options: readonly number[];
   value: number;
