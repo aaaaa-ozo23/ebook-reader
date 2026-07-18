@@ -2,6 +2,7 @@ mod backup;
 mod batch_import;
 mod db;
 mod file_open;
+mod mobi;
 mod updater;
 
 use tauri::{Emitter, Manager};
