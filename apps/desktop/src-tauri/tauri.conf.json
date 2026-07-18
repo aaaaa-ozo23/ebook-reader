@@ -30,6 +30,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
+    "externalBin": ["binaries/mobitool"],
     "publisher": "Ebook Reader Contributors",
     "fileAssociations": [
       {

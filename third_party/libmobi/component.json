@@ -1,0 +1,21 @@
+{
+  "name": "libmobi mobitool",
+  "version": "0.12",
+  "license": "LGPL-3.0-or-later",
+  "sourceUrl": "https://github.com/bfabiszewski/libmobi/releases/download/v0.12/libmobi-0.12.tar.gz",
+  "sourceSha256": "9A6FB2C56B916F8FA8B15E0C71008D908109508C944EA1D297881D4E277BF7E7",
+  "signatureUrl": "https://github.com/bfabiszewski/libmobi/releases/download/v0.12/libmobi-0.12.tar.gz.asc",
+  "primaryFingerprint": "B1ED40082AF2D620370827C6734EF933CD41675C",
+  "signingFingerprint": "DCBC81C5A4AC9C873F6FEA7F5C7E8917C4315322",
+  "sourceDateEpoch": 1718607591,
+  "target": "x86_64-pc-windows-msvc",
+  "binaryBytes": 296129,
+  "binarySha256": "438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1",
+  "build": {
+    "compiler": "gcc (MinGW) 8.1.0",
+    "encryption": false,
+    "shared": false,
+    "zlib": "bundled-miniz",
+    "xml": "bundled-xmlwriter"
+  }
+}
