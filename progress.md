@@ -2090,3 +2090,13 @@
 - **EPUB 根因修复：** iframe 页内 underline click handler 之前捕获旧 annotations 数组；现以最新 callback ref 与复合 annotation signature 同步，同一 CFI 多条 note 新增后无需离开页面即可读到。Saved notes 和 Notes 侧栏均有内部纵向滚动、鼠标滚轮与长文本完整换行。
 - **回归证据：** desktop 24 files / 176 Vitest；core 8 tests；Playwright 26/26（含 DPR2、375/640/900/1280、axe、reduced-motion）；Rust 51/51；Cargo fmt、production build、`git diff --check` 全部通过。
 - **边界：** 未改变 EPUB/TXT/PDF 范围、reader lazy boundary、版本号、schema、依赖或发布状态；Browser 隔离页验证真实 Vite 空书架与无横向溢出，带书数据由仓库生成 fixture 负责。
+
+## 2026-07-18 大阶段 13.x：Page view 设置入口统一
+
+- **状态：** complete；分支 `codex/stage13-page-view-settings-only` 从已合入 UI fidelity 的 `codex/v0.2.0-integration` 创建。
+- **目标：** TXT、EPUB、PDF 的 Single/Double 仅允许在 Theme / Reading Settings 的 Page view 中切换；阅读舞台底部只保留 Previous/Next、位置/进度、页码和 PDF 缩放等阅读导航。
+- **边界：** 复用既有 reader experience preferences、持久化 handler 和 format adapter prop 同步，不新增 schema、依赖、格式或版本变更；完成后执行 app 构建。
+- **完成内容：** 已移除共享 TXT/EPUB 与 PDF 独立舞台 toggle，清理失效 props/state/CSS；三格式继续由 `ReaderThemePanel` 的 Page view 更新父状态并同步 adapter，reader lazy boundary 不变。
+- **运行态验收：** Browser 实页检查通过；Playwright 26/26 覆盖 TXT、EPUB、PDF 的 Settings-only 切换、1280/900/640/375、DPR2、reduced-motion 与 axe serious/critical。Windows 下 Playwright 完成断言后临时 Vite 子进程未释放输出句柄，外层命令超时，但 26 个用例均输出通过标记且无失败上下文。
+- **代码门禁：** `pnpm.cmd check` 通过（24 files / 176 Vitest），Cargo fmt 通过，Rust 51/51 通过，reader chunk 为 195.91 kB（gzip 56.08 kB）。
+- **应用构建：** release EXE、NSIS 与 MSI 均于 2026-07-18 重新生成；WiX ICE 在受限环境无法访问 Windows Installer Service，使用同一构建命令在允许系统服务访问的环境重试后 MSI 成功。产物位于 `apps/desktop/src-tauri/target/release/` 与其 `bundle/nsis`、`bundle/msi` 子目录。

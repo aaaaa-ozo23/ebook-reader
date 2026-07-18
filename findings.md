@@ -709,3 +709,15 @@
 - **视觉对照：** Notes/Search 从大按钮和横向分栏收敛为批准稿的单列密集层级；font dropdown 使用受控圆角 listbox；移动 settings 打开后从 Theme 起始且 Reset 位于控制组尾部；pagination 主胶囊与 Single/Double 不再混成一组。完整差异表见 `docs/design/v0.2/stage13-ui-fidelity-followup.md`。
 - **Browser 能力边界：** 隔离 Browser 成功验证真实 Vite 页面身份、空书架 DOM 与布局；浏览器环境无法完成 Tauri 原生文件选择（返回 Import canceled），因此三格式、批注和滚轮状态由项目 Playwright 生成 fixture 验证，没有伪造原生导入成功。
 - **最终门禁：** `pnpm.cmd check`、Playwright 26/26、Cargo fmt、Rust 51/51、`git diff --check` 全部通过；没有新增 schema、依赖、格式或版本变更。
+
+## 2026-07-18 Page view 设置入口统一
+
+- **重复入口：** TXT 与 EPUB 通过共享 `PaginatedReaderControls` 在阅读舞台渲染 Single/Double；PDF 在自己的 navigation row 中另渲染同名 toggle。三者同时已由 `ReaderThemePanel` 的 Page view radiogroup 控制，因此舞台入口属于重复 UI。
+- **状态所有权：** `ReaderShell` 已持有 EPUB spread state 与 TXT/PDF persisted reader experience preferences。Settings 的 change handler 会更新父状态，EPUB effect、TXT layout signature 与 PDF `viewMode` effect 都会把新值同步到各自 adapter/分页器，不需要在阅读舞台保留第二套 handler 或本地状态。
+- **Browser 运行态：** 隔离 Browser 在 `127.0.0.1:1420` 验证页面标题、真实空书架、Grid→List pressed 状态、1280 px 无横向溢出、framework overlay=false、console warn/error=0。隔离书库为 0 books，无法进入分页 reader，三格式目标状态继续由生成 fixture 的仓库 Playwright 验证。
+- **过程错误：** 一次 PowerShell `rg` 搜索把正则中的 `|` 误解释为管道并退出；后续改为单引号/简化 pattern，未影响代码或验证结果。
+- **测试迁移错误：** 首轮三格式 Playwright 中 TXT 仍保留旧的 `TXT page view` 舞台 group 断言而失败，EPUB/PDF 已通过；该断言已改为 Settings 的 `Page view` radiogroup，并显式验证面板关闭后舞台 Single/Double 数量为 0。
+- **移动测试状态：** 首轮全量 Playwright 25/26；500 页 PDF 到 375 px 时目录抽屉仍打开，拦截测试助手对 Theme 的点击。设置助手现先检测并通过 `Close contents` 关闭可见抽屉，再进入 Reading Settings；这是测试路径状态修正，不是产品交互绕过。
+- **同名关闭入口：** 移动目录同时渲染 backdrop 与面板内两个 `Close contents` 按钮，不能用按钮数量判断是否打开；backdrop 位于 sidebar 下层也不适合作为此状态下的点击目标。最终助手只在 sidebar 的 computed `position` 为 `fixed` 时点击面板内关闭按钮并等待隐藏，避免误关 desktop/640 px 常驻侧栏。
+- **构建环境：** Tauri 首次双目标构建已生成 release EXE 与 NSIS，但 WiX `light.exe` 的 ICE01–ICE09 因受限环境无法访问正在运行的 Windows Installer Service 而失败；同一 MSI 命令在允许服务访问的环境执行后成功，说明不是应用代码、WXS 或依赖编译错误。
+- **完成结论：** TXT/EPUB/PDF 阅读舞台均不再渲染 Single/Double，唯一入口为 Theme / Reading Settings 的 Page view；Settings 的既有父状态和 adapter 同步仍负责布局切换与持久化。176 Vitest、26 Playwright、51 Rust tests、Cargo fmt、NSIS/MSI 构建通过。
