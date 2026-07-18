@@ -1,5 +1,38 @@
 # 进度日志
 
+## 2026-07-19 大阶段 14.2：MOBI/AZW3 转换原型
+
+### 状态
+- **当前状态：** implementation_complete
+- **当前分支：** `codex/stage14-mobi-conversion-spike`
+- **基线：** v0.3 integration `be6a63c`
+
+### 已执行
+- 14.1 三类提交已推送，并以 `--no-ff` 合入/推送 `codex/v0.3.0-integration`。
+- 创建 14.2 分支；审计现有 operation registry、batch-import progress 和 ZIP 安全边界。
+- 使用上游 hybrid fixture 实测 bundled sidecar，确认默认 KF8 转换会生成单个有效 EPUB 候选。
+- 已实现不写数据库/正式书库的 `MobiConversionService`、DRM preflight、独立 staging、取消/超时、子进程清理和 EPUB ZIP/OPF 安全验证。
+- 8 项定向 Rust 测试全部通过；可重复测量确认三个 fixture 为 53–181 ms、峰值 working set 3.19–5.89 MB，scratch 成功清理。
+
+### 遇到的错误
+- 首轮 7 项定向 Rust 测试有 3 项失败：PalmDOC DRM v1 fixture 使用旧式 `TEXtREAd` type/creator，预检在读取 encryption type 前误报格式；Windows `canonicalize()` 又生成 MinGW `mobitool` 无法解析的 `\\?\` 路径。修正为同时识别只用于预检的 `BOOKMOBI`/`TEXtREAd`，仍以 encryption type 拒绝 DRM；安全边界继续使用 canonical path，仅在无 shell 的 sidecar 参数边界去除 verbatim 前缀。
+- 第二轮 7 项定向测试只剩 Unicode 断言失败：上游 `sample-unicode-uncompressed.mobi` 虽声明 UTF-8，但正文恰好全为 ASCII。测试改为在临时副本中对 hybrid 两个 rendition 做等长 UTF-8 中文替换，再验证派生 EPUB 保留 `中文测试`；不修改上游 fixture 或引入来源不明样本。
+- 首次新增 duplicate ZIP 测试时，`zip` writer 自身拒绝写同名 entry；改为先写等长不同名，再只在测试产物的 local/central directory 中等长替换成重复名，以实际验证后端 duplicate 检查。首次性能脚本的 `Start-Process` 对象在 `WaitForExit` 后未刷新，`ExitCode` 仍为空；进程实际已成功生成 EPUB，脚本增加 `Refresh()` 后再读取退出码。
+- 第二次 duplicate 产物由 `ZipArchive` 在构造阶段直接以 `Duplicate filename` 拒绝，属于预期安全拒绝但错误链位于 anyhow source；断言改为检查完整错误链。性能脚本第二次仍因 Windows `Start-Process` 未保留原生 handle 而读不到 exit code；启动后立即访问 `Handle`，确保进程退出状态和峰值内存可读取。
+- `Start-Process` 在当前 PowerShell/重定向组合下即使访问 handle 仍不提供 `ExitCode`；性能测量改用显式 `System.Diagnostics.ProcessStartInfo`，关闭 shell、独立传入已引号路径并重定向标准流，继续轮询真实 `PeakWorkingSet64`。
+- 14.2 首轮仓库 `pnpm.cmd check` 在 ESLint 停止：14.1 verifier 顶部遗留了未使用的 `process` global 声明，脚本实际没有读取环境变量。删除该多余声明后重跑，不改变 sidecar 验证逻辑。
+- 第二轮 `pnpm.cmd check` 通过 ESLint 后在 Prettier 检出 `package.json` 与 14.1 verifier 的机械格式差异；使用仓库锁定的本地 Prettier 只格式化这两个文件后继续。
+- 文档提交前 `git diff --cached --check` 检出报告头两行的 Markdown 尾空格；首次命令使用分号仍继续创建了提交，随即删除尾空格、重新执行严格检查并 amend，同一提交最终无 whitespace 错误。
+
+### 待执行
+- 完成三类提交和阶段合并；随后只产出 14.3 四组 UI 状态板并等待用户审核。
+
+### 阶段结果
+- **结论：** go；`MobiConversionService` 保持内部原型边界，不写数据库或正式 library。
+- **功能证据：** 8 项转换专项通过，覆盖 MOBI/AZW3、hybrid KF8、中文 UTF-8、图片/NCX/OPF、DRM、取消、超时、converter 非零退出、重复 ZIP、压缩炸弹和清理。
+- **仓库门禁：** `pnpm.cmd check` 通过（core 8 / desktop 176）；Cargo fmt 与 Rust 59/59 通过；sidecar hash/无 encryption、license audit（291 JS / 529 Cargo / 1 bundled）、release security 和 `git diff --check` 通过。
+- **资源证据：** 三个上游合成 fixture 为 53–181 ms、3,194,880–5,885,952 bytes peak working set；完整记录见 `docs/architecture/mobi-conversion-spike.md`。
+
 ## 2026-07-19 大阶段 14.1：MOBI/AZW3 决策
 
 ### 状态

@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.1 MOBI/AZW3 决策：implementation complete，等待阶段提交/合并。libmobi v0.12 来源、签名、可重复 Windows x64 sidecar、LGPL 分发、DRM 拒绝、NSIS/MSI 体积和完整自动化门禁均通过，结论为 go；合入后进入 14.2 隔离转换原型。
+大阶段 14.2 MOBI/AZW3 转换原型：implementation complete，等待阶段提交/合并。隔离 preflight、真实 MOBI/AZW3 转换、中文/图片/目录、DRM 预拒绝、取消/超时、EPUB 攻击验证、清理与资源测量均通过，结论为 go；合入后先产出 14.3 四组 UI 状态板并等待审核。
 
 ## 分支策略
 
@@ -525,7 +525,7 @@
 | 小阶段 | 分支 | 工作内容 | 验收 |
 |--------|------|----------|------|
 | 14.1 MOBI/AZW3 决策 | `codex/stage14-mobi-azw3-evaluation` | 比较 Calibre/KindleUnpack/其他转换器的许可、体积、离线性、DRM 边界和分发方式 | 输出 go/no-go；DRM 文件明确拒绝；未过许可/体积门槛不进入实现 |
-| 14.2 转换原型 | `codex/stage14-mobi-conversion-spike` | 在隔离临时目录将无 DRM 样本转换为 EPUB，验证元数据、目录、图片、编码和清理 | 转换失败不污染书库；进程取消/超时/残留清理通过；记录安装包增量 |
+| 14.2 转换原型（complete） | `codex/stage14-mobi-conversion-spike` | 在隔离临时目录将无 DRM 样本转换为 EPUB，验证元数据、目录、图片、编码和清理 | 8 项转换专项、Rust 59/59、core 8、desktop 176、许可证/sidecar/release security 通过；失败、取消、超时无残留；资源与包增量已记录 |
 | 14.3 MOBI/AZW3 导入 | `codex/stage14-mobi-import` | 仅在 14.1/14.2 go 后接入导入、转换进度、去重和错误反馈，内部继续走 EPUB adapter | 原文件保留；转换产物可追踪/删除；书库、文件关联、备份和许可证清单通过 |
 | 14.4 自定义字体 | `codex/stage14-custom-fonts` | 导入本地字体、校验许可提示/格式、管理启停并映射到 TXT/EPUB | 损坏字体不影响启动；卸载字体有回退；PDF 不承诺替换文档字体 |
 | 14.5 全书库全文检索 | `codex/stage14-library-search-index` | 建立可失效本地索引、后台队列、搜索结果和跳转；不上传内容 | 导入/删除/修复触发增量索引；大书库搜索可取消；索引损坏可重建 |
