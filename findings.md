@@ -733,3 +733,4 @@
 - **隔离替代证据：** 最终 NSIS 实际安装的 EXE 为 0.2.0；NSIS `installer.nsi` 只有主 EXE `File` 指令，MSI administrative image 也只有 0.2.0 主 EXE。再以仓库既有独立 identifier `com.ebookreader.desktop.updater-test` 启动同源 0.2.0 release binary，所有用户内容表与 managed book files 均为 0。因此发布包不携带测试数据库/书籍，fresh identifier 初始化为空。
 - **诊断错误：** 尝试同时重定向 `USERPROFILE` 与 AppData 启动时 Windows 返回 access denied；该方法未继续重试，改用仓库既有独立 identifier，避免修改 Known Folder 注册表或真实用户目录。
 - **Playwright 清理：** publication 最终套件 26 个项目全部显示通过点；与既有记录一致，Playwright 完成后 Windows Vite 子进程未释放输出句柄导致外层超时。此清理问题不改变 26/26 断言结果，未生成失败上下文。
+- **Release 草稿：** 内置侧边浏览器已将正式说明与 11 个最终产物保存到 GitHub draft；页面确认 `Latest` 被选中且提示 tag 将在发布时从 `release/v0.2.0` 创建。草稿只完成可逆准备，离线备份未确认前不创建/推送 tag，也不公开 Release。

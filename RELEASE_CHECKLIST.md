@@ -71,6 +71,7 @@ must have current-run evidence; draft artifacts alone do not authorize a tag or 
 
 - [x] Final artifacts are regenerated from the current publication source and pass security/schema verification.
 - [x] Isolated clean launch reports version `0.2.0`, zero books, and zero managed library book files.
+- [x] GitHub draft targets `release/v0.2.0`, is marked Latest, and contains all 11 final assets.
 - [ ] Updater private key offline-backup confirmation is recorded without exposing its location or contents.
 - [ ] `v0.2.0` tag targets the accepted publication commit and is pushed.
 - [ ] GitHub Release `Ebook Reader v0.2.0` is public, non-prerelease, and marked Latest.

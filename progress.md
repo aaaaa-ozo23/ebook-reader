@@ -2112,3 +2112,4 @@
 - **空状态证明：** 同一 source 的 0.2.0 release binary 以独立 `com.ebookreader.desktop.updater-test` 标识首次启动，事前 app-data 不存在；启动后 `books=0`、`bookmarks=0`、`annotations=0`、`reading_progress=0`、`book_user_metadata=0`、managed library book files=0，进程随后停止。真实 `%APPDATA%\com.ebookreader.desktop` 未删除或覆盖。
 - **密钥权限：** 沙箱外只读 ACL 复核 owner/唯一显式 allow 均为当前用户 `许涵予\许涵予xhy`，未读取或输出私钥内容；离线备份仍等待维护者确认。
 - **最终 E2E：** publication source Playwright 26/26 全部输出通过标记，覆盖 1280/900/640/375、DPR2、reduced-motion、axe 与独立 500 页 PDF；Windows 临时 Vite 子进程继续在断言结束后占用输出句柄，外层 360 秒超时，但没有失败用例或 error context。
+- **GitHub 草稿：** 已通过内置侧边浏览器创建 `Ebook Reader v0.2.0` draft，目标为 `release/v0.2.0`、标签候选为 `v0.2.0`、Latest 已选中；最终 11 个附件全部上传并保存。当前未创建 tag、未点击 Publish，继续等待 updater 私钥离线备份人工确认。
