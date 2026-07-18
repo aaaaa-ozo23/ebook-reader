@@ -21,7 +21,6 @@ import {
   type EpubLocator,
   type Locator,
   type PdfLocator,
-  type PdfPaginatedViewMode,
   type PageTransitionMode,
   type ReaderProgress,
   type ReaderTheme,
@@ -50,7 +49,6 @@ import {
   type EpubPosition,
   type EpubProgressPreview,
   type EpubSpreadMode,
-  type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
 import {
   nextPdfSpreadStart,
@@ -253,7 +251,6 @@ export interface TxtReaderContentProps {
   onActiveChapterChange: (chapterId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
-  onPaginatedViewModeChange: (mode: TxtPaginatedViewMode) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onRetry: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
@@ -631,7 +628,6 @@ function TxtPaginatedReaderContent({
   onActiveChapterChange,
   onAnnotationActivate,
   onNavigationActionsChange,
-  onPaginatedViewModeChange,
   onProgressChange,
   onRetry,
   onSelectionChange,
@@ -1108,24 +1104,6 @@ function TxtPaginatedReaderContent({
     return () => onNavigationActionsChange(null);
   }, [movePage, onNavigationActionsChange]);
 
-  const handleSpreadModeChange = useCallback(
-    (mode: TxtSpreadMode) => {
-      pendingTransitionPageRef.current = null;
-      pendingTargetSnapshotRef.current = null;
-      if (pendingProgressTimerRef.current !== null) {
-        window.clearTimeout(pendingProgressTimerRef.current);
-        pendingProgressTimerRef.current = null;
-        scheduledProgressPageRef.current = null;
-      }
-      transitionControllerRef.current?.cancel();
-      const activePage = pages[committedPageIndexRef.current];
-      if (activePage !== undefined) {
-        currentAnchorRef.current = activePage.startCharOffset;
-      }
-      onPaginatedViewModeChange(mode);
-    },
-    [onPaginatedViewModeChange, pages],
-  );
   const commitPageInput = useCallback(() => {
     const pageNumber = Number.parseInt(pageInput, 10);
     if (!Number.isFinite(pageNumber) || pages.length === 0) {
@@ -1235,11 +1213,6 @@ function TxtPaginatedReaderContent({
       : spreadSize === 2 && spreadEnd > spreadStart + 1
         ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pageTotalLabel}${calculationLabel}`
         : `Page ${spreadStart + 1} / ${pageTotalLabel}${calculationLabel}`;
-  const spreadDescription =
-    requestedSpreadMode === "double" && renderedSpreadMode === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       ref={viewportRef}
@@ -1280,7 +1253,6 @@ function TxtPaginatedReaderContent({
         onProgressChange={handleProgressPreview}
         onProgressCommit={commitProgress}
         onProgressStart={() => setIsDraggingProgress(true)}
-        onSpreadModeChange={handleSpreadModeChange}
         pageFieldLabel="Page"
         pageInputAriaLabel="TXT page number"
         pageInputDisabled={pages.length === 0}
@@ -1294,9 +1266,6 @@ function TxtPaginatedReaderContent({
         progressLabel={`${progressPercent}%`}
         progressTooltip={`${positionLabel} · ${progressPercent}%`}
         progressValue={progressValue}
-        requestedSpreadMode={requestedSpreadMode}
-        spreadAriaLabel="TXT page view"
-        spreadModeDescription={spreadDescription}
       />
     </section>
   );
@@ -1321,7 +1290,6 @@ export interface EpubReaderContentProps {
   onSelectionCleared: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
-  onSpreadModeChange: (mode: EpubSpreadMode) => void;
   onTocChange: (items: TocItem[]) => void;
 }
 
@@ -1344,7 +1312,6 @@ export function EpubReaderContent({
   onSelectionCleared,
   onSelectionChange,
   onSearchProviderChange,
-  onSpreadModeChange,
   onTocChange,
 }: EpubReaderContentProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -1376,12 +1343,6 @@ export function EpubReaderContent({
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
   );
-  const [spreadState, setSpreadState] = useState<EpubSpreadState>({
-    requested: "single",
-    rendered: "single",
-    canRenderDouble: false,
-  });
-
   useEffect(() => {
     tocItemsRef.current = tocItems;
   }, [tocItems]);
@@ -1407,10 +1368,7 @@ export function EpubReaderContent({
   useEffect(() => {
     requestedSpreadModeRef.current = requestedSpreadMode;
     transitionControllerRef.current?.cancel();
-    const nextSpreadState = adapterRef.current?.setSpreadMode(requestedSpreadMode);
-    if (nextSpreadState !== undefined) {
-      setSpreadState(nextSpreadState);
-    }
+    adapterRef.current?.setSpreadMode(requestedSpreadMode);
   }, [requestedSpreadMode]);
 
   useEffect(() => {
@@ -1602,11 +1560,6 @@ export function EpubReaderContent({
       setPosition(null);
       setPreviewPosition(null);
       setLocationInput("1");
-      setSpreadState({
-        requested: requestedSpreadModeRef.current,
-        rendered: "single",
-        canRenderDouble: false,
-      });
       onTocChange([]);
 
       try {
@@ -1686,13 +1639,12 @@ export function EpubReaderContent({
               ...getSelectionMenuAnchor(selection.anchorRect),
             });
           },
-          onSpreadChange: setSpreadState,
         });
         openedAdapter = adapter;
         adapterRef.current = adapter;
 
         await adapter.open(book.id);
-        setSpreadState(adapter.setSpreadMode(requestedSpreadModeRef.current));
+        adapter.setSpreadMode(requestedSpreadModeRef.current);
         onSearchProviderChange(
           (searchQuery) =>
             adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
@@ -1892,19 +1844,6 @@ export function EpubReaderContent({
     };
   }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
-  const handleSpreadModeChange = useCallback(
-    (mode: EpubSpreadMode) => {
-      transitionControllerRef.current?.cancel();
-      onSpreadModeChange(mode);
-      const nextSpreadState = adapterRef.current?.setSpreadMode(mode);
-
-      if (nextSpreadState !== undefined) {
-        setSpreadState(nextSpreadState);
-      }
-    },
-    [onSpreadModeChange],
-  );
-
   const handleProgressPreview = useCallback(
     (value: string) => {
       const adapter = adapterRef.current;
@@ -2011,11 +1950,6 @@ export function EpubReaderContent({
     activeProgress !== null
       ? (findTocItemByHref(tocItems, activeProgress.locator.href)?.title ?? book.title)
       : book.title;
-  const spreadModeDescription =
-    requestedSpreadMode === "double" && spreadState.rendered === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       className="reader-viewport reader-viewport--epub"
@@ -2072,7 +2006,6 @@ export function EpubReaderContent({
             isDraggingProgressRef.current = true;
             setIsDraggingProgress(true);
           }}
-          onSpreadModeChange={handleSpreadModeChange}
           pageFieldLabel="Location"
           pageInputAriaLabel="EPUB location number"
           pageInputDisabled={!locationsReady}
@@ -2091,9 +2024,6 @@ export function EpubReaderContent({
               : `Page ${activeProgress.publicationPageLabel}`
           }
           progressValue={sliderValue}
-          requestedSpreadMode={requestedSpreadMode}
-          spreadAriaLabel="EPUB page view"
-          spreadModeDescription={spreadModeDescription}
         />
       </article>
       <EpubImageViewer
@@ -2111,7 +2041,6 @@ export interface PdfReaderContentProps {
   book: Book;
   isPageCurlBlocked: boolean;
   jumpRequest: PdfJumpRequest | null;
-  paginatedViewMode: PdfPaginatedViewMode;
   theme: ReaderTheme;
   tocItems: TocItem[];
   transition: PageTransitionMode;
@@ -2121,7 +2050,6 @@ export interface PdfReaderContentProps {
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
-  onPaginatedViewModeChange: (mode: PdfPaginatedViewMode) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
@@ -2132,7 +2060,6 @@ export function PdfReaderContent({
   book,
   isPageCurlBlocked,
   jumpRequest,
-  paginatedViewMode,
   theme,
   tocItems,
   transition,
@@ -2142,7 +2069,6 @@ export function PdfReaderContent({
   onBackToLibrary,
   onCurrentLocatorChange,
   onNavigationActionsChange,
-  onPaginatedViewModeChange,
   onSelectionChange,
   onSearchProviderChange,
   onTocChange,
@@ -2744,17 +2670,6 @@ export function PdfReaderContent({
     };
   }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
-  const handleViewModeChange = useCallback(
-    (mode: PdfPaginatedViewMode) => {
-      requestedViewModeRef.current = mode;
-      onPaginatedViewModeChange(mode);
-      runPdfAction((adapter) =>
-        adapter.setViewMode(mode, frameRef.current?.clientWidth),
-      );
-    },
-    [onPaginatedViewModeChange, runPdfAction],
-  );
-
   const handleZoomOut = useCallback(() => {
     runPdfAction((adapter) => adapter.setZoom((positionRef.current?.scale ?? 1) - 0.1));
   }, [runPdfAction]);
@@ -2864,11 +2779,6 @@ export function PdfReaderContent({
   const progressControlStyle = {
     "--epub-progress-percent": `${(activeProgress?.progression ?? 0) * 100}%`,
   } as CSSProperties;
-  const renderedModeDescription =
-    viewMode === "double" && position?.renderedMode === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       className="reader-viewport reader-viewport--pdf"
@@ -2956,31 +2866,6 @@ export function PdfReaderContent({
             <button type="button" className="reader-tool-button" onClick={handleNext}>
               Next
             </button>
-            <div
-              className="reader-epub-mode-toggle reader-pdf-mode-toggle"
-              role="group"
-              aria-label="PDF page view"
-              title={renderedModeDescription}
-            >
-              <button
-                type="button"
-                aria-pressed={
-                  viewMode !== "continuous" && paginatedViewMode === "single"
-                }
-                onClick={() => handleViewModeChange("single")}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                aria-pressed={
-                  viewMode !== "continuous" && paginatedViewMode === "double"
-                }
-                onClick={() => handleViewModeChange("double")}
-              >
-                Double
-              </button>
-            </div>
           </div>
           <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
             <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">

@@ -1295,13 +1295,15 @@ describe("App", () => {
         },
       }),
     );
-    expect(await screen.findByRole("group", { name: "TXT page view" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const pageViewGroup = screen.getByRole("radiogroup", { name: "Page view" });
+    expect(
+      screen.queryByRole("group", { name: "TXT page view" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /single/i }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    await user.click(screen.getByRole("button", { name: "Double" }));
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /double/i }));
     expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         txt: {
@@ -1315,10 +1317,9 @@ describe("App", () => {
       within(readingModeGroup).getByRole("radio", { name: "Continuous" }),
     );
     await user.click(within(readingModeGroup).getByRole("radio", { name: "Smooth" }));
-    expect(await screen.findByRole("button", { name: "Double" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /double/i }),
+    ).toHaveAttribute("aria-checked", "true");
   });
 
   it("navigates cached TXT pages with one progress commit per transaction", async () => {
@@ -2747,7 +2748,7 @@ describe("App", () => {
     expect(epubAdapterGoToProgressMock).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles EPUB single and double page view through the adapter", async () => {
+  it("toggles EPUB single and double page view only through reading settings", async () => {
     const user = userEvent.setup();
     const epubBook = createBook({
       id: "epub-spread",
@@ -2763,19 +2764,23 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
 
-    await user.click(screen.getByRole("button", { name: "Double" }));
+    expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    const pageViewGroup = screen.getByRole("radiogroup", { name: "Page view" });
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /double/i }));
     expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("double");
-    expect(screen.getByRole("button", { name: "Double" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /double/i }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    await user.click(screen.getByRole("button", { name: "Single" }));
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /single/i }));
     expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("single");
-    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /single/i }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("button", { name: "Close reading settings" }));
+    expect(screen.queryByRole("button", { name: "Single" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
   });
 
   it("opens EPUB images in a modal viewer and restores iframe focus", async () => {
@@ -2885,7 +2890,15 @@ describe("App", () => {
 
     expect(await screen.findByText("Page 1 / 3")).toBeVisible();
 
-    await user.click(within(reader).getByRole("button", { name: "Double" }));
+    expect(
+      within(reader).queryByRole("button", { name: "Double" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    const pdfPageViewGroup = screen.getByRole("radiogroup", {
+      name: "Page view",
+    });
+    await user.click(within(pdfPageViewGroup).getByRole("radio", { name: /double/i }));
+    await user.click(screen.getByRole("button", { name: "Close reading settings" }));
     expect(pdfAdapterSetViewModeMock).toHaveBeenCalledWith("double", 1100);
     await waitFor(() => expect(screen.getByText("Page 1 / 3")).toBeVisible());
 

@@ -502,6 +502,7 @@
 | 13.8 发布安全与签名（complete） | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
 | 13.9 v0.2 发布候选（repository complete；native acceptance pending） | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | 自动化与 draft artifacts 已通过；隔离 updater smoke、安装矩阵和离线密钥备份保持显式未完成，发布需用户明确授权后执行 |
 | 13.x UI fidelity / EPUB 批注修复（complete） | `codex/stage13-ui-fidelity-followup` | 对照批准稿收口 Notes/Search、选区/书签、主题/分页控件，并修复 EPUB 多 Note 即时刷新与长列表滚动 | 13 张用户证据逐项关闭；176 desktop Vitest、26 Playwright、51 Rust tests、Browser 空书架实页检查与最终截图目检全部通过 |
+| 13.x Page view 设置入口统一（complete） | `codex/stage13-page-view-settings-only` | 移除 TXT/EPUB/PDF 阅读舞台上的 Single/Double，所有分页单双页切换只保留在 Reading Settings 的 Page view | 176 Vitest、26 Playwright、51 Rust tests、Cargo fmt 与 NSIS/MSI 应用构建通过 |
 
 ### 阶段 13.1/13.2 设计评审前置记录
 

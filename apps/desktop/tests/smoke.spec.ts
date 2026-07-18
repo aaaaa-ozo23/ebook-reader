@@ -579,8 +579,10 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
       );
   });
   await txtReadingModes.getByRole("radio", { name: "None" }).click();
-  await expect(page.getByRole("group", { name: "TXT page view" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Page view" })).toBeVisible();
   await page.getByRole("button", { name: "Theme" }).click();
+  await expect(page.getByRole("button", { name: "Single" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Double" })).toHaveCount(0);
   const txtViewport = page.getByLabel("长篇样本 content");
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
   await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
@@ -660,7 +662,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
       .locator(".reader-txt-page-window")
       .getAttribute("data-rendered-page-count"),
   ).toBe("2");
-  await page.getByRole("button", { name: "Double" }).click();
+  await setReaderPageView(page, "Double");
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "calculating");
   await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready");
@@ -740,13 +742,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   );
   await page.setViewportSize({ width: 640, height: 640 });
   await expect(page.locator(".reader-txt-page-window--single")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(
-    page.getByText("Double view will resume when the window is wide enough."),
-  ).toBeVisible();
+  await expectReaderPageView(page, "Double");
   await page.setViewportSize({ width: 1280, height: 720 });
   await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
   await expectNoSeriousAccessibilityViolations(page);
@@ -758,10 +754,7 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await txtReadingModes.getByRole("radio", { name: "Smooth" }).click();
   await page.getByRole("button", { name: "Theme" }).click();
   await expect(page.locator(".reader-txt-page-window--double")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectReaderPageView(page, "Double");
   await page.getByRole("button", { name: "Theme" }).click();
   await txtReadingModes.getByRole("radio", { name: "Continuous" }).click();
   await page.getByRole("button", { name: "Theme" }).click();
@@ -893,12 +886,9 @@ test("opens a seeded TXT reader without rendering the whole document", async ({
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
     timeout: 20_000,
   });
-  await page.getByRole("button", { name: "Double" }).click();
+  await setReaderPageView(page, "Double");
   await expect(page.locator(".reader-txt-page-window--single")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expectReaderPageView(page, "Double");
   await expect(txtViewport).toHaveAttribute("data-pagination-state", "ready", {
     timeout: 20_000,
   });
@@ -1558,11 +1548,7 @@ test("opens a generated EPUB reader and uses contents and theme controls", async
   await expect(epubLocationInput).toHaveValue(String(totalLocations));
   await expect(page.getByText("100%").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Double" }).click();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await setReaderPageView(page, "Double");
   await expect(page.locator(".reader-epub-host iframe")).toBeVisible();
 
   const epubIframe = page.locator(".reader-epub-host iframe");
@@ -2012,11 +1998,7 @@ test("opens a generated PDF reader and uses page and zoom controls", async ({
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
   await page.getByRole("button", { name: "Contents", exact: true }).click();
-  await page.getByRole("button", { name: "Double" }).click();
-  await expect(page.getByRole("button", { name: "Double" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await setReaderPageView(page, "Double");
   await expect(page.getByText("Page 1 / 3")).toBeVisible();
 
   await page.getByRole("button", { name: "Fit width" }).click();
@@ -2343,7 +2325,7 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   await smoothMode.click();
   await page.keyboard.press("Escape");
   await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible();
-  await page.getByRole("button", { name: "Single" }).click();
+  await setReaderPageView(page, "Single");
   await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
   await pageInput.fill("10");
   await pageInput.press("Enter");
@@ -2353,7 +2335,7 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     .poll(() => page.locator(".reader-pdf-canvas").count())
     .toBeLessThanOrEqual(3);
 
-  await page.getByRole("button", { name: "Double" }).click();
+  await setReaderPageView(page, "Double");
   await expect(page.locator(".reader-pdf-paginated-window--double")).toBeVisible();
   const currentDoubleSurfaces = page.locator(
     '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface',
@@ -2505,9 +2487,7 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   }
 
   await page.setViewportSize({ width: 375, height: 760 });
-  await expect(
-    page.getByRole("button", { name: "Double", includeHidden: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expectReaderPageView(page, "Double");
   await expect(page.locator(".reader-pdf-paginated-window--single")).toBeVisible();
   const currentMobileSurface = page.locator(
     '.reader-pdf-spread[data-window-state="current"] .reader-pdf-page-surface[data-page-number="10"]',
@@ -2537,9 +2517,7 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("main", { name: "PDF reader" })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Double", includeHidden: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expectReaderPageView(page, "Double");
   expect(
     consoleIssues.filter(
       (issue) =>
@@ -2547,6 +2525,47 @@ test("virtualizes a generated 500-page PDF and preserves bounded page surfaces",
     ),
   ).toEqual([]);
 });
+
+async function setReaderPageView(page: Page, mode: "Single" | "Double"): Promise<void> {
+  await closeMobileContentsIfOpen(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+  const pageView = page.getByRole("radiogroup", { name: "Page view" });
+  await pageView.getByRole("radio", { name: new RegExp(mode, "i") }).click();
+  await page.getByRole("button", { name: "Close reading settings" }).click();
+  await expect(page.getByRole("button", { name: mode, exact: true })).toHaveCount(0);
+}
+
+async function expectReaderPageView(
+  page: Page,
+  mode: "Single" | "Double",
+): Promise<void> {
+  await closeMobileContentsIfOpen(page);
+  await page.getByRole("button", { name: "Theme" }).click();
+  await expect(
+    page
+      .getByRole("radiogroup", { name: "Page view" })
+      .getByRole("radio", { name: new RegExp(mode, "i") }),
+  ).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("button", { name: "Close reading settings" }).click();
+  await expect(page.getByRole("button", { name: mode, exact: true })).toHaveCount(0);
+}
+
+async function closeMobileContentsIfOpen(page: Page): Promise<void> {
+  const contentsSidebar = page.getByRole("complementary", {
+    name: "Table of contents",
+  });
+  const isMobileDrawer =
+    (await contentsSidebar.count()) > 0 &&
+    (await contentsSidebar.isVisible()) &&
+    (await contentsSidebar.evaluate(
+      (element) => getComputedStyle(element).position,
+    )) === "fixed";
+
+  if (isMobileDrawer) {
+    await contentsSidebar.getByRole("button", { name: "Close contents" }).click();
+    await expect(contentsSidebar).toBeHidden();
+  }
+}
 
 async function firstPdfCanvasHasInk(page: Page): Promise<boolean> {
   return page
