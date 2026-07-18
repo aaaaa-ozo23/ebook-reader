@@ -14,6 +14,17 @@
 - **体积门：** v0.2.0 baseline NSIS 7,373,692 → 7,485,002（+111,310）；MSI 9,461,760 → 9,601,024（+139,264）；installed footprint +296,129，均远低于 10 MiB/20 MiB 门槛。
 - **14.1 结论：** go。可进入 14.2；仍不授权 DRM、其他 Kindle 扩展、直接 MOBI reader adapter 或 14.4。
 
+## 2026-07-19 大阶段 14.2：隔离转换原型
+
+- **阶段边界：** 原型只接收 source path、operation ID、staging root、取消 token 和 converter path；成功返回已验证 EPUB descriptor，失败/取消/超时清理 staging，不写数据库或正式 library。
+- **上游 fixture：** libmobi v0.12 源码包自带 LGPL 测试样本，包括 `sample-ncx.mobi`（MOBI 8 hybrid / KF8 default / NCX）、`sample-multimedia.mobi`、Unicode 样本和 DRM 样本；将只复制必要的合成测试文件并保留来源/许可证说明，不引入商业电子书。
+- **真实行为：** bundled `mobitool -e -o <dir> sample-ncx.mobi` 已生成单个 `sample-ncx.epub`，日志确认 title、language、MOBI 8 hybrid 与默认 KF8；输出可被后端安全验证后交给现有 EPUB adapter。
+- **预检契约：** 现代 MOBI/KF8 使用 `BOOKMOBI`，旧 PalmDOC DRM v1 样本使用 `TEXtREAd`；预检接受两者仅为读取 record 0 的 big-endian encryption type，非 0 必须在启动 sidecar 前返回 `mobi-drm-unsupported`，不提供密码或解密回退。
+- **Windows 参数边界：** canonical path 继续用于来源安全校验；MinGW sidecar 不接受 Windows `\\?\` verbatim 前缀，因此仅在 `Command` 参数构造处转换成等价普通 drive/UNC path，不经过 shell，也不降低 canonical containment 检查。
+- **真实转换矩阵：** MOBI 8 hybrid 默认 KF8、改扩展名 `.azw3`、NCX/OPF 元数据、多媒体图片、临时注入的 UTF-8 中文正文均转换并通过 EPUB verifier；PalmDOC DRM v1 在 sidecar 前拒绝。
+- **资源测量：** 三个上游合成样本耗时 53–181 ms，峰值 working set 3,194,880–5,885,952 bytes；bundled sidecar hash 保持 `438576B7…47CF1`。小样本不代表普遍性能，生产仍使用 120 秒 timeout 和阶段式进度。
+- **14.2 结论：** go。服务不接收数据库/正式书库句柄，失败、取消、超时、converter 非零退出和验证失败均不留下 operation 目录；完整报告见 `docs/architecture/mobi-conversion-spike.md`。
+
 ## 需求
 
 - 基于 `DEVELOPMENT.md` 制定更具体的分阶段开发计划。
