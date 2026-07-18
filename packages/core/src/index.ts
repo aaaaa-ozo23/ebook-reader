@@ -1,5 +1,6 @@
 export type BookFormat = "epub" | "txt" | "pdf";
 export type BookCoverStatus = "pending" | "ready" | "fallback";
+export type BookAvailability = "available" | "missing";
 
 export type AnnotationKind = "highlight" | "note";
 
@@ -47,9 +48,33 @@ export interface Book {
   fileHash: string;
   coverPath?: string;
   coverStatus: BookCoverStatus;
+  availability?: BookAvailability;
   createdAt: string;
   updatedAt: string;
   lastOpenedAt?: string;
+}
+
+export type BookCoverOrigin = "automatic" | "user" | "fallback";
+
+export interface BookDetails {
+  book: Book;
+  automaticTitle: string;
+  automaticAuthor?: string;
+  automaticCoverPath?: string;
+  coverOrigin: BookCoverOrigin;
+  titleOverrideUpdatedAt?: string;
+  authorOverrideUpdatedAt?: string;
+  coverOverrideUpdatedAt?: string;
+}
+
+export type MetadataOverridePatch =
+  | { action: "unchanged" }
+  | { action: "set"; value: string }
+  | { action: "reset" };
+
+export interface BookMetadataOverridePatch {
+  title: MetadataOverridePatch;
+  author: MetadataOverridePatch;
 }
 
 export type ImportBookStatus = "imported" | "duplicate" | "repaired";
@@ -57,6 +82,41 @@ export type ImportBookStatus = "imported" | "duplicate" | "repaired";
 export interface ImportBookResult {
   status: ImportBookStatus;
   book: Book;
+}
+
+export type BatchImportItemStatus =
+  | "valid"
+  | "duplicate"
+  | "unsupported"
+  | "missing"
+  | "error"
+  | "imported"
+  | "repaired"
+  | "canceled";
+
+export interface BatchImportPreviewItem {
+  path: string;
+  name: string;
+  status: BatchImportItemStatus;
+  selected: boolean;
+  fileHash?: string;
+  message?: string;
+}
+
+export interface BatchImportPreview {
+  operationId: string;
+  items: BatchImportPreviewItem[];
+  truncated: boolean;
+}
+
+export interface BatchImportResultItem extends BatchImportPreviewItem {
+  book?: Book;
+}
+
+export interface BatchImportResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  items: BatchImportResultItem[];
 }
 
 export interface RemoveBookResult {
@@ -105,7 +165,7 @@ export interface ReaderLayoutPreferences {
 }
 
 export const defaultReaderLayoutPreferences: ReaderLayoutPreferences = {
-  sidebarWidth: 292,
+  sidebarWidth: 366,
 };
 
 export interface LocatorContext {
@@ -157,6 +217,97 @@ export interface Bookmark<TLocator extends Locator = Locator> {
   locator: TLocator;
   label?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface BackupOptions {
+  includeData: boolean;
+  includeCovers: boolean;
+  includeBooks: boolean;
+}
+
+export type DataOperationKind = "backup-export" | "backup-restore" | "batch-import";
+export type OperationProgressPhase =
+  | "preparing"
+  | "reading"
+  | "writing"
+  | "verifying"
+  | "committing"
+  | "complete"
+  | "canceled";
+
+export interface OperationProgress {
+  operationId: string;
+  kind: DataOperationKind;
+  phase: OperationProgressPhase;
+  completed: number;
+  total: number;
+  message: string;
+}
+
+export interface BackupPayloadDescriptor {
+  path: string;
+  size: number;
+  sha256: string;
+}
+
+export interface BackupManifest {
+  formatIdentifier: "ebook-reader-backup";
+  formatVersion: 1;
+  appVersion: string;
+  schemaVersion: number;
+  exportedAt: string;
+  options: BackupOptions;
+  recordCounts: Record<string, number>;
+  payloads: BackupPayloadDescriptor[];
+}
+
+export interface BackupResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  outputPath?: string;
+  fileName?: string;
+  bytesWritten: number;
+  manifest?: BackupManifest;
+}
+
+export interface BackupPreview {
+  operationId: string;
+  fileName: string;
+  manifest: BackupManifest;
+  archiveBytes: number;
+  warnings: string[];
+}
+
+export interface RestorePreview extends BackupPreview {
+  newBooks: number;
+  matchedBooks: number;
+  missingFiles: number;
+  conflictRecords: number;
+  canRestore: boolean;
+}
+
+export type RestoreItemStatus =
+  | "restored"
+  | "merged"
+  | "local-kept"
+  | "missing-file"
+  | "skipped"
+  | "failed";
+
+export interface RestoreResultItem {
+  category: "book" | "progress" | "bookmark" | "annotation" | "setting" | "file";
+  id: string;
+  label: string;
+  status: RestoreItemStatus;
+  message: string;
+}
+
+export interface RestoreResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  counts: Record<RestoreItemStatus, number>;
+  items: RestoreResultItem[];
 }
 
 export interface Annotation {
@@ -186,6 +337,49 @@ export interface ReaderAdapter<TLocator extends Locator = Locator> {
   getCurrentLocator(): Promise<TLocator>;
   setTheme(theme: ReaderTheme): Promise<void>;
   search?(query: string): Promise<SearchHit<TLocator>[]>;
+}
+
+export type AppUpdateStatus =
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "canceled"
+  | "signature-failure"
+  | "network-failure";
+
+export interface UpdaterCapability {
+  enabled: boolean;
+  track: "nsis" | "msi";
+  endpoint: string;
+}
+
+export interface AppUpdateMetadata {
+  version: string;
+  currentVersion: string;
+  notes?: string;
+  publishedAt?: string;
+}
+
+export interface UpdateCheckResult {
+  status: "up-to-date" | "available" | "canceled";
+  update?: AppUpdateMetadata;
+}
+
+export interface UpdateActionResult {
+  status: "downloaded" | "installing" | "canceled";
+}
+
+export interface UpdateDownloadProgress {
+  downloaded: number;
+  contentLength?: number;
+}
+
+export interface UpdatePreferences {
+  dailyCheck: boolean;
 }
 
 export const defaultReaderTheme: ReaderTheme = {

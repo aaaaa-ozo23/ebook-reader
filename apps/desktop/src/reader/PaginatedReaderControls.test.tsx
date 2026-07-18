@@ -4,12 +4,11 @@ import { describe, expect, it, vi } from "vitest";
 import { PaginatedReaderControls } from "./PaginatedReaderControls";
 
 describe("paginated reader controls", () => {
-  it("shares the EPUB two-row page, percentage, spread, and progress structure", () => {
+  it("shares the EPUB two-row page, percentage, navigation, and progress structure", () => {
     const onPageInputChange = vi.fn();
     const onPageInputCommit = vi.fn();
     const onProgressChange = vi.fn();
     const onProgressCommit = vi.fn();
-    const onSpreadModeChange = vi.fn();
     const { container } = render(
       <PaginatedReaderControls
         ariaLabel="TXT navigation"
@@ -22,7 +21,6 @@ describe("paginated reader controls", () => {
         onProgressChange={onProgressChange}
         onProgressCommit={onProgressCommit}
         onProgressStart={vi.fn()}
-        onSpreadModeChange={onSpreadModeChange}
         pageFieldLabel="Page"
         pageInputAriaLabel="TXT page number"
         pageInputDisabled={false}
@@ -34,19 +32,16 @@ describe("paginated reader controls", () => {
         progressLabel="21%"
         progressTooltip="Page 14 · 21%"
         progressValue={210}
-        requestedSpreadMode="double"
-        spreadAriaLabel="TXT page view"
       />,
     );
 
     expect(container.querySelectorAll(".reader-epub-control-row")).toHaveLength(1);
+    expect(container.querySelectorAll(".reader-page-navigation")).toHaveLength(1);
     expect(container.querySelectorAll(".reader-epub-progress")).toHaveLength(1);
     expect(screen.getByText("Pages 13-14 / 63")).toBeVisible();
     expect(screen.getByText("21%")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Double" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(screen.queryByRole("button", { name: "Single" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
     expect(container.querySelector(".reader-epub-progress")).toHaveStyle({
       "--epub-progress-percent": "21%",
     });
@@ -64,8 +59,5 @@ describe("paginated reader controls", () => {
     fireEvent.pointerUp(progress);
     expect(onProgressChange).toHaveBeenCalledWith("750");
     expect(onProgressCommit).toHaveBeenCalledTimes(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "Single" }));
-    expect(onSpreadModeChange).toHaveBeenCalledWith("single");
   });
 });

@@ -256,12 +256,14 @@ export async function createBookmark<TLocator extends Locator = Locator>(
   label?: string,
 ): Promise<Bookmark<TLocator>> {
   if (!hasTauriRuntime()) {
+    const now = new Date().toISOString();
     const bookmark: Bookmark<TLocator> = {
       id: createFallbackId(),
       bookId,
       locator,
       label: normalizeBookmarkLabel(label),
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
     setFallbackBookmarks(bookId, [bookmark, ...getFallbackBookmarks<TLocator>(bookId)]);
     return bookmark;

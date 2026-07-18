@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 12.10 PDF Double 冷启动动画修复：complete；已把快照状态拆分为 pending/ready/failed，冷启动 pending 在可取消的 10 秒窗口内等待准确 Canvas，明确渲染/快照失败仍立即安全回退。500 页 PDF 首次打开后立即 Double Next 已在 Chromium/DPR2 验证准确 page 1 → page 2–3 与可见中间帧，并通过完整 Web/Rust/Tauri 门禁。
+大阶段 13.10 v0.2 正式发布：complete。最终签名产物通过隔离空状态验收，`v0.2.0` 已作为 Latest 通过内置侧边浏览器公开发布；11 个上传资产的远程 digest/大小与本地最终产物一致，Latest updater feed 精确匹配。
 
 ## 分支策略
 
@@ -492,15 +492,31 @@
 
 | 小阶段 | 分支 | 工作内容 | 验收 |
 |--------|------|----------|------|
-| 13.1 书架视觉收口 | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1280/900/640/375/DPR2 通过 |
-| 13.2 阅读器视觉收口 | `codex/stage13-reader-polish` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效 | 四主题、三格式、focus/reduced-motion、窄屏抽屉和图片查看器视觉/a11y 通过 |
-| 13.3 备份导出 | `codex/stage13-backup-export` | 定义版本化备份 manifest/JSON，导出书库元数据、设置、进度、书签、标注；原书/封面为显式选项 | 可校验版本、checksum 和缺失文件；导出不修改数据库；大书库有进度/取消 |
-| 13.4 备份恢复 | `codex/stage13-backup-restore` | 校验备份后事务恢复；书籍按 file hash 去重，记录按 UUID 合并，冲突以 `updated_at` 新者为准 | 失败原子回滚；旧/重复/部分/损坏备份、无原书和跨路径恢复测试通过 |
-| 13.5 元数据与封面编辑 | `codex/stage13-book-metadata-editor` | 编辑标题/作者和用户封面；区分提取值与用户覆盖值，支持恢复自动封面 | 重启/升级保持覆盖；格式/尺寸校验、删除书籍和备份恢复一致 |
-| 13.6 文件夹与拖放导入 | `codex/stage13-batch-import` | 支持拖放文件/文件夹、递归扫描 EPUB/TXT/PDF、预览、去重、取消和逐项结果 | 大批量导入不阻塞 UI；非法/重复/丢失文件隔离；不跟随符号链接越界 |
-| 13.7 应用内更新 | `codex/stage13-app-updater` | 接入 Tauri updater、签名清单、检查/下载/安装状态和手动回退说明 | 无更新、下载失败、签名失败、取消、重启安装和数据库兼容路径通过 |
-| 13.8 发布安全与签名 | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
-| 13.9 v0.2 发布候选 | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | RC 仅含已验收功能；全套门禁和安装矩阵通过；发布需用户明确授权后执行 |
+| 13.1 书架视觉收口（complete） | `codex/stage13-bookshelf-polish` | 按已批准概念统一导航、grid/list、封面、空/错/加载状态和响应式细节 | 与概念逐点对比无未记录偏差；1536/1280/900/640/375/DPR2 通过 |
+| 13.2 阅读器视觉收口（complete） | `codex/stage13-reader-polish` + `codex/stage13-fidelity-completion` | 统一三格式 chrome、侧栏、设置、进度、模态/浮层、图标和动效；按 15 张批准稿完成二次逐项审计与缺口收口 | 四主题、三格式、format-aware settings、focus/reduced-motion、真实手势、tooltips、系统态、窄屏抽屉和图片查看器视觉/a11y 通过 |
+| 13.3 备份导出（complete） | `codex/stage13-backup-export` | 定义版本化备份 manifest/JSON，导出书库元数据、设置、进度、书签、标注；原书/封面为显式选项 | 可校验版本、checksum 和缺失文件；导出不修改数据库；大书库有进度/取消 |
+| 13.4 备份恢复（complete） | `codex/stage13-backup-restore` | 校验备份后事务恢复；书籍按 file hash 去重，记录按 UUID 合并，冲突以 `updated_at` 新者为准 | 失败原子回滚；旧/重复/部分/损坏备份、无原书和跨路径恢复测试通过 |
+| 13.5 元数据与封面编辑（complete） | `codex/stage13-book-metadata-editor` | 编辑标题/作者和用户封面；区分提取值与用户覆盖值，支持恢复自动封面 | 重启/升级保持覆盖；格式/尺寸校验、删除书籍和备份恢复一致 |
+| 13.6 文件夹与拖放导入（complete） | `codex/stage13-batch-import` | 支持拖放文件/文件夹、递归扫描 EPUB/TXT/PDF、预览、去重、取消和逐项结果 | 大批量导入不阻塞 UI；非法/重复/丢失文件隔离；不跟随符号链接越界 |
+| 13.7 应用内更新（complete） | `codex/stage13-app-updater` | 接入 Tauri updater、签名清单、检查/下载/安装状态和手动回退说明 | 无更新、下载失败、签名失败、取消、重启安装和数据库兼容路径通过 |
+| 13.8 发布安全与签名（complete） | `codex/stage13-release-security` | 固化依赖/许可证/SBOM、installer checksum、代码签名和 SmartScreen 路径；无证书时记录非阻塞降级 | 有证书则验证签名链；无证书则保留警告文档，不伪造已签名状态 |
+| 13.9 v0.2 发布候选（repository complete；native acceptance pending） | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | 自动化与 draft artifacts 已通过；隔离 updater smoke、安装矩阵和离线密钥备份保持显式未完成，发布需用户明确授权后执行 |
+| 13.x UI fidelity / EPUB 批注修复（complete） | `codex/stage13-ui-fidelity-followup` | 对照批准稿收口 Notes/Search、选区/书签、主题/分页控件，并修复 EPUB 多 Note 即时刷新与长列表滚动 | 13 张用户证据逐项关闭；176 desktop Vitest、26 Playwright、51 Rust tests、Browser 空书架实页检查与最终截图目检全部通过 |
+| 13.x Page view 设置入口统一（complete） | `codex/stage13-page-view-settings-only` | 移除 TXT/EPUB/PDF 阅读舞台上的 Single/Double，所有分页单双页切换只保留在 Reading Settings 的 Page view | 176 Vitest、26 Playwright、51 Rust tests、Cargo fmt 与 NSIS/MSI 应用构建通过 |
+| 13.10 v0.2 正式发布（complete） | `codex/v0.2.0-publication` | 重建最终 NSIS/MSI/updater/SBOM/checksum，验证干净初始状态，创建 `v0.2.0` 并发布第二个 GitHub Release | 最终产物来自 tag source；安装后 version=0.2.0、books=0、library files=0；公开资产/checksum/latest 状态复核通过 |
+
+### 阶段 13.1/13.2 设计评审前置记录
+
+- 当前状态：implemented_and_verified；15 张活动画板已全部落实到 13.1/13.2，差异账本分别见书架与阅读器 fidelity 文档。
+- 实施边界：先 `codex/stage13-bookshelf-polish`，完成并合入集成分支后再进入 `codex/stage13-reader-polish`；不得把两阶段压缩为一次大改。
+- 审核门：13.1 对照 01–04 与 14–15，覆盖 Grid/List、删除确认、loading/empty/error/import feedback、1280/900/640/375/DPR2、focus/reduced-motion；13.2 对照 05–15，覆盖 EPUB/TXT/PDF、四主题、侧栏/抽屉、设置、浮层、图片查看器和动效。
+- 停止边界：完成 13.1/13.2 产品实现与验收后停止，不开始 13.3 备份导出。
+
+### 阶段 13.1/13.2 最终 fidelity completion
+
+- 分支：`codex/stage13-fidelity-completion`，从已合入 13.1/13.2 的 `codex/v0.2.0-integration` 创建。
+- 完成项：设置面板、格式页视图、移动工具栏、侧栏工具态、加载/错误态、tooltip 时序、drawer/sheet 手势与 PDF 主题性能逐项对齐批准稿。
+- 验收：所有 15 张活动画板重新原尺寸审计；TXT/EPUB/PDF 运行态截图和 21 个 Playwright 项目通过；13.3 保持未开始。
 
 ## 大阶段 14：v0.3 格式与阅读能力扩展
 

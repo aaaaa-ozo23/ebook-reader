@@ -9,6 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import type { Annotation, Bookmark, Locator, SearchHit, TocItem } from "@reader/core";
@@ -23,6 +24,7 @@ import {
   formatAnnotationTimestamp,
   getLocatorLabel,
 } from "./readerAnnotationPresentation";
+import { ReaderIcon, type ReaderIconName } from "./ReaderIcons";
 
 export type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
 
@@ -38,6 +40,8 @@ interface ReaderSidebarProps {
   activeTab: ReaderSidebarTab;
   annotationError: string | null;
   annotations: Annotation[];
+  bookAuthor: string;
+  bookTitle: string;
   bookmarks: Array<Bookmark<Locator>>;
   bookmarkError: string | null;
   items: TocItem[];
@@ -48,6 +52,7 @@ interface ReaderSidebarProps {
   onBackToLibrary: () => void;
   onClose: () => void;
   onCreateBookmark: () => void;
+  onCreateNote: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
   onJumpToAnnotation: (annotation: Annotation) => void;
@@ -66,11 +71,23 @@ interface ReaderSidebarProps {
   sidebarWidth: number;
 }
 
+interface MobileDrawerGesture {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  startTime: number;
+  lastX: number;
+  lastTime: number;
+  isHorizontal: boolean;
+}
+
 function ReaderSidebar({
   activeTocItemId,
   activeTab,
   annotationError,
   annotations,
+  bookAuthor,
+  bookTitle,
   bookmarks,
   bookmarkError,
   items,
@@ -81,6 +98,7 @@ function ReaderSidebar({
   onBackToLibrary,
   onClose,
   onCreateBookmark,
+  onCreateNote,
   onDeleteAnnotation,
   onDeleteBookmark,
   onJumpToAnnotation,
@@ -99,6 +117,11 @@ function ReaderSidebar({
   sidebarWidth,
 }: ReaderSidebarProps) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const drawerGestureRef = useRef<MobileDrawerGesture | null>(null);
+  const [drawerOffset, setDrawerOffset] = useState(0);
+  const [drawerMotionMs, setDrawerMotionMs] = useState(0);
+  const [isDrawerDragging, setIsDrawerDragging] = useState(false);
   const flattenedItems = useMemo(() => flattenTocItems(items), [items]);
   const noteAnnotations = useMemo(
     () => annotations.filter(isVisibleAnnotation),
@@ -120,11 +143,114 @@ function ReaderSidebar({
     }
   }, [activeTocItemId]);
 
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    },
+    [],
+  );
+
+  const handleDrawerPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      if (
+        (event.pointerType !== "touch" && event.pointerType !== "pen") ||
+        window.matchMedia("(min-width: 521px)").matches
+      ) {
+        return;
+      }
+      drawerGestureRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        startTime: event.timeStamp,
+        lastX: event.clientX,
+        lastTime: event.timeStamp,
+        isHorizontal: false,
+      };
+      setDrawerMotionMs(0);
+    },
+    [],
+  );
+
+  const handleDrawerPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const gesture = drawerGestureRef.current;
+      if (gesture === null || gesture.pointerId !== event.pointerId) return;
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      if (!gesture.isHorizontal) {
+        if (Math.abs(dx) < 7) return;
+        if (Math.abs(dx) <= Math.abs(dy)) {
+          drawerGestureRef.current = null;
+          return;
+        }
+        gesture.isHorizontal = true;
+        try {
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Synthetic pointers and older webviews can reject capture; movement still tracks.
+        }
+        setIsDrawerDragging(true);
+      }
+      gesture.lastX = event.clientX;
+      gesture.lastTime = event.timeStamp;
+      setDrawerOffset(dx <= 0 ? dx : dx * 0.18);
+      event.preventDefault();
+    },
+    [],
+  );
+
+  const finishDrawerGesture = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) => {
+      const gesture = drawerGestureRef.current;
+      if (gesture === null || gesture.pointerId !== event.pointerId) return;
+      drawerGestureRef.current = null;
+      try {
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+          event.currentTarget.releasePointerCapture?.(event.pointerId);
+        }
+      } catch {
+        // The pointer may already have been cancelled by the host webview.
+      }
+      setIsDrawerDragging(false);
+      if (!gesture.isHorizontal) return;
+      const elapsed = Math.max(1, gesture.lastTime - gesture.startTime);
+      const velocity = (gesture.lastX - gesture.startX) / elapsed;
+      const width = event.currentTarget.getBoundingClientRect().width;
+      const shouldClose = drawerOffset < -width * 0.32 || velocity < -0.42;
+      if (shouldClose) {
+        const remaining = Math.max(0, width + drawerOffset);
+        const duration = Math.round(Math.min(240, Math.max(110, remaining / 2.2)));
+        setDrawerMotionMs(duration);
+        setDrawerOffset(-width - 2);
+        closeTimerRef.current = window.setTimeout(() => {
+          onClose();
+          setDrawerOffset(0);
+          setDrawerMotionMs(0);
+        }, duration);
+      } else {
+        setDrawerMotionMs(230);
+        setDrawerOffset(0);
+      }
+    },
+    [drawerOffset, onClose],
+  );
+
   return (
     <aside
-      className="reader-sidebar"
+      className={`reader-sidebar${isDrawerDragging ? " reader-sidebar--dragging" : ""}`}
       aria-label="Table of contents"
       aria-hidden={!isOpen}
+      style={
+        {
+          "--reader-drawer-offset": `${drawerOffset}px`,
+          "--reader-drawer-motion": `${drawerMotionMs}ms`,
+        } as CSSProperties
+      }
+      onPointerCancel={finishDrawerGesture}
+      onPointerDown={handleDrawerPointerDown}
+      onPointerMove={handleDrawerPointerMove}
+      onPointerUp={finishDrawerGesture}
     >
       <div className="reader-sidebar__actions">
         <button
@@ -132,7 +258,8 @@ function ReaderSidebar({
           className="reader-sidebar__back"
           onClick={onBackToLibrary}
         >
-          Back to shelf
+          <ReaderIcon name="back" />
+          <span>Back to shelf</span>
         </button>
         <button
           ref={sidebarCloseButtonRef}
@@ -141,8 +268,12 @@ function ReaderSidebar({
           aria-label="Close contents"
           onClick={onClose}
         >
-          Close
+          <ReaderIcon name="close" />
         </button>
+      </div>
+      <div className="reader-sidebar__book">
+        <p className="reader-sidebar__book-title">{bookTitle}</p>
+        <p>{bookAuthor}</p>
       </div>
       <div className="reader-sidebar-tabs" role="tablist" aria-label="Reader sidebar">
         {(["contents", "bookmarks", "notes", "search"] as ReaderSidebarTab[]).map(
@@ -154,7 +285,8 @@ function ReaderSidebar({
               aria-selected={activeTab === tab}
               onClick={() => onTabChange(tab)}
             >
-              {formatSidebarTab(tab)}
+              <ReaderIcon name={getSidebarIcon(tab)} />
+              <span>{formatSidebarTab(tab)}</span>
             </button>
           ),
         )}
@@ -170,7 +302,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "contents" ? (
         <>
-          <h2>Contents</h2>
+          <h2 className="sr-only">Contents</h2>
           <nav className="reader-toc" aria-label={label}>
             {flattenedItems.length === 0 ? (
               <p className="reader-sidebar__empty">Loading chapters...</p>
@@ -192,7 +324,10 @@ function ReaderSidebar({
                     title={item.title}
                     onClick={() => handleJump(item.id)}
                   >
-                    {item.title}
+                    <span>{item.title}</span>
+                    {item.locator?.kind === "pdf" ? (
+                      <small>{item.locator.page}</small>
+                    ) : null}
                   </button>
                 );
               })
@@ -203,13 +338,14 @@ function ReaderSidebar({
       {activeTab === "bookmarks" ? (
         <section className="reader-sidebar-panel" aria-label="Bookmarks">
           <div className="reader-sidebar-panel__header">
-            <h2>Bookmarks</h2>
+            <h2 className="sr-only">Bookmarks</h2>
             <button
               type="button"
               className="reader-sidebar__action"
               onClick={onCreateBookmark}
             >
-              Add
+              <ReaderIcon name="plus" />
+              Add bookmark
             </button>
           </div>
           {bookmarkError !== null ? (
@@ -229,8 +365,16 @@ function ReaderSidebar({
                     aria-label={`Go to bookmark ${bookmark.label ?? getLocatorLabel(bookmark.locator)}`}
                     onClick={() => onJumpToBookmark(bookmark)}
                   >
-                    <span>{bookmark.label ?? getLocatorLabel(bookmark.locator)}</span>
-                    <small>{getLocatorLabel(bookmark.locator)}</small>
+                    <ReaderIcon name="bookmark" />
+                    <span>
+                      <strong>
+                        {bookmark.label ?? getLocatorLabel(bookmark.locator)}
+                      </strong>
+                      <small>
+                        {getLocatorLabel(bookmark.locator)} ·{" "}
+                        {formatAnnotationTimestamp(bookmark.createdAt)}
+                      </small>
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -238,7 +382,7 @@ function ReaderSidebar({
                     aria-label={`Delete bookmark ${bookmark.label ?? getLocatorLabel(bookmark.locator)}`}
                     onClick={() => onDeleteBookmark(bookmark.id)}
                   >
-                    Delete
+                    <ReaderIcon name="trash" />
                   </button>
                 </div>
               ))}
@@ -248,14 +392,28 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "notes" ? (
         <section className="reader-sidebar-panel" aria-label="Notes">
-          <h2>Notes</h2>
+          <div className="reader-sidebar-panel__header">
+            <h2 className="sr-only">Notes</h2>
+            <button
+              type="button"
+              className="reader-sidebar__action"
+              onClick={onCreateNote}
+            >
+              <ReaderIcon name="plus" />
+              Add note
+            </button>
+          </div>
           {annotationError !== null ? (
             <p className="reader-sidebar__error" role="alert">
               {annotationError}
             </p>
           ) : null}
           {noteAnnotations.length === 0 ? (
-            <p className="reader-sidebar__empty">No notes yet.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="notes" />
+              <strong>No notes yet.</strong>
+              <span>Notes you add while reading will appear here.</span>
+            </div>
           ) : (
             <div className="reader-notes" role="list">
               {noteAnnotations.map((annotation) => (
@@ -272,7 +430,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "search" ? (
         <section className="reader-sidebar-panel" aria-label="Search">
-          <h2>Search</h2>
+          <h2 className="sr-only">Search</h2>
           <form
             className="reader-search-form"
             onSubmit={(event) => {
@@ -282,15 +440,34 @@ function ReaderSidebar({
           >
             <label>
               <span>Search in book</span>
-              <input
-                ref={searchInputRef}
-                aria-label="Search in book"
-                value={searchQuery}
-                onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
-              />
+              <span className="reader-search-input">
+                <ReaderIcon name="search" />
+                <input
+                  ref={searchInputRef}
+                  aria-label="Search in book"
+                  placeholder="Search words or phrases"
+                  value={searchQuery}
+                  onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
+                />
+                {searchQuery !== "" ? (
+                  <button
+                    type="button"
+                    className="reader-search-input__clear"
+                    aria-label="Clear search"
+                    onClick={() => onSearchQueryChange("")}
+                  >
+                    <ReaderIcon name="close" />
+                  </button>
+                ) : null}
+              </span>
             </label>
-            <button type="submit" disabled={isSearchLoading}>
-              {isSearchLoading ? "Searching..." : "Search"}
+            <button
+              type="submit"
+              className="reader-search-submit"
+              disabled={isSearchLoading}
+            >
+              <ReaderIcon name="search" />
+              {isSearchLoading ? "Searching…" : "Search"}
             </button>
           </form>
           {searchError !== null ? (
@@ -298,10 +475,20 @@ function ReaderSidebar({
               {searchError}
             </p>
           ) : null}
+          {isSearchLoading ? (
+            <p className="reader-search-status" role="status">
+              <span aria-hidden="true" />
+              Searching in book…
+            </p>
+          ) : null}
           {searchQuery.trim() !== "" &&
           !isSearchLoading &&
           searchResults.length === 0 ? (
-            <p className="reader-sidebar__empty">No results.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="search" />
+              <strong>No results.</strong>
+              <span>Try a different keyword or check your spelling.</span>
+            </div>
           ) : null}
           {searchResults.length > 0 ? (
             <div className="reader-search-results" role="list">
@@ -314,8 +501,9 @@ function ReaderSidebar({
                   aria-label={`Go to search result ${hit.excerpt}`}
                   onClick={() => onJumpToSearchResult(hit)}
                 >
-                  <span>{hit.excerpt}</span>
                   <small>{getLocatorLabel(hit.locator)}</small>
+                  <span>{highlightSearchExcerpt(hit.excerpt, searchQuery)}</span>
+                  <ReaderIcon name="external" />
                 </button>
               ))}
             </div>
@@ -323,6 +511,29 @@ function ReaderSidebar({
         </section>
       ) : null}
     </aside>
+  );
+}
+
+function getSidebarIcon(tab: ReaderSidebarTab): ReaderIconName {
+  if (tab === "contents") return "contents";
+  if (tab === "bookmarks") return "bookmark";
+  if (tab === "notes") return "notes";
+  return "search";
+}
+
+function highlightSearchExcerpt(excerpt: string, query: string): ReactNode {
+  const normalizedQuery = query.trim();
+  if (normalizedQuery === "") return excerpt;
+  const index = excerpt
+    .toLocaleLowerCase()
+    .indexOf(normalizedQuery.toLocaleLowerCase());
+  if (index < 0) return excerpt;
+  return (
+    <>
+      {excerpt.slice(0, index)}
+      <mark>{excerpt.slice(index, index + normalizedQuery.length)}</mark>
+      {excerpt.slice(index + normalizedQuery.length)}
+    </>
   );
 }
 
@@ -475,15 +686,23 @@ function ReaderNoteItem({ annotation, onDelete, onJump }: ReaderNoteItemProps) {
           onClick={() => onJump(annotation)}
         >
           <span>{excerpt}</span>
-          <small>{formatAnnotationTimestamp(annotation.updatedAt)}</small>
+          {annotation.note !== undefined && annotation.note.trim() !== "" ? (
+            <span className="reader-note__preview">{annotation.note}</span>
+          ) : null}
+          <small>
+            {getLocatorLabel(annotation.locator)} ·{" "}
+            {formatAnnotationTimestamp(annotation.updatedAt)}
+          </small>
         </button>
       </div>
-      {annotation.note !== undefined && annotation.note.trim() !== "" ? (
-        <p className="reader-note__preview">{annotation.note}</p>
-      ) : null}
       <div className="reader-note__actions">
-        <button type="button" onClick={() => onDelete(annotation.id)}>
-          Delete
+        <button type="button" title="Jump" onClick={() => onJump(annotation)}>
+          <ReaderIcon name="external" />
+          <span className="sr-only">Jump</span>
+        </button>
+        <button type="button" title="Delete" onClick={() => onDelete(annotation.id)}>
+          <ReaderIcon name="trash" />
+          <span className="sr-only">Delete</span>
         </button>
       </div>
     </article>

@@ -1,6 +1,6 @@
 [package]
 name = "ebook-reader-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Local-first desktop ebook reader"
 authors = ["ebook-reader contributors"]
 edition = "2021"
@@ -23,6 +23,7 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40.1", features = ["bundled"] }
@@ -34,6 +35,10 @@ uuid = { version = "1.23.3", features = ["v4"] }
 encoding_rs = "0.8.35"
 chardetng = "1.0.0"
 regex = "1.12.4"
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+image = { version = "0.25.8", default-features = false, features = ["jpeg", "png", "webp"] }
+tokio = { version = "1", features = ["macros", "sync"] }
+tokio-util = "0.7"
 
 [dev-dependencies]
 tempfile = "3.27.0"

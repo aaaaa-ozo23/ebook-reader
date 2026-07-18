@@ -235,6 +235,7 @@ const deleteBookmarkMock = vi.hoisted(() => vi.fn());
 const listAnnotationsMock = vi.hoisted(() => vi.fn());
 const listBookmarksMock = vi.hoisted(() => vi.fn());
 const prepareBookCoverMock = vi.hoisted(() => vi.fn());
+const loadBookProgressSummariesMock = vi.hoisted(() => vi.fn());
 const listenForOpenBookFilesMock = vi.hoisted(() => vi.fn());
 const takePendingOpenFilesMock = vi.hoisted(() => vi.fn());
 const openBookFilesHandlerRef = vi.hoisted(
@@ -243,6 +244,10 @@ const openBookFilesHandlerRef = vi.hoisted(
 
 vi.mock("./covers/bookCovers", () => ({
   prepareBookCover: prepareBookCoverMock,
+}));
+
+vi.mock("./library/bookProgress", () => ({
+  loadBookProgressSummaries: loadBookProgressSummariesMock,
 }));
 
 vi.mock("./tauri/library", () => ({
@@ -572,6 +577,7 @@ describe("App", () => {
       ...book,
       coverStatus: "fallback",
     }));
+    loadBookProgressSummariesMock.mockResolvedValue({});
     markBookOpenedMock.mockImplementation(async (bookId) =>
       createBook({
         id: bookId,
@@ -626,6 +632,7 @@ describe("App", () => {
       locator,
       label,
       createdAt: "2026-06-21T10:00:00.000Z",
+      updatedAt: "2026-06-21T10:00:00.000Z",
     }));
     deleteBookmarkMocked.mockResolvedValue(undefined);
     openTxtBookMock.mockResolvedValue(createTxtDocument(createBook({ format: "txt" })));
@@ -811,7 +818,7 @@ describe("App", () => {
       await screen.findByRole("alertdialog", { name: "Remove from shelf?" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/The original file you imported will not be deleted/),
+      screen.getByText(/Your original imported file will not be deleted/),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
@@ -1288,13 +1295,15 @@ describe("App", () => {
         },
       }),
     );
-    expect(await screen.findByRole("group", { name: "TXT page view" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    const pageViewGroup = screen.getByRole("radiogroup", { name: "Page view" });
+    expect(
+      screen.queryByRole("group", { name: "TXT page view" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /single/i }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    await user.click(screen.getByRole("button", { name: "Double" }));
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /double/i }));
     expect(saveReaderExperiencePreferencesMock).toHaveBeenLastCalledWith(
       expect.objectContaining({
         txt: {
@@ -1308,10 +1317,9 @@ describe("App", () => {
       within(readingModeGroup).getByRole("radio", { name: "Continuous" }),
     );
     await user.click(within(readingModeGroup).getByRole("radio", { name: "Smooth" }));
-    expect(await screen.findByRole("button", { name: "Double" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /double/i }),
+    ).toHaveAttribute("aria-checked", "true");
   });
 
   it("navigates cached TXT pages with one progress commit per transaction", async () => {
@@ -1498,6 +1506,10 @@ describe("App", () => {
       "aria-selected",
       "true",
     );
+    expect(
+      within(reader).getByRole("button", { name: "Current page bookmarked" }),
+    ).toBeVisible();
+    expect(bookmarkButton).toHaveAttribute("aria-pressed", "true");
 
     await user.click(
       within(reader).getByRole("button", { name: "Go to bookmark 第一章 初见" }),
@@ -2267,6 +2279,78 @@ describe("App", () => {
     expect(within(savedNotes).getByText("saved epub note")).toBeVisible();
   });
 
+  it("refreshes an EPUB note underline callback after adding another note in place", async () => {
+    const user = userEvent.setup();
+    const epubBook = createBook({
+      id: "epub-live-note-refresh",
+      title: "Live Notes EPUB",
+      format: "epub",
+    });
+    const locator: EpubLocator = {
+      kind: "epub",
+      href: "OPS/chapter-one.xhtml",
+      cfi: "epubcfi(/6/2[chapter-one]!/4/1:0,/4/1:4)",
+      selectedText: "Selected text",
+    };
+    const firstNote = createAnnotationRecord({
+      id: "epub-live-note-one",
+      bookId: epubBook.id,
+      type: "note",
+      note: "first saved note",
+      selectedText: "Selected text",
+      locator,
+    });
+    const secondNote = createAnnotationRecord({
+      id: "epub-live-note-two",
+      bookId: epubBook.id,
+      type: "note",
+      note: "second saved note",
+      selectedText: "Selected text",
+      locator,
+      updatedAt: "2026-06-21T10:05:00.000Z",
+    });
+    listBooksMock.mockResolvedValueOnce([epubBook]);
+    markBookOpenedMock.mockResolvedValueOnce(epubBook);
+    listAnnotationsMocked.mockResolvedValueOnce([firstNote]);
+    createAnnotationMocked.mockResolvedValueOnce(secondNote);
+
+    render(<App />);
+    expect(
+      await screen.findByRole("heading", { name: "Live Notes EPUB" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("main", { name: "EPUB reader" });
+    await waitFor(() => expect(epubAdapterAddUnderlineMock).toHaveBeenCalled());
+
+    const activateUnderline = epubAdapterAddUnderlineMock.mock.calls[0]?.[2] as
+      | ((event: MouseEvent) => void)
+      | undefined;
+    const clickEvent = {
+      currentTarget: window.document.body,
+      target: window.document.body,
+    } as unknown as MouseEvent;
+    activateUnderline?.(clickEvent);
+
+    const firstPopover = await screen.findByRole("dialog", {
+      name: "Saved notes for Selected text",
+    });
+    await user.click(within(firstPopover).getByRole("button", { name: "Add note" }));
+    const noteInput = await screen.findByRole("textbox", {
+      name: "Note for Selected text",
+    });
+    await user.type(noteInput, "second saved note");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(createAnnotationMocked).toHaveBeenCalledTimes(1));
+
+    activateUnderline?.(clickEvent);
+    const refreshedPopover = await screen.findByRole("dialog", {
+      name: "Saved notes for Selected text",
+    });
+    expect(within(refreshedPopover).getByText("first saved note")).toBeVisible();
+    expect(within(refreshedPopover).getByText("second saved note")).toBeVisible();
+  });
+
   it("replays saved PDF highlights as page overlays", async () => {
     const user = userEvent.setup();
     const pdfBook = createBook({
@@ -2664,7 +2748,7 @@ describe("App", () => {
     expect(epubAdapterGoToProgressMock).toHaveBeenCalledTimes(1);
   });
 
-  it("toggles EPUB single and double page view through the adapter", async () => {
+  it("toggles EPUB single and double page view only through reading settings", async () => {
     const user = userEvent.setup();
     const epubBook = createBook({
       id: "epub-spread",
@@ -2680,19 +2764,23 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("main", { name: "EPUB reader" });
 
-    await user.click(screen.getByRole("button", { name: "Double" }));
+    expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    const pageViewGroup = screen.getByRole("radiogroup", { name: "Page view" });
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /double/i }));
     expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("double");
-    expect(screen.getByRole("button", { name: "Double" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /double/i }),
+    ).toHaveAttribute("aria-checked", "true");
 
-    await user.click(screen.getByRole("button", { name: "Single" }));
+    await user.click(within(pageViewGroup).getByRole("radio", { name: /single/i }));
     expect(epubAdapterSetSpreadModeMock).toHaveBeenCalledWith("single");
-    expect(screen.getByRole("button", { name: "Single" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
+    expect(
+      within(pageViewGroup).getByRole("radio", { name: /single/i }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("button", { name: "Close reading settings" }));
+    expect(screen.queryByRole("button", { name: "Single" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
   });
 
   it("opens EPUB images in a modal viewer and restores iframe focus", async () => {
@@ -2802,7 +2890,15 @@ describe("App", () => {
 
     expect(await screen.findByText("Page 1 / 3")).toBeVisible();
 
-    await user.click(within(reader).getByRole("button", { name: "Double" }));
+    expect(
+      within(reader).queryByRole("button", { name: "Double" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Theme" }));
+    const pdfPageViewGroup = screen.getByRole("radiogroup", {
+      name: "Page view",
+    });
+    await user.click(within(pdfPageViewGroup).getByRole("radio", { name: /double/i }));
+    await user.click(screen.getByRole("button", { name: "Close reading settings" }));
     expect(pdfAdapterSetViewModeMock).toHaveBeenCalledWith("double", 1100);
     await waitFor(() => expect(screen.getByText("Page 1 / 3")).toBeVisible());
 

@@ -11,6 +11,7 @@ import type {
   ReaderNotePopoverState,
   ReaderSelectionSnapshot,
 } from "./readerUiTypes";
+import { ReaderIcon } from "./ReaderIcons";
 
 interface SelectionMenuProps {
   menuRef: RefObject<HTMLDivElement | null>;
@@ -134,12 +135,18 @@ export function NotePopover({
       className="reader-note-popover"
       role="dialog"
       aria-label={`Saved notes for ${popover.selectedText}`}
-      style={{ left: `${popover.menuX}px`, top: `${popover.menuY}px` }}
+      style={{
+        left: `${popover.menuX}px`,
+        top: `${getNotePopoverTop(popover.menuY)}px`,
+      }}
     >
       <div className="reader-note-popover__header">
-        <strong>Saved notes</strong>
-        <button type="button" onClick={onClose}>
-          Close
+        <span>
+          <strong>Saved notes</strong>
+          <small>{popover.annotations.length} saved</small>
+        </span>
+        <button type="button" aria-label="Close saved notes" onClick={onClose}>
+          <ReaderIcon name="close" />
         </button>
       </div>
       <div className="reader-note-popover__items" role="list">
@@ -155,6 +162,7 @@ export function NotePopover({
               type="button"
               className="reader-note-popover__item"
               aria-label={`Edit saved note ${excerpt}${note === "" ? "" : `: ${note}`}`}
+              title="Edit note"
               onClick={() => onEditAnnotation(annotation)}
             >
               <span>{note === "" ? excerpt : note}</span>
@@ -167,5 +175,14 @@ export function NotePopover({
         Add note
       </button>
     </div>
+  );
+}
+
+function getNotePopoverTop(anchorY: number): number {
+  const viewportPadding = 14;
+  const maxPopoverHeight = Math.min(420, window.innerHeight - viewportPadding * 2);
+  return Math.max(
+    viewportPadding,
+    Math.min(anchorY + 12, window.innerHeight - maxPopoverHeight - viewportPadding),
   );
 }

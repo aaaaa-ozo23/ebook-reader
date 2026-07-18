@@ -11,6 +11,7 @@ files and notices supplied by each upstream project.
 | React and React DOM | Application UI | MIT |
 | TanStack Virtual | Long-document virtualization | MIT |
 | Tauri, Tauri API, and Tauri plugins | Desktop runtime and native integration | MIT OR Apache-2.0 |
+| Tauri updater and minisign-verify | Signed update retrieval and verification | MIT OR Apache-2.0 |
 | epub.js | EPUB parsing and rendering | BSD-2-Clause |
 | PDF.js (`pdfjs-dist`) | PDF parsing and rendering | Apache-2.0 |
 | JSZip | EPUB ZIP container support; used under its MIT option | MIT OR GPL-3.0-or-later |
@@ -27,12 +28,12 @@ for Ebook Reader; they are not copied from a third-party icon or artwork set.
 
 ## Full locked-dependency audit
 
-The v0.1.0 release candidate was audited from the committed lockfiles:
+The v0.2.0 release candidate was audited from the committed lockfiles and frozen install:
 
-- `pnpm.cmd licenses list --json`: 285 direct and transitive JavaScript packages across
-  production and development scopes; no unknown license group.
+- `node scripts/release/audit-licenses.mjs`: 291 unique direct and transitive JavaScript packages
+  across production and development scopes; no package without license metadata or a license file.
 - `cargo metadata --format-version 1 --locked --manifest-path apps/desktop/src-tauri/Cargo.toml`:
-  487 workspace and transitive Cargo packages; no dependency with a missing license field.
+  529 external Cargo packages; no dependency with a missing license or license-file field.
 - JavaScript license families observed: MIT, MIT-0, Apache-2.0, ISC, BSD-2-Clause,
   BSD-3-Clause, MPL-2.0, CC0-1.0, CC-BY-4.0, BlueOak-1.0.0, Zlib combinations, and
   compatible dual-license expressions.
@@ -42,6 +43,10 @@ The v0.1.0 release candidate was audited from the committed lockfiles:
 `@axe-core/playwright`, `axe-core` (MPL-2.0), and `caniuse-lite` data (CC-BY-4.0) are
 development/test dependencies and are not application features. Build and test tooling is
 not shipped as a standalone redistributable component of the installed application.
+
+Syft v1.44.0 (Apache-2.0) is a release-only SBOM generator. Its Windows archive is downloaded from
+Anchore's immutable GitHub release only after the official checksum manifest and the archive
+checksum are verified; Syft is not bundled into Ebook Reader.
 
 Upstream source, copyright, and exact license texts are available through the package metadata
 in `pnpm-lock.yaml`, `apps/desktop/src-tauri/Cargo.lock`, and the projects linked from their

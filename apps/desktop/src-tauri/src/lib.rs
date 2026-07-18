@@ -1,7 +1,128 @@
+mod backup;
+mod batch_import;
 mod db;
 mod file_open;
+mod updater;
 
 use tauri::{Emitter, Manager};
+
+#[tauri::command]
+async fn export_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    output_path: String,
+    options: backup::BackupOptions,
+) -> Result<backup::BackupResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::export_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&output_path),
+            options,
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn inspect_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    path: String,
+) -> Result<backup::RestorePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::inspect_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&path),
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-inspection-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn restore_backup(
+    app: tauri::AppHandle,
+    operation_id: String,
+    path: String,
+) -> Result<backup::RestoreResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        backup::restore_backup(
+            &app,
+            &operations,
+            &operation_id,
+            std::path::Path::new(&path),
+        )
+        .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[backup-restore-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn cancel_data_operation(
+    operations: tauri::State<'_, backup::DataOperationRegistry>,
+    operation_id: String,
+) -> bool {
+    operations.cancel(&operation_id)
+}
+
+#[tauri::command]
+fn updater_capability() -> updater::UpdaterCapability {
+    updater::capability()
+}
+
+#[tauri::command]
+async fn check_for_update(
+    app: tauri::AppHandle,
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+) -> Result<updater::UpdateCheckResult, updater::UpdaterError> {
+    updater::check_for_update(app, &updater_state).await
+}
+
+#[tauri::command]
+async fn download_update(
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+    on_event: tauri::ipc::Channel<updater::UpdateDownloadEvent>,
+) -> Result<updater::UpdateActionResult, updater::UpdaterError> {
+    updater::download_update(&updater_state, on_event).await
+}
+
+#[tauri::command]
+fn cancel_update_download(updater_state: tauri::State<'_, updater::UpdaterState>) -> bool {
+    updater_state.cancel()
+}
+
+#[tauri::command]
+fn install_downloaded_update(
+    updater_state: tauri::State<'_, updater::UpdaterState>,
+) -> Result<updater::UpdateActionResult, updater::UpdaterError> {
+    updater::install_downloaded_update(&updater_state)
+}
+
+#[tauri::command]
+fn get_update_preferences(
+    app: tauri::AppHandle,
+) -> Result<updater::UpdatePreferences, updater::UpdaterError> {
+    updater::get_preferences(&app)
+}
+
+#[tauri::command]
+fn save_update_preferences(
+    app: tauri::AppHandle,
+    preferences: updater::UpdatePreferences,
+) -> Result<updater::UpdatePreferences, updater::UpdaterError> {
+    updater::save_preferences(&app, preferences)
+}
 
 #[tauri::command]
 fn app_health(app: tauri::AppHandle) -> Result<db::AppHealth, String> {
@@ -15,7 +136,38 @@ fn list_books(app: tauri::AppHandle) -> Result<Vec<db::Book>, String> {
 
 #[tauri::command]
 fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
-    db::import_book(&app, std::path::PathBuf::from(path)).map_err(|error| error.to_string())
+    batch_import::import_single(&app, std::path::Path::new(&path))
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn scan_import_paths(
+    app: tauri::AppHandle,
+    operation_id: String,
+    paths: Vec<String>,
+) -> Result<batch_import::BatchPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        batch_import::scan_import_paths(&app, &operations, &operation_id, paths)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[batch-scan-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn import_batch(
+    app: tauri::AppHandle,
+    operation_id: String,
+    paths: Vec<String>,
+) -> Result<batch_import::BatchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        batch_import::import_batch(&app, &operations, &operation_id, paths)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[batch-import-task-failed] {error}"))?
 }
 
 #[tauri::command]
@@ -26,6 +178,38 @@ fn mark_book_opened(app: tauri::AppHandle, book_id: String) -> Result<db::Book, 
 #[tauri::command]
 fn remove_book(app: tauri::AppHandle, book_id: String) -> Result<db::RemoveBookResult, String> {
     db::remove_book(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn get_book_details(app: tauri::AppHandle, book_id: String) -> Result<db::BookDetails, String> {
+    db::get_book_details(&app, &book_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_book_metadata_overrides(
+    app: tauri::AppHandle,
+    book_id: String,
+    patch: db::BookMetadataOverridePatch,
+) -> Result<db::BookDetails, String> {
+    db::save_book_metadata_overrides(&app, &book_id, patch).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn save_user_book_cover(
+    app: tauri::AppHandle,
+    book_id: String,
+    image_bytes: Vec<u8>,
+) -> Result<db::BookDetails, String> {
+    db::save_user_book_cover(&app, &book_id, image_bytes).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn reset_book_overrides(
+    app: tauri::AppHandle,
+    book_id: String,
+    fields: Vec<String>,
+) -> Result<db::BookDetails, String> {
+    db::reset_book_overrides(&app, &book_id, fields).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -205,6 +389,8 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(pending_open_files)
+        .manage(backup::DataOperationRegistry::default())
+        .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let paths = file_open::collect_book_paths(args);
 
@@ -227,6 +413,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             db::init_app_database(app.handle())?;
             Ok(())
@@ -235,8 +422,14 @@ pub fn run() {
             app_health,
             list_books,
             import_book,
+            scan_import_paths,
+            import_batch,
             mark_book_opened,
             remove_book,
+            get_book_details,
+            save_book_metadata_overrides,
+            save_user_book_cover,
+            reset_book_overrides,
             save_book_cover,
             mark_book_cover_fallback,
             open_txt_book,
@@ -257,6 +450,17 @@ pub fn run() {
             create_annotation,
             update_annotation,
             delete_annotation,
+            export_backup,
+            inspect_backup,
+            restore_backup,
+            cancel_data_operation,
+            updater_capability,
+            check_for_update,
+            download_update,
+            cancel_update_download,
+            install_downloaded_update,
+            get_update_preferences,
+            save_update_preferences,
             take_pending_open_files
         ])
         .run(tauri::generate_context!())

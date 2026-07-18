@@ -1962,3 +1962,156 @@
 - **Browser：** 应用内浏览器修复前后均确认 `http://127.0.0.1:1420/`、标题 `Ebook Reader`、非空书架 DOM、无框架错误层、console warning/error 0，Grid/List 真实切换状态正确。首次启动命令误把 Vite 只绑定到 `::1`，浏览器访问 127.0.0.1 被拒；改用正确参数重启后恢复。修复后旧 tab 截图一次 `Page.captureScreenshot` 超时，按故障流程换新 tab 后截图成功。
 - **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 155）；Playwright 15/15 passed；Cargo fmt check 与 Rust 36 tests passed；Tauri NSIS/MSI build passed；`git diff --check` passed。
 - **包体/边界：** 书架入口 67.22 kB gzip、ReaderShell 51.77 kB gzip，PDF runtime 127.30 kB gzip 且继续懒加载；未新增依赖、schema、格式、版本或 Release。
+
+## 2026-07-15 大阶段 13.1/13.2：UI 概念设计与审核
+
+- **状态：** in_progress（concept review）。
+- **范围：** 只做书架与阅读器全功能界面概念、响应式方案和动效规格；用户批准前不修改 React/CSS，不创建实现提交，不开始 13.3。
+- **输入：** 已读取阶段 13 契约并以 `view_image` 原始分辨率复核用户提供的 4 张桌面/移动参考图。
+- **方法：** 使用 Build Web Apps 完整概念优先流程，结合 `frontend-design` 的明确视觉方向、`emil-design-eng` 的高频动效克制、`animation-vocabulary` 的术语、`apple-design` 的可中断手势/材料层级，并通过 `imagegen` 生成逐屏设计图。
+- **已确定方向：** 编辑感本地书房；真白/暖白内容面、深墨蓝结构导航、青绿主强调、赤陶色导入动作、琥珀焦点环；桌面四区阅读器与移动 drawer/bottom sheet 共用一套组件语法。
+- **首轮资产：** 已生成并保存 12 张概念画板到 `docs/design/v0.2/stage13-concepts/`，覆盖书架主态/列表/系统态/响应式及 EPUB/TXT/PDF/侧栏/设置/浮层/图片查看器/移动阅读器。
+- **首轮 QA：** 01、03、10 的结构可用；其余相关画板发现双导航、书架 rail 混入阅读器入口、Reset defaults、Fade 或格式控制重复等生成偏差，正在以通过画板为结构锚点做定向重生成。用户审核前不会把这些偏差写成实施契约。
+- **纠偏完成：** 02、04–09、11、12 已生成 v2，并以 01/05 的通过结构为锚点消除书架 rail 混入阅读入口、阅读器双导航、Reset defaults、Fade 和格式控制重复。首轮未版本化文件仅保留为生成历史，不再是活动概念。
+- **补充画板：** 新增 13 阅读器系统状态、14 动效分镜、15 控件交互状态；活动评审集共 15 张，索引、token、动效和交互逻辑见 `docs/design/v0.2/stage13-concepts/README.md`。
+- **当前状态：** concept_review_waiting_user；等待用户逐图批准或提出修改。未改产品 React/CSS，未开始 13.3。
+
+## 2026-07-16 大阶段 13.1/13.2：批准与实施启动
+
+- **批准：** 用户批准 15/15 张活动画板，无需继续概念迭代；状态更新为 `approved_for_implementation`。
+- **分支顺序：** 先封存 `codex/stage13-ui-concepts` 并 `--no-ff` 合入 `codex/v0.2.0-integration`，再创建 `codex/stage13-bookshelf-polish`；13.1 完成后才创建 13.2 分支。
+- **13.1 视觉基线：** 已用 `view_image` 原尺寸复核 01 Grid、02 List/actions、03 system states、04 responsive 四张批准图，记录 token、布局、真实数据边界与动效约束。
+- **技能约束：** Build Web Apps 将批准稿视为生产规格并要求最终批准图/浏览器截图直接比对；frontend-design/React best practices 约束组件结构；Emil/Apple 规范 press、popover、layout transition、手势和 reduced-motion；Browser 优先执行渲染 QA。
+- **停止边界：** 只完成 13.1/13.2；不开始 13.3，不改版本、不发布 Release。
+
+## 2026-07-16 大阶段 13.1：书架视觉收口完成
+
+- **状态：** complete；分支 `codex/stage13-bookshelf-polish`。实现范围严格止于书架，不提前修改 13.2 reader chrome，也不开始 13.3。
+- **组件/数据：** 提取 `library/Bookshelf.tsx`，App 保留行为编排；新增 `bookProgress.ts` 读取真实持久化进度（去重、最大六并发、坏记录隔离）；ReaderShell 与 EPUB/PDF runtime 继续懒加载。
+- **视觉：** 落实 106 px rail、开放式三列 Grid、70×105 List、批准 token、真实 cover/fallback、系统 skeleton/empty/error/import feedback、900/640/375 响应式和 44 px compact target。
+- **交互/动效：** Grid/List 使用 book identity View Transition；overflow origin-aware；pointer press 0.97；菜单/删除确认的焦点转移与恢复保留；reduced motion 移除位移/stagger，仅保留短颜色/透明度反馈。
+- **对图：** 原尺寸复核批准板 01–04，并用 `view_image` 比较最终 1536 Grid/List 与 375 Grid 截图；封面列起点、List 信息分组、封面纵横比、进度宽度等发现项均已修正。差异账本见 `docs/design/v0.2/stage13-bookshelf-fidelity.md`，无未记录偏差。
+- **自动化：** desktop 18 files / 158 tests passed；Stage 13.1 Chromium 3/3；responsive + Stage 13.1 DPR2 6/6；既有 bookshelf smoke 3/3；production build passed。
+- **Browser：** 新标签页验证 `Ebook Reader` 页面身份、1536/1536 无横向溢出、Grid→List、Shelf→Recent、真实空态和 console warning/error 0；隔离 Browser 无 seeded 本地书库，六书状态由项目 Playwright fixture 补充。
+- **过程纠正：** 初次 Vite 命令多传一个 `--` 导致只绑定 localhost/IPv6，已按 Browser 契约重启到 `127.0.0.1:1420`；首次组合 Vitest 参数误跑全部测试并暴露兼容断言，修正语义后通过；Browser screenshot 属于 tab API 而非 `tab.playwright`，纠正后恢复；DPR2 axe 曾在入场透明度中途取样，改为完成动画后测稳定视觉；List smoke 的旧几何断言也改为等待 View Transition 完成。
+
+## 2026-07-16 大阶段 13.2：阅读器视觉收口完成
+
+- **状态：** complete；分支 `codex/stage13-reader-polish`。仅完成 13.2 reader UI，未开始 13.3、未改版本/依赖/schema/格式、未发布 Release。
+- **结构：** 新增统一线性 `ReaderIcons`；ReaderShell topbar 改为格式/书名/工具三段，ReaderSidebar 增加书名作者与四个图标 tab，原有 bookmark/annotation/search/locator/transition 行为不变。
+- **视觉：** 366 px deep-ink 桌面侧栏、356 px Reading settings、开放式暖纸阅读舞台、青绿目录/进度、琥珀 focus/active；TXT/EPUB/PDF 各自只调整表现，不互相覆盖 layout。
+- **响应式：** 900 档保持可调桌面侧栏；640 使用 252 px 常驻侧栏和等宽四工具栏；375 使用白色 drawer、模糊 backdrop 与 bottom sheet，44 px 控件和 body 无横向溢出。
+- **动效：** popover 使用 origin-aware scale/fade，drawer/bottom sheet 使用可打断的短距离 slide，press 为 0.97；reduced-motion 清除位移、缩放和转场，仅保留即时状态变化。
+- **回归：** targeted Vitest 67/67，desktop 全量 18 files / 158 tests；seeded TXT、生成 EPUB（含图片查看器）、3 页 PDF、500 页 PDF 虚拟化均通过；axe serious/critical、focus、DPR2、窄窗回退由既有 smoke/acceptance 覆盖。
+- **最终门禁：** `pnpm.cmd check` passed（core 8、desktop 158）；Playwright Chromium/DPR2/专用 TXT/PDF project 21/21 passed；Cargo fmt check 与 Rust 36 tests passed；production ReaderShell gzip 52.73 kB，PDF runtime 127.30 kB 并继续懒加载。
+- **视觉证据：** 1280 desktop/settings、640 compact、375 drawer/settings 五张稳定截图均经 `view_image` 原尺寸复核；差异和修正记录在 `docs/design/v0.2/stage13-reader-fidelity.md`。
+- **Browser：** 新隔离 tab 验证真实 Vite 页面身份、空书架语义和 `bodyScrollWidth === bodyClientWidth`；隔离会话无本地书籍，复杂三格式状态由项目生成 fixture 补齐。
+
+## 2026-07-16 大阶段 13.1/13.2：批准稿二次 fidelity completion
+
+- [x] 原尺寸重新审计 15 张批准画板与 binding README。
+- [x] 补齐 format-aware settings、EPUB Single/Double 外提状态与 Continuous 禁用说明。
+- [x] 补齐移动 Back/Contents/Theme/Bookmark/More 工具顺序和 Notes/Search/Focus overflow。
+- [x] 补齐 toolbar 首次延迟/相邻即时 tooltip，避免根阅读树重渲染。
+- [x] 补齐 drawer/sheet 1:1 gesture、intent lock、velocity settle、rubber-banding 和 reduced-motion。
+- [x] 美化真实 bookmarks/notes/search panels 与 EPUB/TXT/PDF loading/error states。
+- [x] 优化 PDF theme surface 更新和 memo 边界；Playwright Chromium/DPR2 50ms long-task 门通过。
+- [x] 定向 Vitest、lint/build；Playwright 全量 21/21。
+- [x] 最终 `pnpm.cmd check`（core 8、desktop 160）、Cargo fmt/Rust 36、Playwright 21/21。
+- [x] `git diff --check` 通过；实现提交 `81857ed` 已推送并 `--no-ff` 合入 `codex/v0.2.0-integration`。
+- [x] 保持 13.3 未开始，未改版本/schema/依赖/格式，未发布 Release。
+
+## 2026-07-16 大阶段 13.3：备份导出
+
+- **状态：** complete；分支 `codex/stage13-backup-export`，从集成基线 `331101b` 创建。
+- **契约：** core 新增 `BackupManifest`、`BackupOptions`、`BackupResult`、payload descriptor 与统一 `OperationProgress`；v1 archive 固定 manifest/data/可选 covers/books，数据与封面默认开启、原书默认关闭。
+- **数据库：** 新增 `0004_backup_portability.sql`，回填并强制 bookmarks `updated_at`；migration runner 改为只执行未应用版本。
+- **后端：** 新增后台 operation registry、结构化 progress event、取消令牌、可移植 SQL snapshot、SHA-256、同目录临时 ZIP 与成功原子 rename；错误/取消清理临时文件且不修改数据库。
+- **前端：** 书架 desktop/mobile 增加 Settings 入口；新增 lazy Data & Backup 设置中心、未加密提示、三组选项、进度/取消/结果状态和桌面运行时错误恢复；reader lazy boundary 不变。
+- **文档：** 新增 `docs/backup-and-restore.md` 和 `stage13-data-settings-fidelity.md`，更新隐私说明与三份执行台账。
+- **验证：** core/desktop production build passed；desktop 20 files / 164 tests passed；Rust 41 tests passed；专用 Playwright Chromium 2/2、DPR2 2/2 passed，覆盖 1280/900/640/375、focus、reduced-motion、axe serious/critical=0；Browser 页面身份、DOM、console=0、桌面/375 截图和 fallback 错误交互通过。
+- **边界：** 版本仍为 0.1.0；未开始 13.4，未创建 tag 或 Release，用户未跟踪 `.codex/` 与 `AGENTS.md` 保持不变。
+
+## 2026-07-16 大阶段 13.4：备份恢复
+
+- **状态：** complete；分支 `codex/stage13-backup-restore`，从备份导出合并基线 `88fb97a` 创建。
+- **安全：** 安全预检覆盖 traversal、重复/目录 entry、major version、声明/实际 payload 集合、size/SHA-256、条目/总展开大小与 compression ratio；未知可选字段由 serde 默认忽略。
+- **事务：** staging 提取、内容寻址文件提交、SQLite merge 和失败清理构成两阶段恢复；取消使用同一 operation registry/progress channel。
+- **合并：** books 按 hash、本地 ID 优先；progress/bookmark/annotation UUID 与 setting key 按严格 newer-wins、tie-local；lastOpened 取较新；deletedAt tombstone 保留。
+- **产品：** Data & Backup 增加安全预览、冲突统计、显式确认、进度/取消和逐项结果；missing 书架状态禁止误打开并显示 File needed；375 保持全屏 sheet 与 44px target。
+- **验证：** desktop production build、20 files/166 Vitest、Rust 46 tests（含攻击 ZIP、checksum/size、missing repair/newer local）通过；专用 Playwright 覆盖四视口、reduced-motion、焦点、axe serious/critical 与浏览器 runtime 错误。
+- **边界：** 版本仍为 0.1.0；未开始 13.5、未创建 tag/Release，`.codex/` 与 `AGENTS.md` 未改动。
+
+## 2026-07-16 大阶段 13.5：元数据与封面编辑
+
+- **状态：** complete；分支 `codex/stage13-book-metadata-editor`，从 13.4 集成合并 `5ad00d0` 创建。
+- **数据库/Core：** migration 0005、BookDetails/BookCoverOrigin、显式 set/reset/unchanged patch；列表与 reader 接收 effective book，同时保留自动值。
+- **封面：** PNG/JPEG/WebP ≤10 MiB；前端 2:3 crop/zoom/position → 600×900 WebP，后端 signature/decode/40M pixel 限制；reset/delete 清理正确。
+- **UI：** overflow 增加 Edit details；桌面 modal/移动 sheet 延续暖纸、深墨、青绿、琥珀、44px、焦点与 reduced-motion 契约。
+- **备份：** v1 导出/恢复字段覆盖值与独立时间，旧 v1 缺失字段仍可恢复；user/automatic cover path 不混写。
+- **验证：** `pnpm.cmd check`、Rust 47 tests（含 field reset/custom cover）、格式门禁通过；版本保持 0.1.0，未开始 13.6。
+
+## 2026-07-16 大阶段 13.6：文件夹与拖放导入
+
+- **状态：** complete；分支 `codex/stage13-batch-import`，从 13.5 集成合并 `3ed2bd0` 创建。
+- **服务：** 新增统一 scan/import Rust 服务、operation progress/cancel、32 层/10,000 项/canonical containment/reparse 门禁；单文件和文件关联复用同一服务。
+- **UI：** `Import book` split menu 保留单文件快捷行为，增加 files/folder picker、原生 drag/drop overlay、可选 preview、逐项结果与移动 sheet。
+- **验证：** core/desktop build、169 Vitest、Rust 49 tests、格式门禁通过；版本保持 0.1.0，下一阶段为 13.7。
+
+## 2026-07-16 大阶段 13.7：应用内更新
+
+- **状态：** complete；分支 `codex/stage13-app-updater`，从 13.6 集成合并 `078adf5` 创建。
+- **密钥：** 新 minisign 私钥位于用户级 secrets 目录并限制当前用户；仓库只提交 public key 与 SHA-256 fingerprint，离线备份列为 RC 强制人工门禁。
+- **后端/轨道：** 官方 Rust updater API、30s check timeout、可取消 check/download、内存验签后 install；NSIS updater / MSI manual 双 flavor。
+- **UI：** Settings 增加 Updates 桌面页与移动 sheet 导航，覆盖完整状态、每日 opt-in、下载进度、取消和不可取消安装确认。
+- **验证：** `pnpm.cmd check`（core 8、desktop 173）、Rust 51 tests；Updates 专用 Playwright Chromium 3/3 含 1280/375、axe serious/critical、无横向溢出。测试进程仍有既存 Vite teardown hang，但所有用例完成通过。
+
+## 2026-07-16 大阶段 13.8：发布安全与签名
+
+- **状态：** complete；分支 `codex/stage13-release-security`，从 13.7 集成合并 `e794cb9` 创建。
+- **工具链：** 固定并实际校验/安装 Syft 1.44.0；新增 release orchestrator、license audit、security/schema verifier、SHA256SUMS/latest/SBOM/manifest/acceptance report 生成。
+- **安全：** 私钥 marker 与 key/cert 文件双范围扫描；生产 endpoint/HTTPS/fingerprint 门禁；CurrentUser/LocalMachine 均无 Code Signing cert，RC 固定 unsigned Authenticode 降级。
+- **CI：** 手动 workflow 只上传 14 天 draft artifact，无 push trigger、无 tag、无 Release 写权限。
+- **验证：** license audit 291 JS / 529 Cargo、unknown=0；security verifier、PowerShell/Node syntax、Syft CycloneDX 1.6 smoke（1301 components）通过；版本保持 0.1.0，下一阶段为 13.9。
+
+## 2026-07-16 大阶段 13.9：v0.2 发布候选
+
+- **状态：** repository complete / native acceptance pending；分支 `codex/stage13-v0.2-release-candidate`，从 13.8 集成合并 `e528380` 创建。
+- **版本/文档：** root/core/desktop/Cargo/Tauri/verifier 全部 0.2.0；CHANGELOG、README、隐私、备份、更新、release security、升级/回滚和 RC checklist 已收口。
+- **自动化：** frozen install；`pnpm.cmd check`（core 8、desktop 173）；Rust 51；Playwright 26/26（单 worker、DPR2 独立 500 页 PDF、50ms 门槛）；license 291/529 unknown=0；version/security/diff gates 全部通过。
+- **draft RC：** NSIS、MSI、NSIS `.sig`、`latest.json`、CycloneDX source/artifact SBOM、SHA256SUMS、license/authenticode/artifact/acceptance reports 已生成到忽略目录；Authenticode 为 `NotSigned`。
+- **未伪造通过：** updater 私钥离线备份、独立 identifier 原生安装 smoke 和 NSIS/MSI 安装/升级/卸载矩阵需要隔离 Windows 环境，继续在 `RELEASE_CHECKLIST.md` 保持 unchecked；无 tag、无 GitHub Release。
+## 2026-07-18 大阶段 13.x：UI fidelity 与 EPUB 批注修复
+
+- **状态：** complete；分支 `codex/stage13-ui-fidelity-followup` 从 `codex/v0.2.0-integration` 的 `507efeb` 创建，等待按 `--no-ff` 流程合回集成分支。
+- **侧栏与检索：** Notes/Search 统一批准稿的信息密度、完整换行摘录、紧凑图标动作、明确空态/加载态；Search 命中词直接高亮，Notes 额外提供基于当前位置的新建入口。
+- **选区与书签：** 选区工具条保持范围锚定与 Highlight/颜色/Note/Copy 顺序；页内 bookmark indicator 与顶部 `aria-pressed`、侧栏列表同步。
+- **设置与分页：** 自定义键盘可用字体 listbox 取代 Windows 原生穿透菜单；Theme/Font/Size/Line height/Spacing/Margin/模式/转场/页视图按桌面与 375 sheet 重新排序；TXT/EPUB 分页主胶囊与旁置 Single/Double 分组对齐批准稿。
+- **EPUB 根因修复：** iframe 页内 underline click handler 之前捕获旧 annotations 数组；现以最新 callback ref 与复合 annotation signature 同步，同一 CFI 多条 note 新增后无需离开页面即可读到。Saved notes 和 Notes 侧栏均有内部纵向滚动、鼠标滚轮与长文本完整换行。
+- **回归证据：** desktop 24 files / 176 Vitest；core 8 tests；Playwright 26/26（含 DPR2、375/640/900/1280、axe、reduced-motion）；Rust 51/51；Cargo fmt、production build、`git diff --check` 全部通过。
+- **边界：** 未改变 EPUB/TXT/PDF 范围、reader lazy boundary、版本号、schema、依赖或发布状态；Browser 隔离页验证真实 Vite 空书架与无横向溢出，带书数据由仓库生成 fixture 负责。
+
+## 2026-07-18 大阶段 13.x：Page view 设置入口统一
+
+- **状态：** complete；分支 `codex/stage13-page-view-settings-only` 从已合入 UI fidelity 的 `codex/v0.2.0-integration` 创建。
+- **目标：** TXT、EPUB、PDF 的 Single/Double 仅允许在 Theme / Reading Settings 的 Page view 中切换；阅读舞台底部只保留 Previous/Next、位置/进度、页码和 PDF 缩放等阅读导航。
+- **边界：** 复用既有 reader experience preferences、持久化 handler 和 format adapter prop 同步，不新增 schema、依赖、格式或版本变更；完成后执行 app 构建。
+- **完成内容：** 已移除共享 TXT/EPUB 与 PDF 独立舞台 toggle，清理失效 props/state/CSS；三格式继续由 `ReaderThemePanel` 的 Page view 更新父状态并同步 adapter，reader lazy boundary 不变。
+- **运行态验收：** Browser 实页检查通过；Playwright 26/26 覆盖 TXT、EPUB、PDF 的 Settings-only 切换、1280/900/640/375、DPR2、reduced-motion 与 axe serious/critical。Windows 下 Playwright 完成断言后临时 Vite 子进程未释放输出句柄，外层命令超时，但 26 个用例均输出通过标记且无失败上下文。
+- **代码门禁：** `pnpm.cmd check` 通过（24 files / 176 Vitest），Cargo fmt 通过，Rust 51/51 通过，reader chunk 为 195.91 kB（gzip 56.08 kB）。
+- **应用构建：** release EXE、NSIS 与 MSI 均于 2026-07-18 重新生成；WiX ICE 在受限环境无法访问 Windows Installer Service，使用同一构建命令在允许系统服务访问的环境重试后 MSI 成功。产物位于 `apps/desktop/src-tauri/target/release/` 与其 `bundle/nsis`、`bundle/msi` 子目录。
+
+## 2026-07-18 大阶段 13.10：v0.2 正式发布
+
+- **状态：** complete；发布准备分支 `codex/v0.2.0-publication` 已合入并推送到 `release/v0.2.0`，正式 tag 指向验收提交 `b67b2a4`。
+- **目标：** 发布第二个正式 GitHub Release `v0.2.0`；最终 installer 必须来自当前 source，并在不读取或覆盖真实用户数据的隔离数据根验证 version 0.2.0、books=0、managed library book files=0。
+- **发布顺序：** 最终产物/签名/安全门禁 → 初始状态验收 → 离线密钥备份确认 → publication commit/tag → 内置侧边浏览器草稿上传与公开 → 公开资产/checksum/latest 复核。
+- **边界：** 不把 draft RC 旧产物当最终产物，不混用 NSIS/MSI 轨道，不删除真实用户 app-data，不泄露 updater 私钥；Authenticode 继续如实标记 `NotSigned`。
+- **最终产物：** `release-artifacts/v0.2.0-final/` 已从当前 source 全量生成；`pnpm.cmd check` 176 desktop / 8 core、Rust 51、license audit 291 JS / 529 Cargo unknown=0、release/security verifier、NSIS updater signature、MSI、Syft 1.44.0 SBOM 与 `git diff --check` 全部通过。
+- **安装内容证明：** 最终 NSIS 静默安装到独立目录，installed EXE version/productVersion 均为 0.2.0；NSIS 生成脚本和 MSI WXS/File table 均只打包应用 EXE，不含 SQLite、library、EPUB/TXT/PDF 或测试 payload。MSI administrative install 成功，image 内应用 EXE 为 0.2.0。
+- **空状态证明：** 同一 source 的 0.2.0 release binary 以独立 `com.ebookreader.desktop.updater-test` 标识首次启动，事前 app-data 不存在；启动后 `books=0`、`bookmarks=0`、`annotations=0`、`reading_progress=0`、`book_user_metadata=0`、managed library book files=0，进程随后停止。真实 `%APPDATA%\com.ebookreader.desktop` 未删除或覆盖。
+- **密钥权限：** 沙箱外只读 ACL 复核 owner/唯一显式 allow 均为当前用户 `许涵予\许涵予xhy`，未读取或输出私钥内容；维护者已于 2026-07-19 明确确认完成独立离线备份，未记录介质位置或密钥内容。
+- **最终 E2E：** publication source Playwright 26/26 全部输出通过标记，覆盖 1280/900/640/375、DPR2、reduced-motion、axe 与独立 500 页 PDF；Windows 临时 Vite 子进程继续在断言结束后占用输出句柄，外层 360 秒超时，但没有失败用例或 error context。
+- **GitHub 草稿：** 已通过内置侧边浏览器创建 `Ebook Reader v0.2.0` draft，目标为 `release/v0.2.0`、标签候选为 `v0.2.0`、Latest 已选中；最终 11 个附件全部上传并保存。维护者已解除离线备份门禁，下一步创建 tag 后公开发布。
+- **公开发布：** 内置侧边浏览器已发布 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面确认 Latest、非草稿、tag `v0.2.0`、commit `b67b2a4`。附件区显示 13 项（11 个上传产物加 GitHub 自动生成的 Source code zip/tar），远程内容校验继续执行。
+- **远程验收：** GitHub Release API 返回 `draft=false`、`prerelease=false`、target `release/v0.2.0` 与 11 个 uploaded assets；每个资产的 SHA-256 digest 和 byte size 均与 `release-artifacts/v0.2.0-final/` 一致。公开 Latest `latest.json` 为 0.2.0、签名长度 424，并与本地 JSON 规范化后完全相同。

@@ -1,0 +1,43 @@
+name: v0.2 RC draft artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: RC version without v prefix
+        required: true
+        default: 0.2.0
+
+permissions:
+  contents: read
+
+jobs:
+  windows-artifacts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install locked dependencies
+        run: pnpm.cmd install --frozen-lockfile
+      - name: Build verified draft artifacts
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: >-
+          powershell -ExecutionPolicy Bypass -File scripts/release/build-release.ps1
+          -Version "${{ inputs.version }}"
+          -OutputDirectory "release-artifacts/v${{ inputs.version }}-rc"
+      - name: Upload workflow artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: ebook-reader-v${{ inputs.version }}-rc-draft
+          path: release-artifacts/v${{ inputs.version }}-rc/
+          if-no-files-found: error
+          retention-days: 14

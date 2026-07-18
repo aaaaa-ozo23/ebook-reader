@@ -1,0 +1,12 @@
+{
+  "productName": "Ebook Reader Updater Test",
+  "identifier": "com.ebookreader.desktop.updater-test",
+  "bundle": {
+    "active": false
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://127.0.0.1:4443/latest.json"]
+    }
+  }
+}

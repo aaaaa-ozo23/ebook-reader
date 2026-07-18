@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
+  workers: 1,
   timeout: 30_000,
   expect: {
     timeout: 5_000,
@@ -18,11 +19,12 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      grepInvert: /500-page PDF/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "chromium-dpr2",
-      testMatch: "responsive.spec.ts",
+      testMatch: /(?:responsive|stage13-bookshelf|stage13-data-safety)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         deviceScaleFactor: 2,

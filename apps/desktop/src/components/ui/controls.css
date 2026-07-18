@@ -55,7 +55,7 @@
 .ui-button:active:not(:disabled),
 .ui-icon-button:active:not(:disabled),
 .ui-segmented-control__option:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 
 .ui-button:disabled,
@@ -210,6 +210,10 @@
   .ui-button,
   .ui-icon-button,
   .ui-segmented-control__option {
-    transition: none;
+    transition:
+      background var(--ds-motion-feedback) ease,
+      border-color var(--ds-motion-feedback) ease,
+      color var(--ds-motion-feedback) ease,
+      opacity var(--ds-motion-feedback) ease;
   }
 }

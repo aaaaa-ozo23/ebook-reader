@@ -574,3 +574,165 @@
 - 修复后等待仍受 AbortSignal 和 10 秒 watchdog 约束；模式/主题/缩放/resize/卸载会取消事务，明确页面错误或 Canvas 快照失败立即走原有无动画真实导航。只有仍可能成功的 pending 才等待，因此不会用预建整书 Canvas 或错误页换取动画。
 - 500 页真实冷开验收现在从已保存的 Double + Smooth 启动，在 Double DOM 首次可见后不等待 current/target ready 就立即 Next；Chromium/DPR2 均捕获准确 page 1 → page 2–3，视觉中间帧同时显示旧页与目标页。Smooth/Cover/Realistic 共用同一 snapshot 等待管线，后续热机循环继续分别验证三种 mode、几何与准确目标 Canvas。
 - React 层无需增加“等待 ready”的额外 state/effect 或整书预热：现有 `PageTransitionController` 已提供串行请求、最终方向合并和 AbortSignal。把 pending/failed 判定留在快照边界即可减少重渲染，并保持 PDF runtime 懒加载与有限 3 spread/6 Canvas 窗口。
+
+## 2026-07-15 大阶段 13.1/13.2：UI 概念设计输入
+
+- 四张用户参考图共同锁定一种“编辑感本地书房”方向：真白/暖白内容背景、深墨蓝导航、低饱和青绿主强调、克制赤陶色导入动作、琥珀色焦点环、纤细边框与很浅的环境阴影。
+- 桌面书架强调宽松留白、封面主导、Grid/List 切换、排序和导入；不应继续把每项堆成过度厚重的卡片。移动书架保留三列封面优先布局，标题/作者/进度构成稳定纵向节奏。
+- 桌面阅读器采用“窄全局栏 + 上下文侧栏 + 阅读舞台 + 按需设置面板”；移动阅读器把目录/书签/批注/搜索合并进左侧 sheet，把阅读设置放进底部 sheet，保持正文优先。
+- EPUB 图片查看器使用深色聚焦层、可见缩放百分比、缩放/重置/关闭和鼠标滚轮/触控板/拖拽提示；其结构应同时覆盖窄屏底部工具栏。
+- 动效只服务空间连续性、状态反馈和防止突变：按钮 pointer-down 立即 0.97 缩放；popover 从触发器 origin-aware 进入；移动 drawer 使用可中断 spring、速度交接与 rubber-banding；高频键盘动作不加进出动画；reduced-motion 使用短 crossfade。
+- 四张图仅是风格/结构参考，不是逐像素实现规格；后续概念必须补齐当前应用真实存在的 TXT、EPUB、PDF 三格式差异、空/错/加载状态、选择菜单、搜索结果、书签/批注、PDF 缩放与连续/分页控制等界面。
+- 首轮 12 张概念的结构 QA 表明，直接把四张参考图同时用于所有画板会放大参考图的已知生成偏差：书架 List/响应式画板混入 Contents/Bookmarks/Notes/Search，TXT/PDF/图片查看器/640 阅读器重复出现书架 rail，EPUB 设置重新出现 Reset defaults，移动设置重新出现 Fade。
+- 这些偏差不是可接受的创意自由：本目录既有校正规则已经固定“阅读器只保留一个侧栏”、书架 rail 只含 Shelf/Recent、EPUB/TXT 不含 Fade、不新增 Reset defaults。后续迭代改用已通过的 `01-bookshelf-grid-desktop.png` 和 `05-epub-reader-desktop.png` 作为结构锚点，减少错误结构从原始参考重复迁移。
+- 首轮通过方向：书架 Grid 的封面主导布局、selected + origin-aware menu、系统状态 2x2、编辑感配色与克制阴影成立；阅读器四区层级、TXT 双页排版、PDF 页面材质、选择/笔记浮层以及图片查看器的深色聚焦层可继续沿用。
+- v2 纠偏结果：书架活动 rail 只保留 Shelf/Recent；桌面和响应式阅读器统一为单侧栏/单抽屉；设置只暴露当前格式能力；图片查看器覆盖真实 EPUB reader；移动设置只保留 None/Realistic/Cover/Smooth，不再出现 Fade/Slide/Reset defaults。
+- 静态主屏不足以审核交互感觉，因此把动效作为独立分镜：popover 0→80→160ms origin-aware，drawer 0→140→260ms interruptible spring，Grid/List 0→100→200ms layout animation，page 0→140→280ms direction-aware；reduced motion 用 160ms crossfade。
+- 控件状态板把按钮逻辑锁定为 default/hover/pressed/focus/disabled/loading，并明确 pointer-down 0.97 press feedback、3px amber focus、首个 tooltip 延迟/相邻 tooltip 立即，以及普通菜单到破坏性确认的两级路径。
+
+## 2026-07-16 大阶段 13.1/13.2：批准与实施规格锁定
+
+- 用户已明确批准全部 15 张活动画板；`docs/design/v0.2/stage13-concepts/README.md` 从评审候选升级为 13.1/13.2 的正式视觉实施契约。
+- 13.1 的 01–04 原尺寸复核显示：桌面书架是深色结构 rail + 开放式书架 workspace，不是大卡片仪表盘；Grid 使用封面与信息并排的 3×2 密度，List 使用紧凑横向行并保持相同信息层级。
+- 核心颜色锁定为 `#FCFBF8` workspace、`#1F3035` structural chrome、`#235F62` selected/progress、`#B94B35` import action、`#F2B84B` focus 与 `#DFE1DE` border；utility surface 保持真白，不能把全部界面泛化成暖纸色。
+- 书架系统态必须是同一真实壳体内的 loading skeleton、empty、load error/retry、importing 与三种 import feedback；这些不是独立演示页，也不能用装饰 badge 代替明确状态反馈。
+- 响应式契约是 900/640 保留 rail，375 移除 rail 并把 Grid/List 与导入压缩为 44px 触控控件；Grid/List 两种移动布局都不能出现 body 横向滚动。
+- 概念中的书名、作者和封面只用于设计演示。产品实现必须继续渲染真实用户书库数据，并复刻容器、排版、进度、菜单与状态语法，不能内置演示书籍。
+- 动效按共享 token 实施：press 100–140ms/0.97、popover 150–180ms origin-aware、Grid/List 180–220ms layout/crossfade；键盘触发即时、reduced-motion 只保留 120–180ms opacity/color feedback。
+
+## 2026-07-16 大阶段 13.1：书架视觉收口
+
+- 旧 `App.tsx` 同时承担数据协调与整套书架表现，难以让 Grid/List、系统态和响应式共享稳定结构；将纯书架拆为 `library/Bookshelf.tsx` 后，App 只保留导入/打开/移除/文件关联等编排，ReaderShell 仍在打开书籍后懒加载。
+- 书架进度此前只存在于 reader runtime，主书架不能展示概念要求的真实百分比。新增只读汇总层按唯一 book id 读取持久化进度、最大六并发、单条失败隔离并把值钳制到 0–1；没有新增 schema 或复制进度来源。
+- 首轮视觉截图揭示桌面 Grid 的 20 px 卡片 padding 把封面整体右推，List 又把格式标签变成独立中列；两者都破坏批准稿的信息分组。最终 Grid 封面贴列起点，List 把标题/作者/格式归为左组、进度归为右组。
+- 1536 px 对图还揭示默认 2:3 封面比批准稿短约 22 px、进度轨道过宽。最终桌面封面为约 172×280、轨道限制为 174 px，保留真实封面自身 `object-fit: cover`，不会拉伸用户图像内容。
+- 375 px Grid 按批准稿移除 rail 和可见 overflow 按钮，封面限制为 88 px；List 继续提供显式 overflow，Grid 仍保留右键上下文菜单，因此视觉简化没有删除操作能力。
+- DPR2 首轮 axe 在卡片入场透明度尚未结束时把混合后的中间颜色误判为静态低对比；验收现显式完成入场动画后再测稳定状态。最终静态 375 px 颜色对比、44 px target、无横向溢出均通过。
+- 真实 Browser 的旧 tab 保留过一次已修复 HMR 异常；换新 tab 后只有 Vite debug 与 React DevTools info，无 warning/error。隔离会话验证真实空态与 Grid/List、Shelf/Recent；六书视觉与操作状态由仓库 fixture 验证。
+
+## 2026-07-16 大阶段 13.2：阅读器视觉收口
+
+- 阅读器旧样式把 sidebar、topbar、各格式正文和设置控件混在同一视觉层。13.2 保留现有数据/locator/adapter 行为，只用后置 `ReaderStage13.css` 和语义化图标层重塑 chrome，避免触碰 EPUB/PDF 懒加载边界。
+- 桌面默认侧栏从 292 调整为批准稿的 366 px；900 以下不再直接退化为覆盖式 drawer，521–899 保留 252 px 常驻侧栏，只有 520 以下使用白色抽屉与遮罩。375 抽屉仍保留关闭、焦点恢复和 Escape 路径。
+- Reading settings 改为 356 px 桌面实边面板和移动端 bottom sheet；四主题只改变阅读舞台，设置面板自身保持中性白色，避免 Dark 主题让系统控件整体变黑。数值 range 继续保留可访问输入，同时视觉呈现为减号/当前值/加号 stepper。
+- 1280 桌面打开设置后可用 topbar 宽度不足，初版出现书名与工具栏重叠；1400 以下打开设置时隐藏重复的居中书名，保留格式与四个操作，1600 批准布局仍显示完整三段 topbar。
+- 通用 `.reader-page` 宽度首轮误限制 PDF 舞台为 690 px，导致 Double 按钮保持选中但实际降级为 Single；宽度约束已缩到 TXT virtual page，500 页 PDF 的 Double/Continuous/窄窗回退恢复通过。
+- TXT 渐进分页测试曾把 `requestIdleCallback` 固定为每 60 ms 且 `timeRemaining=0`，375 重排需逐批等待而长期显示 Calculating；在完成渐进发布断言后恢复有预算的 idle callback，产品分页算法未被改成同步阻塞。
+- 640 首轮截图显示格式、标题和四个工具挤在 388 px 主区并截断 Focus；紧凑档现只显示等宽四工具栏，书名/作者继续由常驻侧栏承担，正文与 body 均无横向溢出。
+- 顶部 Shelf、侧栏 Back to shelf 和 Close contents 最初产生包含匹配歧义；最终可访问名称明确区分，设置关闭会把焦点恢复到 Theme，打开面板自动聚焦关闭按钮。
+
+## 2026-07-16 大阶段 13.1/13.2：批准稿二次完成审计
+
+- **审计结论：** 首轮 13.2 虽通过通用门禁，但未完整复刻 07/12/13/14/15：排版控件被简化、format page view 未进入设置、移动工具栏错误、手势只是 entrance animation、tooltip 时序和格式系统态缺少运行证据。
+- **设置修正：** 四主题使用 `Aa`；字体显示 Lora；Size 保留步进器；Line/Spacing/Margin 改成三段图形控件；EPUB/TXT/PDF 的阅读模式、转场和 Single/Double 与真实偏好/adapter 状态双向联动，Continuous 下显示明确禁用原因。
+- **移动交互：** 375 px topbar 固定为 Back/Contents/Theme/Bookmark/More，More 承载 Notes/Search/Focus；drawer 横向、sheet 纵向按 touch/pen 1:1 跟踪，越界按 0.18 阻尼，释放按位移/速度决定关闭或回弹，pointer capture 失败安全降级。
+
+## 2026-07-16 大阶段 13.3：备份导出
+
+- SQLite migration runner 原先每次启动都会重新执行全部 migration，只因 0001–0003 本身幂等而未暴露问题；0004 的 `ALTER TABLE` 要求先按 `schema_migrations` 跳过已应用版本。迁移现在真正按版本执行，并验证 bookmarks `updated_at` 只存在一列。
+- `.erbackup` v1 使用 `manifest.json` + `data.json` + 可选 `covers/`/`books/`；manifest 为每个 payload 固定 path/size/SHA-256，但不自我签名。书籍与封面继续按 file hash 内容寻址。
+- 可移植快照由显式 SQL 生成，不序列化 `Book` 运行时对象，因此绝对 `source_path`/`library_path`、reader cache 和 updater 时间从结构上无法进入数据文件；软删除 annotation 会保留 tombstone。
+- 长任务使用 operation ID + `AtomicBool` 协作取消，Rust 命令放入 blocking worker，避免同步 invoke 阻塞取消请求；临时文件与目标文件同目录，成功才 rename，失败/取消删除残留且数据库只读。
+- Settings 新页面继续使用批准的暖纸/深墨/青绿/琥珀系统；桌面 1280×720 首屏完整，375 为 fixed 全屏 sheet，44 px target、reduced-motion、焦点恢复与 axe serious/critical=0 均由专用 Playwright 覆盖。
+- Browser 隔离运行没有 Tauri runtime，因此真实点击导出验证的是明确的桌面运行时错误恢复；文件对话框、原子写入、ZIP 往返和取消由 Rust/Vitest/原生桥测试承担，未用浏览器 fallback 伪造成功。
+
+## 2026-07-16 大阶段 13.4：备份恢复
+
+- ZIP 预检在读取 JSON 或解压前遍历原始 entry name，拒绝路径穿越、反斜杠/盘符、重复项、目录项、条目/总大小上限和压缩比异常；manifest payload 还必须通过声明大小与 SHA-256 双重校验。
+- 文件与数据库采用两阶段恢复：内容先进入 app-data staging，只将校验后的新内容寻址文件移入书库，再开启 SQLite transaction；任何取消、合并或 commit 错误都会删除本轮新增文件。
+- 书籍 ID 通过 `file_hash` 映射到已有本地 ID；UUID/key 记录只接受严格更新的 `updatedAt`，相同时间保留本地，annotation tombstone 与普通记录完全同规则。
+- 无原书的恢复记录保留缺失的 managed path 和完整阅读数据，书架显示 `File needed`；导入同 hash 文件会命中既有 repair 路径，并经 Rust 测试证明 progress 与书签身份不丢失。
+- Rust `zip` writer 本身拒绝生成重复文件名，因此重复条目门禁测试直接覆盖生产使用的 entry 注册器；外部 ZIP reader 仍会逐项调用同一门禁。
+
+## 2026-07-16 大阶段 13.5：元数据与封面编辑
+
+- `books` 继续保存自动提取值；`book_user_metadata` 只保存 title/author/cover 的独立覆盖值与时间，列表查询以 `COALESCE` 生成有效显示值。
+- patch 使用 `unchanged`/`set`/`reset` 显式动作，空作者可以作为有意覆盖值，避免 `null` 同时表示“不改”和“恢复”。
+- 前端 2:3 裁切输出 600×900 WebP；Rust 再次识别 PNG/JPEG/WebP、真实解码、限制 40M pixels，并重新编码为 `.user.webp`。
+- reset 只删除用户封面；自动封面缺失时 EPUB/PDF 回到 pending 队列、TXT 回到 fallback。删除书籍清理自动/用户封面。
+- `.erbackup` v1 的 PortableBook 增加向后兼容可选字段，restore 按每字段时间 newer-wins、tie-local。
+
+## 2026-07-16 大阶段 13.6：文件夹与拖放导入
+
+- 主 `Import book` 继续走既有单文件快捷入口；split menu 暴露 `Import files` 与 `Import folder`，避免把熟悉动作强制改成多选对话框。
+- 单文件、文件关联、批量文件、文件夹和拖放最终都复用 `batch_import` Rust 服务与 `db::import_book_at`，duplicate/repair/managed-copy 规则只有一个来源。
+- 递归扫描固定 depth 32 / items 10,000；canonical path 必须留在选择根，symlink 与 Windows reparse point 在进入目录前拒绝，支持格式只允许 EPUB/TXT/PDF。
+- preview 逐项显示 valid/duplicate/unsupported/missing/error，并允许取消选择；提交按项隔离失败，取消只停止新任务，已开始的原子导入完成后保留或清理。
+- Tauri drag/drop 只打开轻量模糊 overlay 和统一 preview，不会静默导入用户拖入内容。
+
+## 2026-07-16 大阶段 13.7：应用内更新
+
+- Tauri v2 updater 强制 minisign 验证且公钥必须内嵌内容、不能是路径；生产 endpoint 仅使用固定 GitHub HTTPS `latest.json`。
+- Rust 将 `Update::download` 与取消 token 放入 `tokio::select!`，取消会 drop 网络 future 和内存 buffer；只有完整下载并验签后才保存可安装 bytes。
+- Windows `install` 开始后应用由 installer 自动退出，因此 UI 把确认安装明确标成不可取消边界。
+- NSIS build flavor 启用 updater artifact；MSI flavor 通过编译期轨道关闭所有 updater 命令，避免 MSI/NSIS 混装。
+- 每日检查偏好写入 `app_settings` 并可随备份合并；最后检查时间只留在 machine-local storage，不进入 `.erbackup`。
+- 私钥生成在用户级 Codex secrets 目录并经 ACL 验证只有当前 Windows 用户读写；仓库仅含公钥与 canonical fingerprint。
+
+## 2026-07-16 大阶段 13.8：发布安全与签名
+
+- Syft 固定为 v1.44.0；官方 checksum manifest 的 SHA-256 先以 release 页面记录值验证，Windows ZIP 再按已验证 manifest 中的条目校验，实际 binary version 为 1.44.0。
+- Syft 默认会联网检查自身更新并尝试写用户 cache，沙箱下会引入 150 秒延迟；release 环境固定 `SYFT_CHECK_FOR_APP_UPDATE=false` 且把 cache 定向到忽略的 `.tools/`。
+- source/lockfiles 与最终 NSIS/MSI artifact 分别输出 CycloneDX 1.6；smoke source scan 识别 1301 components。
+- 冻结安装审计覆盖 291 个唯一 JS packages 与 529 个外部 Cargo packages，均有 license metadata 或 license file。
+- Windows CurrentUser/LocalMachine 证书库均无 Code Signing certificate；RC 必须报告 Authenticode `NotSigned` 与 SmartScreen 警告，不能把 updater minisign 混称为系统签名。
+- workflow 仅允许 `workflow_dispatch`、contents read 和短期 draft artifact upload，不包含 tag 或 GitHub Release 写入路径。
+
+## 2026-07-16 大阶段 13.9：v0.2 发布候选
+
+- root/core/desktop/Cargo/Tauri/release verifier 统一到 0.2.0；Cargo.lock 只更新 workspace root crate 版本。
+- Tauri CLI 只消费 `TAURI_SIGNING_PRIVATE_KEY`；本机路径包装必须在内存读取后注入该变量，并使用 `--ci` 与显式空密码避免非交互签名等待。
+- Syft cache 会被通用 ESLint 扫描，发布缓存与 draft artifacts 必须同时进入 Git/Prettier/ESLint 的工具输出边界，保证 release 脚本可重复运行。
+- 500 页 PDF 性能用例不应在复用 TXT/EPUB 浏览器进程的基础项目重复执行；独立 DPR2 项目保留严格 50ms 门槛，连续页 metrics 更新按 animation frame 合并，最终全量 26/26。
+- SBOM 必须显式提供稳定 source name/version；Authenticode 状态消息需要归一化，防止把构建机绝对路径写入可分发 artifact。
+- 当前机器没有安全的隔离安装用户/VM、受信本地 updater HTTPS 测试证书或用户指定的离线密钥备份介质；这些 native/manual 项不能用当前工作区自动化结果替代。
+- **侧栏/状态：** Bookmark 增加图标、时间、跳转/删除；Notes 保留真实颜色/摘录/时间并提供 Jump/Delete；Search 增加图标、clear、loading/empty/results；EPUB/TXT/PDF opening 使用各自 skeleton 与真实 indeterminate copy，错误与 PDF per-page retry 保留恢复路径。
+- **性能发现：** React tooltip warm state 会令重型 reader 根重渲染，已改为局部 DOM class。PDF 主题使用透明 ink Canvas + mounted surface 背景更新，并 memoize 连续/分页树；测试的 Canvas ink 检查缩小到 128×128，避免测试自身制造 long task，产品 50ms 门槛未放宽。
+- **验证：** desktop lint/build、Playwright 21/21；运行态原图复核 desktop settings、375 drawer/sheet、bookmark/notes/search，并确认无横向溢出和 axe serious/critical 问题。最终全量计数以 `progress.md` 为准。
+## 2026-07-18 大阶段 13 UI fidelity 与 EPUB 批注修复（进行中）
+
+- **目标证据 01–04：** 批准稿要求侧栏 Contents/Bookmarks/Notes/Search 共用同一信息层级：紧凑图标 tab、细青绿 active underline、无额外大标题；Bookmarks/Notes 每项为图标/色块 + 标题 + page/location + 时间，并把 Jump/Delete 收敛为右下图标；Search 使用单行输入、整宽 Search 按钮、按 location 分隔的紧凑结果和明确 loading/empty state。
+- **阅读器设置目标：** desktop settings 固定为轻量分段面板；Theme 为四个等宽色块，Font 为原生感单行下拉，Size 为减号/百分比/加号，Line height/Spacing/Margin 为三段 icon segmented control；page transition 与 Single/Double 只在相应分页格式出现，Reset defaults 位于底部而非挤压核心控制。
+- **选区/书签目标：** 选区工具条必须锚定选择范围、顺序为 Highlight/四色/Note/Copy，不能遮挡正文或漂移；页内已有 bookmark 必须显示在对应内容右侧的琥珀描边书签标记，并与顶部 Bookmark 状态同步。
+- **分页控制目标：** EPUB/TXT 底部以 Previous、当前 chapter/pages、Next 组成主胶囊，Single/Double 为旁置的独立双段控件；PDF 则把 Continuous/Double、缩放、page 输入、Next 和进度合并为一条底栏，不混用两套结构。
+- **现状证据 06–08：** 当前 Notes 把 Jump/Delete 放成高权重大按钮，缺失引用摘录与 page/location；长中文书名和条目字号/换行破坏密度。Search 结果字号过大、横向分栏断裂、滚动条侵入内容。Reading settings 在窄面板里把 transition 做成大卡片网格，导致面板极长，Single/Double 灰显且语义不清；均与批准稿存在材料差异。
+- **实现原则：** 保持暖纸/深墨/青绿/琥珀 token 与 44px target；高频 tab/分页不做入场动画，popover 仅 150–200ms origin-aware scale/fade，drawer/sheet 可中断，reduced-motion 禁用位移和缩放。
+- **现状证据 09–11：** Font 使用系统原生展开样式，Windows 下灰色高亮与无圆角列表直接穿透设计系统；TXT/PDF 底栏信息重复、层级分裂且 Single/Double 被塞进主导航胶囊；同一选区的 `Saved notes` 浮层固定高度不足，中文多条 note 文本被裁切且没有内部垂直滚动。
+- **批准稿 12：** 深墨侧栏目标密度已明确：无冗余大标题，bookmark/note/search item 使用 16px 主文、14px 次文、单一行分隔；动作仅保留 20px 线性图标并靠右，empty state 在列表余量内居中；Search 不把命中片段强制拆成两栏。
+- **EPUB 缺陷假设：** `EpubReaderAdapter` 在内容文档装载时同步 annotations，但点击页内目标读取的 note 集合可能被闭包捕获为旧数组；新增 note 后 React 状态已更新，iframe 内事件/标记却未即时重绑，退出重进才重建 adapter，因此应检查 annotation sync effect 与 iframe click handler 的闭包更新，而不是仅强制刷新页面。
+
+### 完成结论
+
+- **根因确认：** 假设成立。epub.js iframe 内容事件只在 document attach 时注册，原 handler 闭包长期读取首次注册时的 annotations；新增第二条及后续 note 后 SVG underline 仍可点击，但返回旧 note 集合。修复以 latest callback ref 解耦事件注册生命周期，并以 `id + locator + note + color + updatedAt + deletedAt` 复合签名驱动标记同步；相同 CFI 的 note 先分组再绘制一个可命中的 underline。
+- **失败优先证据：** Playwright 在同一选区连续创建到 8 条 note，每次保存后立即点击当前页 underline 并断言刚新增文本可见；旧实现无需退出重进的第一次断言即失败，修复后完整通过。
+- **长列表结论：** `Saved notes` 浮层和 Notes 侧栏都改为 viewport-bounded 内部 scroll container；中文长文本使用 `overflow-wrap:anywhere` 且不再 line-clamp。自动化同时证明 `scrollHeight > clientHeight`，派发 mouse wheel 后 `scrollTop` 真实增加。
+- **视觉对照：** Notes/Search 从大按钮和横向分栏收敛为批准稿的单列密集层级；font dropdown 使用受控圆角 listbox；移动 settings 打开后从 Theme 起始且 Reset 位于控制组尾部；pagination 主胶囊与 Single/Double 不再混成一组。完整差异表见 `docs/design/v0.2/stage13-ui-fidelity-followup.md`。
+- **Browser 能力边界：** 隔离 Browser 成功验证真实 Vite 页面身份、空书架 DOM 与布局；浏览器环境无法完成 Tauri 原生文件选择（返回 Import canceled），因此三格式、批注和滚轮状态由项目 Playwright 生成 fixture 验证，没有伪造原生导入成功。
+- **最终门禁：** `pnpm.cmd check`、Playwright 26/26、Cargo fmt、Rust 51/51、`git diff --check` 全部通过；没有新增 schema、依赖、格式或版本变更。
+
+## 2026-07-18 Page view 设置入口统一
+
+- **重复入口：** TXT 与 EPUB 通过共享 `PaginatedReaderControls` 在阅读舞台渲染 Single/Double；PDF 在自己的 navigation row 中另渲染同名 toggle。三者同时已由 `ReaderThemePanel` 的 Page view radiogroup 控制，因此舞台入口属于重复 UI。
+- **状态所有权：** `ReaderShell` 已持有 EPUB spread state 与 TXT/PDF persisted reader experience preferences。Settings 的 change handler 会更新父状态，EPUB effect、TXT layout signature 与 PDF `viewMode` effect 都会把新值同步到各自 adapter/分页器，不需要在阅读舞台保留第二套 handler 或本地状态。
+- **Browser 运行态：** 隔离 Browser 在 `127.0.0.1:1420` 验证页面标题、真实空书架、Grid→List pressed 状态、1280 px 无横向溢出、framework overlay=false、console warn/error=0。隔离书库为 0 books，无法进入分页 reader，三格式目标状态继续由生成 fixture 的仓库 Playwright 验证。
+- **过程错误：** 一次 PowerShell `rg` 搜索把正则中的 `|` 误解释为管道并退出；后续改为单引号/简化 pattern，未影响代码或验证结果。
+- **测试迁移错误：** 首轮三格式 Playwright 中 TXT 仍保留旧的 `TXT page view` 舞台 group 断言而失败，EPUB/PDF 已通过；该断言已改为 Settings 的 `Page view` radiogroup，并显式验证面板关闭后舞台 Single/Double 数量为 0。
+- **移动测试状态：** 首轮全量 Playwright 25/26；500 页 PDF 到 375 px 时目录抽屉仍打开，拦截测试助手对 Theme 的点击。设置助手现先检测并通过 `Close contents` 关闭可见抽屉，再进入 Reading Settings；这是测试路径状态修正，不是产品交互绕过。
+- **同名关闭入口：** 移动目录同时渲染 backdrop 与面板内两个 `Close contents` 按钮，不能用按钮数量判断是否打开；backdrop 位于 sidebar 下层也不适合作为此状态下的点击目标。最终助手只在 sidebar 的 computed `position` 为 `fixed` 时点击面板内关闭按钮并等待隐藏，避免误关 desktop/640 px 常驻侧栏。
+- **构建环境：** Tauri 首次双目标构建已生成 release EXE 与 NSIS，但 WiX `light.exe` 的 ICE01–ICE09 因受限环境无法访问正在运行的 Windows Installer Service 而失败；同一 MSI 命令在允许服务访问的环境执行后成功，说明不是应用代码、WXS 或依赖编译错误。
+- **完成结论：** TXT/EPUB/PDF 阅读舞台均不再渲染 Single/Double，唯一入口为 Theme / Reading Settings 的 Page view；Settings 的既有父状态和 adapter 同步仍负责布局切换与持久化。176 Vitest、26 Playwright、51 Rust tests、Cargo fmt、NSIS/MSI 构建通过。
+
+## 2026-07-18 v0.2 正式发布
+
+- **产物新鲜度：** `release-artifacts/v0.2.0-rc/` 最后生成于 2026-07-17，早于 2026-07-18 的 UI/Page view 收口提交，必须整体重建，不能直接上传。
+- **浏览器状态：** 内置侧边浏览器已有仓库主页标签 `https://github.com/aaaaa-ozo23/ebook-reader`，正式发布仍需在产物验收后确认登录态并创建 Release。
+- **隔离能力：** 当前系统没有 `WindowsSandbox.exe`；干净状态验证必须使用独立安装目录和重定向的 `APPDATA`/`LOCALAPPDATA`，不能清空或覆盖真实用户目录。
+- **密钥检查：** updater 私钥路径存在；受限环境读取 ACL 返回 unauthorized，后续只在允许的系统上下文验证 ACL/用于签名，绝不输出密钥内容。维护者已于 2026-07-19 明确确认完成独立离线备份，门禁已解除且不记录介质位置。
+- **GitHub 权限：** 内置侧边浏览器仓库页显示已登录头像、通知与创建入口，当前账号可见仓库管理 UI；默认 `main` 仍停留在 v0.1 文档，正式 v0.2 publication source 必须在发布后同步回主线。
+- **真实数据隔离：** 机器上仍有旧 `%LOCALAPPDATA%\Ebook Reader` 程序目录和真实 `%APPDATA%\com.ebookreader.desktop` 数据库。Windows `SHGetKnownFolderPath` 不接受仅重定向 `APPDATA/LOCALAPPDATA` 作为可靠隔离，首次尝试未在测试根创建数据库；后续没有清空或替换真实数据。
+- **隔离替代证据：** 最终 NSIS 实际安装的 EXE 为 0.2.0；NSIS `installer.nsi` 只有主 EXE `File` 指令，MSI administrative image 也只有 0.2.0 主 EXE。再以仓库既有独立 identifier `com.ebookreader.desktop.updater-test` 启动同源 0.2.0 release binary，所有用户内容表与 managed book files 均为 0。因此发布包不携带测试数据库/书籍，fresh identifier 初始化为空。
+- **诊断错误：** 尝试同时重定向 `USERPROFILE` 与 AppData 启动时 Windows 返回 access denied；该方法未继续重试，改用仓库既有独立 identifier，避免修改 Known Folder 注册表或真实用户目录。
+- **Playwright 清理：** publication 最终套件 26 个项目全部显示通过点；与既有记录一致，Playwright 完成后 Windows Vite 子进程未释放输出句柄导致外层超时。此清理问题不改变 26/26 断言结果，未生成失败上下文。
+- **Release 草稿：** 内置侧边浏览器已将正式说明与 11 个最终产物保存到 GitHub draft；页面确认 `Latest` 被选中且提示 tag 将在发布时从 `release/v0.2.0` 创建。维护者确认离线备份后，正式 tag 与 Publish 已获既定计划门禁授权。
+- **公开页面：** Release 已公开为 Latest，URL 为 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面显示 tag `v0.2.0`、commit `b67b2a4`、无 draft 提示。GitHub 资产计数 13 包含 11 个上传资产及自动生成的两份 Source code archive。
+- **远程完整性：** GitHub Release API 的 11 个资产全部为 uploaded；服务端 `sha256:` digest 与 size 逐项匹配本地最终产物。`releases/latest/download/latest.json` 可公开访问，内容与本地 feed 相同，version 为 0.2.0、Windows URL 指向 v0.2.0 NSIS、签名字段为完整 424 字节文本。

@@ -2,7 +2,7 @@
   display: grid;
   height: 100vh;
   min-height: 100vh;
-  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 292px), 480px) minmax(
+  grid-template-columns: clamp(240px, var(--reader-sidebar-width, 366px), 480px) minmax(
       0,
       1fr
     );
@@ -967,14 +967,6 @@
   gap: 8px;
 }
 
-.reader-spread-mode-note {
-  grid-column: 1 / -1;
-  color: var(--txt-reader-muted, #5f6870);
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-align: right;
-}
-
 .reader-epub-status {
   display: flex;
   min-width: 0;
@@ -997,32 +989,7 @@
   color: var(--txt-reader-heading, var(--txt-reader-text, #25211d));
 }
 
-.reader-epub-mode-toggle {
-  display: inline-flex;
-  overflow: hidden;
-  min-height: 38px;
-  border: 1px solid var(--txt-reader-meta-border, #d8cebc);
-  border-radius: 8px;
-  background: var(--txt-reader-control-background, #ffffff);
-}
-
-.reader-epub-mode-toggle button {
-  min-width: 70px;
-  border: 0;
-  background: transparent;
-  color: var(--txt-reader-muted, #5f6870);
-  padding: 0 12px;
-  font-weight: 800;
-}
-
-.reader-epub-mode-toggle button[aria-pressed="true"] {
-  background: #2f5d62;
-  color: #ffffff;
-}
-
 .reader-epub-controls .reader-tool-button,
-.reader-epub-controls .reader-epub-mode-toggle,
-.reader-epub-controls .reader-epub-mode-toggle button,
 .reader-epub-controls .reader-page-field input {
   min-height: 44px;
 }
@@ -1399,10 +1366,6 @@
   min-height: 40px;
 }
 
-.reader-shell--chrome-hidden .reader-epub-mode-toggle {
-  min-height: 36px;
-}
-
 .reader-shell--chrome-hidden .reader-epub-progress {
   gap: 6px;
 }
@@ -1743,7 +1706,7 @@
 
 @media (min-width: 761px) and (max-width: 899px) {
   .reader-shell {
-    grid-template-columns: min(var(--reader-sidebar-width, 292px), 40vw) minmax(0, 1fr);
+    grid-template-columns: min(var(--reader-sidebar-width, 366px), 40vw) minmax(0, 1fr);
   }
 }
 
@@ -1881,13 +1844,11 @@
   }
 
   .reader-epub-status,
-  .reader-epub-mode-toggle,
   .reader-epub-control-row > .reader-tool-button {
     width: 100%;
   }
 
   .reader-pdf-status,
-  .reader-pdf-mode-toggle,
   .reader-pdf-control-row > .reader-tool-button {
     width: 100%;
   }
@@ -1902,22 +1863,6 @@
     grid-column: 1 / -1;
     grid-row: 1;
     justify-content: flex-start;
-  }
-
-  .reader-epub-mode-toggle {
-    grid-column: 1 / -1;
-  }
-
-  .reader-pdf-mode-toggle {
-    grid-column: 1 / -1;
-  }
-
-  .reader-epub-mode-toggle button {
-    flex: 1;
-  }
-
-  .reader-pdf-mode-toggle button {
-    flex: 1;
   }
 
   .reader-page-field,

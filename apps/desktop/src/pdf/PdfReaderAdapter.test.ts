@@ -559,6 +559,37 @@ describe("PdfReaderAdapter", () => {
     expect(adapter.getRenderLifecycleSnapshot().activePages).toBe(0);
   });
 
+  it("updates mounted page backgrounds without rerendering the PDF canvas", async () => {
+    const adapter = createPdfAdapter();
+    await adapter.open("pdf-book");
+    const canvas = document.createElement("canvas");
+    vi.spyOn(canvas, "getContext").mockReturnValue({} as CanvasRenderingContext2D);
+
+    const handle = adapter.createPageSurfaceRender({
+      canvas,
+      pageNumber: 1,
+      renderTextLayer: false,
+      scale: 1,
+    });
+    await handle.ready;
+    expect(canvas.style.backgroundColor).toBe("rgb(255, 255, 255)");
+
+    await adapter.setTheme({
+      mode: "green",
+      fontFamily: "serif",
+      fontSize: 18,
+      lineHeight: 1.7,
+      paragraphSpacing: 12,
+      pageMargin: 32,
+      backgroundColor: "#eef4e8",
+      textColor: "#1f3329",
+    });
+    expect(canvas.style.backgroundColor).toBe("rgb(238, 244, 232)");
+
+    handle.release();
+    expect(canvas.style.backgroundColor).toBe("");
+  });
+
   it("restores and reports a continuous in-page locator", async () => {
     const adapter = new PdfReaderAdapter({
       bookId: "pdf-book",

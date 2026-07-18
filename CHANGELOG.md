@@ -2,6 +2,34 @@
 
 All notable changes to Ebook Reader are documented in this file.
 
+## [0.2.0] - 2026-07-16
+
+### Added
+
+- Unified warm-paper bookshelf and reader UI across desktop and mobile layouts, with refined
+  focus, reduced-motion, responsive sheets, and touch targets.
+- Portable `.erbackup` export and guarded restore for books, covers, reading preferences,
+  progress, bookmarks, annotations, and deletion tombstones.
+- Per-field title and author overrides plus cropped custom WebP covers and automatic-value reset.
+- Multi-file, folder, and drag-and-drop import through one previewed, cancellable import service.
+- Signed NSIS in-app updates with manual-by-default checks and an optional daily check; MSI stays
+  on the manual upgrade track.
+- Reproducible RC tooling for updater signatures, SHA-256 sums, CycloneDX SBOMs, locked-license
+  audit, private-key leak checks, and artifact inventory.
+
+### Changed
+
+- Missing backed-up books remain repairable placeholders and recover their reading data when a
+  file with the same hash is imported later.
+- Windows x64 packaging is split into NSIS updater and MSI manual tracks to avoid mixed installs.
+
+### Security
+
+- Backup restore rejects traversal, duplicates, checksum/size mismatch, unsupported versions,
+  excessive expansion, and compression bombs before changing local data.
+- NSIS update artifacts require the independently generated updater signature and HTTPS feed.
+- Windows installers remain unsigned by Authenticode and may show a SmartScreen warning.
+
 ## [0.1.0] - 2026-07-01
 
 ### Added

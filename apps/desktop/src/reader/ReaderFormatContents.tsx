@@ -21,7 +21,6 @@ import {
   type EpubLocator,
   type Locator,
   type PdfLocator,
-  type PdfPaginatedViewMode,
   type PageTransitionMode,
   type ReaderProgress,
   type ReaderTheme,
@@ -50,7 +49,6 @@ import {
   type EpubPosition,
   type EpubProgressPreview,
   type EpubSpreadMode,
-  type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
 import {
   nextPdfSpreadStart,
@@ -59,9 +57,9 @@ import {
   type PdfPosition,
   type PdfViewMode,
 } from "../pdf/PdfReaderAdapter";
-import { PdfContinuousView } from "../pdf/PdfContinuousView";
+import { MemoizedPdfContinuousView } from "../pdf/PdfContinuousView";
 import { resolvePdfLocatorAnchorKind } from "../pdf/PdfContinuousPosition";
-import { PdfPaginatedView } from "../pdf/PdfPaginatedView";
+import { MemoizedPdfPaginatedView } from "../pdf/PdfPaginatedView";
 
 import {
   DEFAULT_HIGHLIGHT_COLOR,
@@ -107,6 +105,56 @@ const TXT_DOUBLE_MIN_PAGE_WIDTH = 320;
 const TXT_SPREAD_GAP = 18;
 const txtSessionPaginationCache = new TxtPaginationSessionCache(2);
 let pendingFocusTimerId: number | null = null;
+
+type ReaderLoadingFormat = "epub" | "txt" | "pdf";
+
+function ReaderLoadingState({
+  format,
+  overlay = false,
+}: {
+  format: ReaderLoadingFormat;
+  overlay?: boolean;
+}) {
+  const formatLabel = format.toUpperCase();
+  return (
+    <section
+      className={`reader-state reader-state--loading reader-state--loading-${format}${overlay ? " reader-state--overlay" : ""}`}
+      role="status"
+      aria-live="polite"
+      aria-label={`Loading ${formatLabel} book`}
+    >
+      <div className="reader-loading-skeleton" aria-hidden="true">
+        {format === "pdf" ? (
+          <>
+            <span className="reader-loading-page" />
+            <span className="reader-loading-page" />
+          </>
+        ) : (
+          <>
+            <span className="reader-loading-title" />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </>
+        )}
+      </div>
+      <div className="reader-loading-copy">
+        <strong>
+          Opening {formatLabel} {format === "txt" ? "file" : "book"}…
+        </strong>
+        {format === "pdf" ? (
+          <p>Preparing pages…</p>
+        ) : (
+          <p>This may take a few moments.</p>
+        )}
+      </div>
+      <span className="reader-loading-progress" aria-hidden="true" />
+    </section>
+  );
+}
+
 export interface ReaderBlock {
   chapter: TxtChapter;
   paragraphs: ReaderParagraph[];
@@ -203,7 +251,6 @@ export interface TxtReaderContentProps {
   onActiveChapterChange: (chapterId: string) => void;
   onAnnotationActivate: (annotation: Annotation, anchor: ReaderMenuAnchor) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
-  onPaginatedViewModeChange: (mode: TxtPaginatedViewMode) => void;
   onProgressChange: (locator: TxtLocator, progress?: number) => void;
   onRetry: () => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
@@ -484,17 +531,7 @@ function TxtScrollReaderContent({
   }, [onSelectionChange]);
 
   if (isLoading) {
-    return (
-      <section
-        className="reader-state"
-        role="status"
-        aria-live="polite"
-        aria-label="Loading TXT book"
-      >
-        <div className="loading-line" aria-hidden="true" />
-        <p>Opening TXT book...</p>
-      </section>
-    );
+    return <ReaderLoadingState format="txt" />;
   }
 
   if (error !== null) {
@@ -591,7 +628,6 @@ function TxtPaginatedReaderContent({
   onActiveChapterChange,
   onAnnotationActivate,
   onNavigationActionsChange,
-  onPaginatedViewModeChange,
   onProgressChange,
   onRetry,
   onSelectionChange,
@@ -1068,24 +1104,6 @@ function TxtPaginatedReaderContent({
     return () => onNavigationActionsChange(null);
   }, [movePage, onNavigationActionsChange]);
 
-  const handleSpreadModeChange = useCallback(
-    (mode: TxtSpreadMode) => {
-      pendingTransitionPageRef.current = null;
-      pendingTargetSnapshotRef.current = null;
-      if (pendingProgressTimerRef.current !== null) {
-        window.clearTimeout(pendingProgressTimerRef.current);
-        pendingProgressTimerRef.current = null;
-        scheduledProgressPageRef.current = null;
-      }
-      transitionControllerRef.current?.cancel();
-      const activePage = pages[committedPageIndexRef.current];
-      if (activePage !== undefined) {
-        currentAnchorRef.current = activePage.startCharOffset;
-      }
-      onPaginatedViewModeChange(mode);
-    },
-    [onPaginatedViewModeChange, pages],
-  );
   const commitPageInput = useCallback(() => {
     const pageNumber = Number.parseInt(pageInput, 10);
     if (!Number.isFinite(pageNumber) || pages.length === 0) {
@@ -1150,12 +1168,7 @@ function TxtPaginatedReaderContent({
   );
 
   if (isLoading) {
-    return (
-      <section className="reader-state" role="status" aria-live="polite">
-        <div className="loading-line" aria-hidden="true" />
-        <p>Opening TXT book...</p>
-      </section>
-    );
+    return <ReaderLoadingState format="txt" />;
   }
   if (error !== null || paginationError !== null) {
     return (
@@ -1200,11 +1213,6 @@ function TxtPaginatedReaderContent({
       : spreadSize === 2 && spreadEnd > spreadStart + 1
         ? `Pages ${spreadStart + 1}-${spreadEnd} / ${pageTotalLabel}${calculationLabel}`
         : `Page ${spreadStart + 1} / ${pageTotalLabel}${calculationLabel}`;
-  const spreadDescription =
-    requestedSpreadMode === "double" && renderedSpreadMode === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       ref={viewportRef}
@@ -1245,7 +1253,6 @@ function TxtPaginatedReaderContent({
         onProgressChange={handleProgressPreview}
         onProgressCommit={commitProgress}
         onProgressStart={() => setIsDraggingProgress(true)}
-        onSpreadModeChange={handleSpreadModeChange}
         pageFieldLabel="Page"
         pageInputAriaLabel="TXT page number"
         pageInputDisabled={pages.length === 0}
@@ -1259,9 +1266,6 @@ function TxtPaginatedReaderContent({
         progressLabel={`${progressPercent}%`}
         progressTooltip={`${positionLabel} · ${progressPercent}%`}
         progressValue={progressValue}
-        requestedSpreadMode={requestedSpreadMode}
-        spreadAriaLabel="TXT page view"
-        spreadModeDescription={spreadDescription}
       />
     </section>
   );
@@ -1273,6 +1277,7 @@ export interface EpubReaderContentProps {
   isPageCurlBlocked: boolean;
   jumpRequest: EpubJumpRequest | null;
   theme: ReaderTheme;
+  spreadMode: EpubSpreadMode;
   transition: PageTransitionMode;
   tocItems: TocItem[];
   onActiveTocItemChange: (tocItemId: string) => void;
@@ -1294,6 +1299,7 @@ export function EpubReaderContent({
   isPageCurlBlocked,
   jumpRequest,
   theme,
+  spreadMode: requestedSpreadMode,
   transition,
   tocItems,
   onActiveTocItemChange,
@@ -1321,9 +1327,11 @@ export function EpubReaderContent({
   const appliedEpubHighlightSignaturesRef = useRef<Map<string, string>>(new Map());
   const appliedEpubUnderlineSignaturesRef = useRef<Map<string, string>>(new Map());
   const isPageCurlBlockedRef = useRef(isPageCurlBlocked);
+  const requestedSpreadModeRef = useRef(requestedSpreadMode);
   const themeRef = useRef(theme);
   const transitionModeRef = useRef(transition);
   const tocItemsRef = useRef(tocItems);
+  const onAnnotationActivateRef = useRef(onAnnotationActivate);
   const [error, setError] = useState<string | null>(null);
   const [activeImage, setActiveImage] = useState<EpubImageResource | null>(null);
   const [retryVersion, setRetryVersion] = useState(0);
@@ -1335,14 +1343,6 @@ export function EpubReaderContent({
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
   );
-  const [requestedSpreadMode, setRequestedSpreadMode] =
-    useState<EpubSpreadMode>("single");
-  const [spreadState, setSpreadState] = useState<EpubSpreadState>({
-    requested: "single",
-    rendered: "single",
-    canRenderDouble: false,
-  });
-
   useEffect(() => {
     tocItemsRef.current = tocItems;
   }, [tocItems]);
@@ -1358,8 +1358,18 @@ export function EpubReaderContent({
   }, [transition]);
 
   useLayoutEffect(() => {
+    onAnnotationActivateRef.current = onAnnotationActivate;
+  }, [onAnnotationActivate]);
+
+  useLayoutEffect(() => {
     isPageCurlBlockedRef.current = isPageCurlBlocked;
   }, [isPageCurlBlocked]);
+
+  useEffect(() => {
+    requestedSpreadModeRef.current = requestedSpreadMode;
+    transitionControllerRef.current?.cancel();
+    adapterRef.current?.setSpreadMode(requestedSpreadMode);
+  }, [requestedSpreadMode]);
 
   useEffect(() => {
     isDraggingProgressRef.current = isDraggingProgress;
@@ -1550,12 +1560,6 @@ export function EpubReaderContent({
       setPosition(null);
       setPreviewPosition(null);
       setLocationInput("1");
-      setRequestedSpreadMode("single");
-      setSpreadState({
-        requested: "single",
-        rendered: "single",
-        canRenderDouble: false,
-      });
       onTocChange([]);
 
       try {
@@ -1635,12 +1639,12 @@ export function EpubReaderContent({
               ...getSelectionMenuAnchor(selection.anchorRect),
             });
           },
-          onSpreadChange: setSpreadState,
         });
         openedAdapter = adapter;
         adapterRef.current = adapter;
 
         await adapter.open(book.id);
+        adapter.setSpreadMode(requestedSpreadModeRef.current);
         onSearchProviderChange(
           (searchQuery) =>
             adapter.search(searchQuery) as Promise<Array<SearchHit<Locator>>>,
@@ -1737,11 +1741,25 @@ export function EpubReaderContent({
 
     appliedEpubHighlightSignaturesRef.current = nextHighlightSignatures;
 
-    const nextUnderlines = getEpubUnderlineAnnotations(annotations);
+    const nextUnderlineGroups = new Map<
+      string,
+      Array<Annotation & { locator: EpubLocator & { cfi: string } }>
+    >();
+    for (const annotation of getEpubUnderlineAnnotations(annotations)) {
+      const group = nextUnderlineGroups.get(annotation.locator.cfi) ?? [];
+      group.push(annotation);
+      nextUnderlineGroups.set(annotation.locator.cfi, group);
+    }
     const nextUnderlineSignatures = new Map(
-      nextUnderlines.map((annotation) => [
-        annotation.locator.cfi,
-        getEpubAnnotationSignature(annotation),
+      Array.from(nextUnderlineGroups, ([cfi, group]) => [
+        cfi,
+        group
+          .map(
+            (annotation) =>
+              `${annotation.id}:${getEpubAnnotationSignature(annotation)}`,
+          )
+          .sort()
+          .join("||"),
       ]),
     );
 
@@ -1751,11 +1769,12 @@ export function EpubReaderContent({
       }
     }
 
-    for (const annotation of nextUnderlines) {
-      const cfi = annotation.locator.cfi;
+    for (const [cfi, group] of nextUnderlineGroups) {
       const signature = nextUnderlineSignatures.get(cfi);
+      const annotation = group[0];
 
       if (
+        annotation === undefined ||
         signature === undefined ||
         appliedEpubUnderlineSignaturesRef.current.get(cfi) === signature
       ) {
@@ -1766,13 +1785,13 @@ export function EpubReaderContent({
         cfi,
         annotation.color ?? DEFAULT_HIGHLIGHT_COLOR,
         (event) => {
-          onAnnotationActivate(annotation, getEventMenuAnchor(event));
+          onAnnotationActivateRef.current(annotation, getEventMenuAnchor(event));
         },
       );
     }
 
     appliedEpubUnderlineSignaturesRef.current = nextUnderlineSignatures;
-  }, [annotations, isAdapterReadyForHighlights, onAnnotationActivate]);
+  }, [annotations, isAdapterReadyForHighlights]);
 
   useEffect(() => {
     if (jumpRequest === null) {
@@ -1824,16 +1843,6 @@ export function EpubReaderContent({
       onNavigationActionsChange(null);
     };
   }, [handleNext, handlePrevious, onNavigationActionsChange]);
-
-  const handleSpreadModeChange = useCallback((mode: EpubSpreadMode) => {
-    transitionControllerRef.current?.cancel();
-    setRequestedSpreadMode(mode);
-    const nextSpreadState = adapterRef.current?.setSpreadMode(mode);
-
-    if (nextSpreadState !== undefined) {
-      setSpreadState(nextSpreadState);
-    }
-  }, []);
 
   const handleProgressPreview = useCallback(
     (value: string) => {
@@ -1941,11 +1950,6 @@ export function EpubReaderContent({
     activeProgress !== null
       ? (findTocItemByHref(tocItems, activeProgress.locator.href)?.title ?? book.title)
       : book.title;
-  const spreadModeDescription =
-    requestedSpreadMode === "double" && spreadState.rendered === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       className="reader-viewport reader-viewport--epub"
@@ -1955,17 +1959,7 @@ export function EpubReaderContent({
     >
       <article className="reader-page reader-page--epub">
         <div className="reader-epub-frame">
-          {isLoading ? (
-            <section
-              className="reader-state reader-state--overlay"
-              role="status"
-              aria-live="polite"
-              aria-label="Loading EPUB book"
-            >
-              <div className="loading-line" aria-hidden="true" />
-              <p>Opening EPUB book...</p>
-            </section>
-          ) : null}
+          {isLoading ? <ReaderLoadingState format="epub" overlay /> : null}
           {error !== null ? (
             <section
               className="reader-state reader-state--error reader-state--overlay"
@@ -2012,7 +2006,6 @@ export function EpubReaderContent({
             isDraggingProgressRef.current = true;
             setIsDraggingProgress(true);
           }}
-          onSpreadModeChange={handleSpreadModeChange}
           pageFieldLabel="Location"
           pageInputAriaLabel="EPUB location number"
           pageInputDisabled={!locationsReady}
@@ -2031,9 +2024,6 @@ export function EpubReaderContent({
               : `Page ${activeProgress.publicationPageLabel}`
           }
           progressValue={sliderValue}
-          requestedSpreadMode={requestedSpreadMode}
-          spreadAriaLabel="EPUB page view"
-          spreadModeDescription={spreadModeDescription}
         />
       </article>
       <EpubImageViewer
@@ -2051,7 +2041,6 @@ export interface PdfReaderContentProps {
   book: Book;
   isPageCurlBlocked: boolean;
   jumpRequest: PdfJumpRequest | null;
-  paginatedViewMode: PdfPaginatedViewMode;
   theme: ReaderTheme;
   tocItems: TocItem[];
   transition: PageTransitionMode;
@@ -2061,7 +2050,6 @@ export interface PdfReaderContentProps {
   onBackToLibrary: () => void;
   onCurrentLocatorChange: (locator: PdfLocator) => void;
   onNavigationActionsChange: ReaderNavigationRegistration;
-  onPaginatedViewModeChange: (mode: PdfPaginatedViewMode) => void;
   onSelectionChange: (snapshot: ReaderSelectionSnapshot | null) => void;
   onSearchProviderChange: (provider: ReaderSearchProvider | null) => void;
   onTocChange: (items: TocItem[]) => void;
@@ -2072,7 +2060,6 @@ export function PdfReaderContent({
   book,
   isPageCurlBlocked,
   jumpRequest,
-  paginatedViewMode,
   theme,
   tocItems,
   transition,
@@ -2082,7 +2069,6 @@ export function PdfReaderContent({
   onBackToLibrary,
   onCurrentLocatorChange,
   onNavigationActionsChange,
-  onPaginatedViewModeChange,
   onSelectionChange,
   onSearchProviderChange,
   onTocChange,
@@ -2295,14 +2281,18 @@ export function PdfReaderContent({
       });
   }, [onSelectionChange]);
 
+  const handlePdfAnnotationActivate = useCallback(
+    (annotation: Annotation, element: HTMLElement) => {
+      onAnnotationActivate(annotation, getElementMenuAnchor(element));
+    },
+    [onAnnotationActivate],
+  );
+
   useEffect(() => {
     themeRef.current = theme;
     pdfTransitionControllerRef.current?.cancel();
-    void adapterRef.current?.setTheme(theme).then(() => {
-      setPdfNavigationVersion((version) => version + 1);
-      return renderVisiblePages();
-    });
-  }, [renderVisiblePages, theme]);
+    void adapterRef.current?.setTheme(theme);
+  }, [theme]);
 
   useEffect(() => {
     let devicePixelRatio = window.devicePixelRatio || 1;
@@ -2680,17 +2670,6 @@ export function PdfReaderContent({
     };
   }, [handleNext, handlePrevious, onNavigationActionsChange]);
 
-  const handleViewModeChange = useCallback(
-    (mode: PdfPaginatedViewMode) => {
-      requestedViewModeRef.current = mode;
-      onPaginatedViewModeChange(mode);
-      runPdfAction((adapter) =>
-        adapter.setViewMode(mode, frameRef.current?.clientWidth),
-      );
-    },
-    [onPaginatedViewModeChange, runPdfAction],
-  );
-
   const handleZoomOut = useCallback(() => {
     runPdfAction((adapter) => adapter.setZoom((positionRef.current?.scale ?? 1) - 0.1));
   }, [runPdfAction]);
@@ -2800,11 +2779,6 @@ export function PdfReaderContent({
   const progressControlStyle = {
     "--epub-progress-percent": `${(activeProgress?.progression ?? 0) * 100}%`,
   } as CSSProperties;
-  const renderedModeDescription =
-    viewMode === "double" && position?.renderedMode === "single"
-      ? "Double view will resume when the window is wide enough."
-      : undefined;
-
   return (
     <section
       className="reader-viewport reader-viewport--pdf"
@@ -2821,17 +2795,7 @@ export function PdfReaderContent({
           onKeyDown={handlePdfFrameKeyDown}
           tabIndex={0}
         >
-          {isLoading ? (
-            <section
-              className="reader-state reader-state--overlay"
-              role="status"
-              aria-live="polite"
-              aria-label="Loading PDF book"
-            >
-              <div className="loading-line" aria-hidden="true" />
-              <p>Opening PDF book...</p>
-            </section>
-          ) : null}
+          {isLoading ? <ReaderLoadingState format="pdf" overlay /> : null}
           {error !== null ? (
             <section
               className="reader-state reader-state--error reader-state--overlay"
@@ -2858,28 +2822,24 @@ export function PdfReaderContent({
             </section>
           ) : null}
           {position?.renderedMode === "continuous" && pdfAdapter !== null ? (
-            <PdfContinuousView
+            <MemoizedPdfContinuousView
               adapter={pdfAdapter}
               annotations={annotations}
               availableWidth={frameWidth}
               frameRef={frameRef}
               navigationVersion={pdfNavigationVersion}
-              onAnnotationActivate={(annotation, element) =>
-                onAnnotationActivate(annotation, getElementMenuAnchor(element))
-              }
+              onAnnotationActivate={handlePdfAnnotationActivate}
               onSelectionEnd={capturePdfSelection}
               position={position}
               renderVersion={pdfRenderVersion}
             />
           ) : position !== null && pdfAdapter !== null ? (
-            <PdfPaginatedView
+            <MemoizedPdfPaginatedView
               adapter={pdfAdapter}
               annotations={annotations}
               availableWidth={frameWidth}
               isTransitioning={isPdfTransitioning}
-              onAnnotationActivate={(annotation, element) =>
-                onAnnotationActivate(annotation, getElementMenuAnchor(element))
-              }
+              onAnnotationActivate={handlePdfAnnotationActivate}
               onSelectionEnd={capturePdfSelection}
               position={position}
               renderVersion={pdfRenderVersion}
@@ -2906,31 +2866,6 @@ export function PdfReaderContent({
             <button type="button" className="reader-tool-button" onClick={handleNext}>
               Next
             </button>
-            <div
-              className="reader-epub-mode-toggle reader-pdf-mode-toggle"
-              role="group"
-              aria-label="PDF page view"
-              title={renderedModeDescription}
-            >
-              <button
-                type="button"
-                aria-pressed={
-                  viewMode !== "continuous" && paginatedViewMode === "single"
-                }
-                onClick={() => handleViewModeChange("single")}
-              >
-                Single
-              </button>
-              <button
-                type="button"
-                aria-pressed={
-                  viewMode !== "continuous" && paginatedViewMode === "double"
-                }
-                onClick={() => handleViewModeChange("double")}
-              >
-                Double
-              </button>
-            </div>
           </div>
           <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
             <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">
