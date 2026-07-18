@@ -14,6 +14,7 @@ files and notices supplied by each upstream project.
 | Tauri updater and minisign-verify | Signed update retrieval and verification | MIT OR Apache-2.0 |
 | epub.js | EPUB parsing and rendering | BSD-2-Clause |
 | PDF.js (`pdfjs-dist`) | PDF parsing and rendering | Apache-2.0 |
+| libmobi `mobitool` 0.12 | Offline MOBI/AZW3 to EPUB conversion sidecar | LGPL-3.0-or-later |
 | JSZip | EPUB ZIP container support; used under its MIT option | MIT OR GPL-3.0-or-later |
 | pako | Compression support used by EPUB dependencies | MIT AND Zlib |
 | rusqlite and SQLite | Local database; rusqlite is MIT, bundled SQLite is public domain | MIT / Public Domain |
@@ -47,6 +48,12 @@ not shipped as a standalone redistributable component of the installed applicati
 Syft v1.44.0 (Apache-2.0) is a release-only SBOM generator. Its Windows archive is downloaded from
 Anchore's immutable GitHub release only after the official checksum manifest and the archive
 checksum are verified; Syft is not bundled into Ebook Reader.
+
+The bundled libmobi sidecar is built from the unmodified v0.12 release with encryption disabled,
+static libmobi, the upstream bundled miniz, and the upstream internal XML writer. Its exact source
+archive, detached signature, build instructions, SHA-256, maintainer key fingerprints, and LGPL
+text are recorded under `third_party/libmobi/`. Public distributions that include the sidecar must
+also distribute the corresponding source archive or a durable written source offer.
 
 Upstream source, copyright, and exact license texts are available through the package metadata
 in `pnpm-lock.yaml`, `apps/desktop/src-tauri/Cargo.lock`, and the projects linked from their

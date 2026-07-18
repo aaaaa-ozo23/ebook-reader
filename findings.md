@@ -1,5 +1,19 @@
 # 发现与决策
 
+## 2026-07-19 大阶段 14.1：MOBI/AZW3 引擎与分发评估
+
+- **已批准决策：** 正式离线支持采用 libmobi v0.12，作为 Tauri Windows x64 sidecar 随应用分发；Calibre、KindleUnpack、foliate-js 仅保留为决策对比，不进入正式实现。
+- **范围：** 只开放 `.mobi`、`.azw3`；加密文件必须在 sidecar 前拒绝，应用不提供密码、密钥或 DRM 去除路径。
+- **仓库基线：** 远端 `v0.2.0` tag 已发布，`main`/`origin/main` 为 `ed72614`；已从该提交创建并推送 `codex/v0.3.0-integration`，当前阶段分支为 `codex/stage14-mobi-azw3-evaluation`。
+- **UI 工作流：** 现有 Stage 13 暖纸、深墨、青绿、琥珀系统是硬规格；14.3 先出四组状态板并审核，再编码和执行 Browser/截图 fidelity 对照。
+- **用户文件边界：** `.codex/` 与 `AGENTS.md` 保持未跟踪，不纳入阶段提交。
+- **上游现状（2026-07-19 核验）：** libmobi 官方仓库最新 release 仍为 v0.12（2024-06-17），README 明确覆盖 MOBI 与 KF8/AZW3、Windows MinGW/MSVC，并允许以 `--with-zlib=no` / `--with-libxml2=no` 使用内置 miniz/xmlwriter；许可证为 LGPL-3.0-or-later。
+- **分发形态：** Tauri 2 官方 sidecar 通过 `bundle.externalBin` 和目标三元组命名嵌入；本项目只从 Rust 后端启动 sidecar，不向 WebView 暴露任意 shell capability。
+- **来源校验：** 官方 release archive 为 2,653,654 bytes / SHA-256 `9A6FB2C5…BF7E7`；detached signature 通过，primary fingerprint `B1ED4008…1675C`、signing subkey `DCBC81C5…15322`。
+- **可重复构建：** MinGW GCC 8.1.0、静态 libmobi、内置 miniz/xmlwriter、`encryption=no`；两次独立干净构建均得到 296,129 bytes / `438576B7…47CF1`。PE 为 x64，仅导入 KERNEL32/msvcrt；help 保留 `-e` EPUB 和默认 KF8、无 password/decrypt 参数。
+- **体积门：** v0.2.0 baseline NSIS 7,373,692 → 7,485,002（+111,310）；MSI 9,461,760 → 9,601,024（+139,264）；installed footprint +296,129，均远低于 10 MiB/20 MiB 门槛。
+- **14.1 结论：** go。可进入 14.2；仍不授权 DRM、其他 Kindle 扩展、直接 MOBI reader adapter 或 14.4。
+
 ## 需求
 
 - 基于 `DEVELOPMENT.md` 制定更具体的分阶段开发计划。

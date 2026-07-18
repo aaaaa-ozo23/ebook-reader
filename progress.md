@@ -1,5 +1,46 @@
 # 进度日志
 
+## 2026-07-19 大阶段 14.1：MOBI/AZW3 决策
+
+### 状态
+- **当前状态：** in_progress
+- **集成分支：** `codex/v0.3.0-integration`
+- **当前分支：** `codex/stage14-mobi-azw3-evaluation`
+
+### 已执行
+- 完整读取 `planning-with-files-zh`、Build Web Apps、`frontend-design`、React 最佳实践和前端测试规范。
+- 核对远端 `v0.2.0` tag、发布后 `main` `ed72614`、工作树和阶段 14 路线图。
+- 从 `main` 创建并推送 `codex/v0.3.0-integration`，再创建 14.1 阶段分支。
+- 锁定 libmobi v0.12 sidecar、无 DRM、仅 MOBI/AZW3、先状态板后生产 UI 的实施边界。
+- 官方网页核验确认 v0.12、MOBI/KF8/AZW3、Windows MinGW/MSVC 和 LGPL-3.0-or-later；Tauri sidecar 配置契约已核对。
+
+### 遇到的错误
+- Web 安全策略拒绝直接打开 GitHub Releases API URL；改用受控 PowerShell HTTPS 请求获取 release 元数据和资产，不重复同一 Web 调用。
+- Git for Windows 的 `gpg.exe` 把绝对 Windows `GNUPGHOME` 再次拼接到当前 MSYS 路径，导致隔离 keyring 不可写；改为仓库相对、正斜杠路径后重试，不使用全局 keyring。
+- 首次 Git Bash 构建命令在 PowerShell 双引号中错误展开 `$PATH`，使 `export` 把后续 configure 参数当作变量；改用 PowerShell 单引号包裹完整 Bash 脚本，保持 Bash 自己展开 PATH。
+- 第二次 configure 已正确识别 Windows x64 MinGW、静态工具和内置 miniz/xmlwriter，但自动依赖跟踪阶段因环境没有名为 `make` 的命令而停止；下一次改用独立 out-of-tree 目录、`MAKE=mingw32-make` 和 `--disable-dependency-tracking`，并同时显式关闭 encryption。
+- out-of-tree 重试被 autotools 拒绝，因为第一次尝试已在同一源码树写入配置；不执行模糊清理，改为从已验证 tarball 解压一份全新的 source-clean 后构建。
+- 干净源码 configure 成功并确认 `encryption=no`、静态 libmobi、内置 miniz/xmlwriter；首次 make 因 Makefile 展开的 Git `sh.exe` 路径包含空格而失败，下一步显式传入 MSYS `/usr/bin/sh`，不改上游源码。
+- make 覆盖 `SHELL=/usr/bin/sh` 后仍被 MSYS 转回含空格的 Git Bash 路径；已确认等价 8.3 路径 `C:\PROGRA~1\Git\usr\bin\sh.exe` 存在，将在全新源码树的 configure 环境同时固定 `SHELL`/`CONFIG_SHELL`。
+- 一次只读工具探测误把数组传给 PowerShell `-Filter`，随后改用 `Where-Object` 完成检查；未影响任何文件或构建结果。
+- 首次运行固化脚本时，严格模式下单个 Git 工具候选被 PowerShell 解包为标量且没有 `.Count`；将过滤结果显式包成数组后重跑。
+- 固化脚本连续两次生成 296,129-byte sidecar，但 SHA-256 分别为 `3C145166…` 与 `1F556E72…`；`SOURCE_DATE_EPOCH` 已将版本时间固定到 2024-06-17，实际 Makefile 却只保留 `-O2`。改为在 configure 前导出 CFLAGS/LDFLAGS/确定性 ARFLAGS，再重新执行双构建门禁。
+- 规范化参数修复后，两次全新构建均得到 296,129 bytes / `438576B7…47CF1`，可重复性通过；该 hash 已写入构建脚本和组件元数据，非匹配产物不会覆盖 bundled sidecar。
+- 首轮 `pnpm.cmd check` 仅在 Prettier 门停止，涉及新增 JSON 与两份 release JS；ESLint 已通过。将只格式化这四个明确文件后重跑完整门禁。
+- `pnpm.cmd exec prettier --write` 在当前 pnpm 11 环境没有解析本地 bin；改用仓库已安装的 `node_modules\.bin\prettier.cmd`，不安装或更改依赖。
+
+### 完成项
+- 已核验 libmobi 源码资产、签名、许可证与可重复 Windows x64 构建路径。
+- 已建立第三方声明、sidecar 构建脚本、安全/体积门禁和 14.1 go/no-go 报告。
+- 阶段提交并合回集成分支后进入 14.2 隔离转换原型。
+
+### 阶段结果
+- **状态：** implementation_complete；结论 go。
+- **sidecar：** 296,129 bytes，SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`；双构建一致，x64 PE、无非系统 DLL、无 encryption 选项。
+- **体积：** NSIS +111,310 bytes，MSI +139,264 bytes，安装目录 +296,129 bytes；全部通过阈值。
+- **质量门：** `pnpm.cmd check`（core 8 / desktop 176）、Rust 51、Cargo fmt、license audit（291 JS / 529 Cargo / 1 bundled）、release security、NSIS 和 MSI 均通过。
+- **环境重试：** NSIS 在沙箱内无法读取既有 updater key，按安全边界在批准环境重跑；MSI 在沙箱内无法访问 WiX/Installer Service，批准环境重跑通过。两次均未输出私钥内容或改变用户数据。
+
 ## 2026-06-21 大阶段 5：书签、高亮、想法与检索
 
 ### 状态
