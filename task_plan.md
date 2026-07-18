@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 13.10 v0.2 正式发布：in progress。以 `release/v0.2.0` 当前头重新生成最终签名产物，在隔离用户数据根验证安装后零书籍/零库文件，再创建正式 tag 并通过内置侧边浏览器发布第二个 GitHub Release。
+大阶段 13.10 v0.2 正式发布：complete。最终签名产物通过隔离空状态验收，`v0.2.0` 已作为 Latest 通过内置侧边浏览器公开发布；11 个上传资产的远程 digest/大小与本地最终产物一致，Latest updater feed 精确匹配。
 
 ## 分支策略
 
@@ -503,7 +503,7 @@
 | 13.9 v0.2 发布候选（repository complete；native acceptance pending） | `codex/stage13-v0.2-release-candidate` | 更新版本/CHANGELOG/README/清单，执行升级、安装、卸载、文件关联和全量验收，创建 `release/v0.2.0` | 自动化与 draft artifacts 已通过；隔离 updater smoke、安装矩阵和离线密钥备份保持显式未完成，发布需用户明确授权后执行 |
 | 13.x UI fidelity / EPUB 批注修复（complete） | `codex/stage13-ui-fidelity-followup` | 对照批准稿收口 Notes/Search、选区/书签、主题/分页控件，并修复 EPUB 多 Note 即时刷新与长列表滚动 | 13 张用户证据逐项关闭；176 desktop Vitest、26 Playwright、51 Rust tests、Browser 空书架实页检查与最终截图目检全部通过 |
 | 13.x Page view 设置入口统一（complete） | `codex/stage13-page-view-settings-only` | 移除 TXT/EPUB/PDF 阅读舞台上的 Single/Double，所有分页单双页切换只保留在 Reading Settings 的 Page view | 176 Vitest、26 Playwright、51 Rust tests、Cargo fmt 与 NSIS/MSI 应用构建通过 |
-| 13.10 v0.2 正式发布（in progress） | `codex/v0.2.0-publication` | 重建最终 NSIS/MSI/updater/SBOM/checksum，验证干净初始状态，创建 `v0.2.0` 并发布第二个 GitHub Release | 最终产物来自 tag source；安装后 version=0.2.0、books=0、library files=0；公开资产/checksum/latest 状态复核通过 |
+| 13.10 v0.2 正式发布（complete） | `codex/v0.2.0-publication` | 重建最终 NSIS/MSI/updater/SBOM/checksum，验证干净初始状态，创建 `v0.2.0` 并发布第二个 GitHub Release | 最终产物来自 tag source；安装后 version=0.2.0、books=0、library files=0；公开资产/checksum/latest 状态复核通过 |
 
 ### 阶段 13.1/13.2 设计评审前置记录
 

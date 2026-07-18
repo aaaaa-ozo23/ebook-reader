@@ -734,3 +734,5 @@
 - **诊断错误：** 尝试同时重定向 `USERPROFILE` 与 AppData 启动时 Windows 返回 access denied；该方法未继续重试，改用仓库既有独立 identifier，避免修改 Known Folder 注册表或真实用户目录。
 - **Playwright 清理：** publication 最终套件 26 个项目全部显示通过点；与既有记录一致，Playwright 完成后 Windows Vite 子进程未释放输出句柄导致外层超时。此清理问题不改变 26/26 断言结果，未生成失败上下文。
 - **Release 草稿：** 内置侧边浏览器已将正式说明与 11 个最终产物保存到 GitHub draft；页面确认 `Latest` 被选中且提示 tag 将在发布时从 `release/v0.2.0` 创建。维护者确认离线备份后，正式 tag 与 Publish 已获既定计划门禁授权。
+- **公开页面：** Release 已公开为 Latest，URL 为 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面显示 tag `v0.2.0`、commit `b67b2a4`、无 draft 提示。GitHub 资产计数 13 包含 11 个上传资产及自动生成的两份 Source code archive。
+- **远程完整性：** GitHub Release API 的 11 个资产全部为 uploaded；服务端 `sha256:` digest 与 size 逐项匹配本地最终产物。`releases/latest/download/latest.json` 可公开访问，内容与本地 feed 相同，version 为 0.2.0、Windows URL 指向 v0.2.0 NSIS、签名字段为完整 424 字节文本。

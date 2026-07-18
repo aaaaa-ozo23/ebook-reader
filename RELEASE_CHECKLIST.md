@@ -73,6 +73,6 @@ must have current-run evidence; draft artifacts alone do not authorize a tag or 
 - [x] Isolated clean launch reports version `0.2.0`, zero books, and zero managed library book files.
 - [x] GitHub draft targets `release/v0.2.0`, is marked Latest, and contains all 11 final assets.
 - [x] Updater private key offline-backup confirmation is recorded without exposing its location or contents.
-- [ ] `v0.2.0` tag targets the accepted publication commit and is pushed.
-- [ ] GitHub Release `Ebook Reader v0.2.0` is public, non-prerelease, and marked Latest.
-- [ ] Public installer, updater feed/signature, SBOM/report, and checksum assets match local final artifacts.
+- [x] `v0.2.0` tag targets the accepted publication commit and is pushed.
+- [x] GitHub Release `Ebook Reader v0.2.0` is public, non-prerelease, and marked Latest.
+- [x] Public installer, updater feed/signature, SBOM/report, and checksum assets match local final artifacts.

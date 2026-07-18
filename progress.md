@@ -2103,7 +2103,7 @@
 
 ## 2026-07-18 大阶段 13.10：v0.2 正式发布
 
-- **状态：** in_progress；分支 `codex/v0.2.0-publication` 从已推送的 `release/v0.2.0` `940beda` 创建。
+- **状态：** complete；发布准备分支 `codex/v0.2.0-publication` 已合入并推送到 `release/v0.2.0`，正式 tag 指向验收提交 `b67b2a4`。
 - **目标：** 发布第二个正式 GitHub Release `v0.2.0`；最终 installer 必须来自当前 source，并在不读取或覆盖真实用户数据的隔离数据根验证 version 0.2.0、books=0、managed library book files=0。
 - **发布顺序：** 最终产物/签名/安全门禁 → 初始状态验收 → 离线密钥备份确认 → publication commit/tag → 内置侧边浏览器草稿上传与公开 → 公开资产/checksum/latest 复核。
 - **边界：** 不把 draft RC 旧产物当最终产物，不混用 NSIS/MSI 轨道，不删除真实用户 app-data，不泄露 updater 私钥；Authenticode 继续如实标记 `NotSigned`。
@@ -2113,3 +2113,5 @@
 - **密钥权限：** 沙箱外只读 ACL 复核 owner/唯一显式 allow 均为当前用户 `许涵予\许涵予xhy`，未读取或输出私钥内容；维护者已于 2026-07-19 明确确认完成独立离线备份，未记录介质位置或密钥内容。
 - **最终 E2E：** publication source Playwright 26/26 全部输出通过标记，覆盖 1280/900/640/375、DPR2、reduced-motion、axe 与独立 500 页 PDF；Windows 临时 Vite 子进程继续在断言结束后占用输出句柄，外层 360 秒超时，但没有失败用例或 error context。
 - **GitHub 草稿：** 已通过内置侧边浏览器创建 `Ebook Reader v0.2.0` draft，目标为 `release/v0.2.0`、标签候选为 `v0.2.0`、Latest 已选中；最终 11 个附件全部上传并保存。维护者已解除离线备份门禁，下一步创建 tag 后公开发布。
+- **公开发布：** 内置侧边浏览器已发布 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面确认 Latest、非草稿、tag `v0.2.0`、commit `b67b2a4`。附件区显示 13 项（11 个上传产物加 GitHub 自动生成的 Source code zip/tar），远程内容校验继续执行。
+- **远程验收：** GitHub Release API 返回 `draft=false`、`prerelease=false`、target `release/v0.2.0` 与 11 个 uploaded assets；每个资产的 SHA-256 digest 和 byte size 均与 `release-artifacts/v0.2.0-final/` 一致。公开 Latest `latest.json` 为 0.2.0、签名长度 424，并与本地 JSON 规范化后完全相同。
