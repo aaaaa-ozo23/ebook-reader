@@ -57,11 +57,27 @@ const report = {
     packageCount: externalCargo.length,
     unknownPackages: unknownCargo.map(({ name, version }) => `${name}@${version}`),
   },
+  bundledComponents: [readBundledComponent("third_party/libmobi/component.json")],
 };
 
 if (outputPath) writeFileSync(outputPath, `${JSON.stringify(report, null, 2)}\n`);
 console.log(JSON.stringify(report));
 if (unknownJs.length > 0 || unknownCargo.length > 0) process.exit(1);
+
+function readBundledComponent(path) {
+  const component = JSON.parse(readFileSync(resolve(root, path), "utf8"));
+  for (const field of [
+    "name",
+    "version",
+    "license",
+    "sourceUrl",
+    "sourceSha256",
+    "binarySha256",
+  ]) {
+    if (!component[field]) throw new Error(`${path} is missing ${field}`);
+  }
+  return component;
+}
 
 function discoverPnpmPackages(store) {
   const packages = new Map();

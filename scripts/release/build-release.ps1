@@ -33,6 +33,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'cargo test failed' }
   }
 
+  & pnpm.cmd deps:libmobi
+  if ($LASTEXITCODE -ne 0) { throw 'libmobi sidecar build and verification failed' }
+
   & node scripts\release\audit-licenses.mjs (Join-Path $OutputDirectory 'license-audit.json')
   if ($LASTEXITCODE -ne 0) { throw 'license audit failed' }
   & node scripts\release\verify-release-security.mjs
@@ -69,6 +72,8 @@ try {
   Copy-Item -LiteralPath $sourceNsis.FullName -Destination (Join-Path $output $nsisName)
   Copy-Item -LiteralPath $sourceMsi.FullName -Destination (Join-Path $output $msiName)
   Copy-Item -LiteralPath $sourceSignature.FullName -Destination (Join-Path $output $signatureName)
+  Copy-Item -LiteralPath (Join-Path $root '.tools\libmobi-v0.12\libmobi-0.12.tar.gz') -Destination $output
+  Copy-Item -LiteralPath (Join-Path $root '.tools\libmobi-v0.12\libmobi-0.12.tar.gz.asc') -Destination $output
 
   $latest = [ordered]@{
     version = $Version

@@ -8,6 +8,26 @@ const root = resolve(import.meta.dirname, "..", "..");
 const artifactRoot = process.argv[2] ? resolve(root, process.argv[2]) : null;
 const failures = [];
 
+const libmobiComponent = JSON.parse(
+  readFileSync(resolve(root, "third_party/libmobi/component.json"), "utf8"),
+);
+const libmobiBinary = resolve(
+  root,
+  "apps/desktop/src-tauri/binaries/mobitool-x86_64-pc-windows-msvc.exe",
+);
+if (!statSafe(libmobiBinary)) {
+  failures.push("Pinned libmobi sidecar is missing.");
+} else {
+  const binary = readFileSync(libmobiBinary);
+  const hash = createHash("sha256").update(binary).digest("hex").toUpperCase();
+  if (hash !== libmobiComponent.binarySha256) {
+    failures.push("Pinned libmobi sidecar hash does not match component metadata.");
+  }
+  if (binary.length !== libmobiComponent.binaryBytes) {
+    failures.push("Pinned libmobi sidecar size does not match component metadata.");
+  }
+}
+
 const publicKeyPath = resolve(
   root,
   "apps/desktop/src-tauri/updater/ebook-reader-updater.pub",
@@ -90,6 +110,11 @@ if (artifactRoot) {
   if (!latest.version || !windows?.url || !windows?.signature) {
     failures.push("latest.json is missing required Windows updater fields.");
   }
+  for (const name of ["libmobi-0.12.tar.gz", "libmobi-0.12.tar.gz.asc"]) {
+    if (!statSafe(resolve(artifactRoot, name))) {
+      failures.push(`Release artifact is missing LGPL source material: ${name}`);
+    }
+  }
 }
 
 if (failures.length > 0) {
@@ -97,6 +122,14 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log("Release security verification passed.");
+
+function statSafe(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
 
 function walk(directory) {
   return readdirSync(directory).flatMap((name) => {
