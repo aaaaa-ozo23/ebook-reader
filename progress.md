@@ -2100,3 +2100,15 @@
 - **运行态验收：** Browser 实页检查通过；Playwright 26/26 覆盖 TXT、EPUB、PDF 的 Settings-only 切换、1280/900/640/375、DPR2、reduced-motion 与 axe serious/critical。Windows 下 Playwright 完成断言后临时 Vite 子进程未释放输出句柄，外层命令超时，但 26 个用例均输出通过标记且无失败上下文。
 - **代码门禁：** `pnpm.cmd check` 通过（24 files / 176 Vitest），Cargo fmt 通过，Rust 51/51 通过，reader chunk 为 195.91 kB（gzip 56.08 kB）。
 - **应用构建：** release EXE、NSIS 与 MSI 均于 2026-07-18 重新生成；WiX ICE 在受限环境无法访问 Windows Installer Service，使用同一构建命令在允许系统服务访问的环境重试后 MSI 成功。产物位于 `apps/desktop/src-tauri/target/release/` 与其 `bundle/nsis`、`bundle/msi` 子目录。
+
+## 2026-07-18 大阶段 13.10：v0.2 正式发布
+
+- **状态：** in_progress；分支 `codex/v0.2.0-publication` 从已推送的 `release/v0.2.0` `940beda` 创建。
+- **目标：** 发布第二个正式 GitHub Release `v0.2.0`；最终 installer 必须来自当前 source，并在不读取或覆盖真实用户数据的隔离数据根验证 version 0.2.0、books=0、managed library book files=0。
+- **发布顺序：** 最终产物/签名/安全门禁 → 初始状态验收 → 离线密钥备份确认 → publication commit/tag → 内置侧边浏览器草稿上传与公开 → 公开资产/checksum/latest 复核。
+- **边界：** 不把 draft RC 旧产物当最终产物，不混用 NSIS/MSI 轨道，不删除真实用户 app-data，不泄露 updater 私钥；Authenticode 继续如实标记 `NotSigned`。
+- **最终产物：** `release-artifacts/v0.2.0-final/` 已从当前 source 全量生成；`pnpm.cmd check` 176 desktop / 8 core、Rust 51、license audit 291 JS / 529 Cargo unknown=0、release/security verifier、NSIS updater signature、MSI、Syft 1.44.0 SBOM 与 `git diff --check` 全部通过。
+- **安装内容证明：** 最终 NSIS 静默安装到独立目录，installed EXE version/productVersion 均为 0.2.0；NSIS 生成脚本和 MSI WXS/File table 均只打包应用 EXE，不含 SQLite、library、EPUB/TXT/PDF 或测试 payload。MSI administrative install 成功，image 内应用 EXE 为 0.2.0。
+- **空状态证明：** 同一 source 的 0.2.0 release binary 以独立 `com.ebookreader.desktop.updater-test` 标识首次启动，事前 app-data 不存在；启动后 `books=0`、`bookmarks=0`、`annotations=0`、`reading_progress=0`、`book_user_metadata=0`、managed library book files=0，进程随后停止。真实 `%APPDATA%\com.ebookreader.desktop` 未删除或覆盖。
+- **密钥权限：** 沙箱外只读 ACL 复核 owner/唯一显式 allow 均为当前用户 `许涵予\许涵予xhy`，未读取或输出私钥内容；离线备份仍等待维护者确认。
+- **最终 E2E：** publication source Playwright 26/26 全部输出通过标记，覆盖 1280/900/640/375、DPR2、reduced-motion、axe 与独立 500 页 PDF；Windows 临时 Vite 子进程继续在断言结束后占用输出句柄，外层 360 秒超时，但没有失败用例或 error context。

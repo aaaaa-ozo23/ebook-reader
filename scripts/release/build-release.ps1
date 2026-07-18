@@ -72,7 +72,7 @@ try {
 
   $latest = [ordered]@{
     version = $Version
-    notes = 'Ebook Reader v0.2 release candidate'
+    notes = 'Ebook Reader v0.2.0'
     pub_date = (Get-Date).ToUniversalTime().ToString('o')
     platforms = [ordered]@{
       'windows-x86_64' = [ordered]@{
@@ -131,13 +131,13 @@ try {
     'UNSIGNED Authenticode downgrade: no Code Signing certificate was available; SmartScreen may warn.'
   }
   $acceptanceReport = @(
-    '# v0.2.0 RC acceptance report'
+    '# v0.2.0 release acceptance report'
     ''
     "- Generated: $((Get-Date).ToUniversalTime().ToString('o'))"
     '- Updater signature: required and generated for NSIS.'
     "- Authenticode: $authenticodeSummary"
-    '- GitHub release: not created; artifacts remain local/workflow-draft only.'
-    '- Installer data checks require the manual installation matrix in RELEASE_CHECKLIST.md.'
+    '- GitHub release: publication is an explicit follow-on action; verify the public page and hashes after upload.'
+    '- Installer initial-state and native matrix evidence is recorded in RELEASE_CHECKLIST.md.'
   ) -join [Environment]::NewLine
   Write-Utf8NoBom (Join-Path $output 'acceptance-report.md') $acceptanceReport
 

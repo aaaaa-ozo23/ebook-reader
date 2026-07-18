@@ -721,3 +721,15 @@
 - **同名关闭入口：** 移动目录同时渲染 backdrop 与面板内两个 `Close contents` 按钮，不能用按钮数量判断是否打开；backdrop 位于 sidebar 下层也不适合作为此状态下的点击目标。最终助手只在 sidebar 的 computed `position` 为 `fixed` 时点击面板内关闭按钮并等待隐藏，避免误关 desktop/640 px 常驻侧栏。
 - **构建环境：** Tauri 首次双目标构建已生成 release EXE 与 NSIS，但 WiX `light.exe` 的 ICE01–ICE09 因受限环境无法访问正在运行的 Windows Installer Service 而失败；同一 MSI 命令在允许服务访问的环境执行后成功，说明不是应用代码、WXS 或依赖编译错误。
 - **完成结论：** TXT/EPUB/PDF 阅读舞台均不再渲染 Single/Double，唯一入口为 Theme / Reading Settings 的 Page view；Settings 的既有父状态和 adapter 同步仍负责布局切换与持久化。176 Vitest、26 Playwright、51 Rust tests、Cargo fmt、NSIS/MSI 构建通过。
+
+## 2026-07-18 v0.2 正式发布
+
+- **产物新鲜度：** `release-artifacts/v0.2.0-rc/` 最后生成于 2026-07-17，早于 2026-07-18 的 UI/Page view 收口提交，必须整体重建，不能直接上传。
+- **浏览器状态：** 内置侧边浏览器已有仓库主页标签 `https://github.com/aaaaa-ozo23/ebook-reader`，正式发布仍需在产物验收后确认登录态并创建 Release。
+- **隔离能力：** 当前系统没有 `WindowsSandbox.exe`；干净状态验证必须使用独立安装目录和重定向的 `APPDATA`/`LOCALAPPDATA`，不能清空或覆盖真实用户目录。
+- **密钥检查：** updater 私钥路径存在；受限环境读取 ACL 返回 unauthorized，后续只在允许的系统上下文验证 ACL/用于签名，绝不输出密钥内容。离线备份仍是只能由维护者确认的人工门禁。
+- **GitHub 权限：** 内置侧边浏览器仓库页显示已登录头像、通知与创建入口，当前账号可见仓库管理 UI；默认 `main` 仍停留在 v0.1 文档，正式 v0.2 publication source 必须在发布后同步回主线。
+- **真实数据隔离：** 机器上仍有旧 `%LOCALAPPDATA%\Ebook Reader` 程序目录和真实 `%APPDATA%\com.ebookreader.desktop` 数据库。Windows `SHGetKnownFolderPath` 不接受仅重定向 `APPDATA/LOCALAPPDATA` 作为可靠隔离，首次尝试未在测试根创建数据库；后续没有清空或替换真实数据。
+- **隔离替代证据：** 最终 NSIS 实际安装的 EXE 为 0.2.0；NSIS `installer.nsi` 只有主 EXE `File` 指令，MSI administrative image 也只有 0.2.0 主 EXE。再以仓库既有独立 identifier `com.ebookreader.desktop.updater-test` 启动同源 0.2.0 release binary，所有用户内容表与 managed book files 均为 0。因此发布包不携带测试数据库/书籍，fresh identifier 初始化为空。
+- **诊断错误：** 尝试同时重定向 `USERPROFILE` 与 AppData 启动时 Windows 返回 access denied；该方法未继续重试，改用仓库既有独立 identifier，避免修改 Known Folder 注册表或真实用户目录。
+- **Playwright 清理：** publication 最终套件 26 个项目全部显示通过点；与既有记录一致，Playwright 完成后 Windows Vite 子进程未释放输出句柄导致外层超时。此清理问题不改变 26/26 断言结果，未生成失败上下文。

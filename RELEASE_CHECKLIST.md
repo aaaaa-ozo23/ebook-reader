@@ -66,3 +66,12 @@ must have current-run evidence; draft artifacts alone do not authorize a tag or 
 - [x] `release/v0.2.0` is created from that integration head and pushed.
 - [x] Workflow is manual, contents-read-only, and uploads draft workflow artifacts only.
 - [x] No formal tag or GitHub Release is created or published in this stage.
+
+## Formal v0.2.0 publication run
+
+- [x] Final artifacts are regenerated from the current publication source and pass security/schema verification.
+- [x] Isolated clean launch reports version `0.2.0`, zero books, and zero managed library book files.
+- [ ] Updater private key offline-backup confirmation is recorded without exposing its location or contents.
+- [ ] `v0.2.0` tag targets the accepted publication commit and is pushed.
+- [ ] GitHub Release `Ebook Reader v0.2.0` is public, non-prerelease, and marked Latest.
+- [ ] Public installer, updater feed/signature, SBOM/report, and checksum assets match local final artifacts.
