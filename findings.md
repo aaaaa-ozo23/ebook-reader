@@ -1,5 +1,14 @@
 # 发现与决策
 
+## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
+
+- **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。
+- **信息层级：** 导入预览先回答“哪些会导入、哪些会本地转换、哪些被跳过”；MOBI/AZW3 源标签始终保留，`Will convert locally to EPUB` 是辅助说明而非把展示格式改成 EPUB。
+- **诚实进度：** 整体 track 只表达已完成项目数，单本转换只显示当前阶段；六阶段为 `Scanning / Hashing / Converting / Validating / Committing / Completed`，不显示 libmobi 不提供的单本百分比。
+- **DRM 边界：** 结果页明确“应用不会尝试移除 DRM”，没有密码、解密或在线转换入口；成功兄弟项不回滚，失败项同时说明没有留下 library record 或 managed file。
+- **移动端：** drop overlay 明确“Nothing imports until you confirm”；review sheet 375px 宽、近全高、顶部拖动 handle、sticky 48px actions，后续实现必须继承现有手势阻尼、焦点恢复和 reduced-motion。
+- **审核状态：** 四张状态板已通过 Browser 1440×900、无溢出、console 0 的静态检查；用户批准前不得修改生产 React/CSS。
+
 ## 2026-07-19 大阶段 14.1：MOBI/AZW3 引擎与分发评估
 
 - **已批准决策：** 正式离线支持采用 libmobi v0.12，作为 Tauri Windows x64 sidecar 随应用分发；Calibre、KindleUnpack、foliate-js 仅保留为决策对比，不进入正式实现。

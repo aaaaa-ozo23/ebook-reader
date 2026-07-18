@@ -1,5 +1,32 @@
 # 进度日志
 
+## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
+
+### 状态
+- **当前状态：** awaiting_user_approval
+- **当前分支：** `codex/stage14-mobi-import`
+- **基线：** v0.3 integration `6e15884`
+
+### 已执行
+- 14.2 三类提交已推送，并以 `--no-ff` 合入/推送 `codex/v0.3.0-integration`。
+- 逐项复核 Stage 13 书架、系统状态、响应式与控件状态批准稿，并核对当前 `BatchImportDialog`、drop overlay 和现有视觉 token。
+- 创建四组静态可审核状态：桌面预览、转换进度/取消、DRM/部分失败、375px sheet/drop overlay；未修改生产 React/CSS。
+
+### 遇到的错误
+- 分支创建后的只读 `rg` 命令把以 `--` 开头的正则误识别为参数；分支已成功创建且无文件修改，改用 `rg -e` 后完成 token 盘点。
+- 首次尝试用隐藏 `Start-Process` 启动静态服务时，当前 Windows 环境同时含 `Path`/`PATH` 键导致 PowerShell 构造环境字典失败；没有子进程被创建。改为由任务直接持有可终止的本地 server，Browser 检查结束后已终止，端口只剩 `TIME_WAIT`。
+- PNG 尺寸复核命令首次未加载 `System.Drawing` 程序集，hash 仍成功计算但宽高字段为空；实际 Browser viewport/DOM 已逐页确认 1440×900，后续改用 PNG header 复核，不把失败读数计为证据。
+- 内置 Browser `screenshot()` 返回 JFIF bytes，即使目标名使用 `.png`；不保留错误扩展名。桌面预览以仓库 Chromium 重新截图为 PNG，其余三张以 Windows `System.Drawing` 无缩放转码为真实 PNG。首次 Playwright CLI 截图生成后复现已知的 Windows 清理挂起，产物已成功写入，终止残留命令后未再批量重跑。
+
+### 待执行
+- 提交并推送设计资产，等待用户逐图批准；批准前不进入生产 UI 或 14.3 功能接线。
+
+### 设计验收结果
+- 内置 Browser 逐页确认四组状态板均为单一可见 board、1440×900、无横向或纵向溢出、console warning/error 0。
+- 桌面预览保留 MOBI/AZW3 源标签与本地转换说明；转换页按六阶段显示且取消按钮 44px；DRM 页无 password/decrypt/online 控件；两个移动 frame 均为 375px，sticky action 为 48px。
+- 四张 PNG 已保存至 `docs/design/v0.3/stage14-mobi-concepts/`，临时 viewport 已重置，Browser tab 与本地 server 已清理。
+- 最终四张均为真实 PNG、1440×900；大小依次为 126,710 / 211,694 / 294,826 / 336,666 bytes，HTML 通过 Prettier，`git diff --check` 通过。
+
 ## 2026-07-19 大阶段 14.2：MOBI/AZW3 转换原型
 
 ### 状态

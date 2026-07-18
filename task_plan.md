@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.2 MOBI/AZW3 转换原型：implementation complete，等待阶段提交/合并。隔离 preflight、真实 MOBI/AZW3 转换、中文/图片/目录、DRM 预拒绝、取消/超时、EPUB 攻击验证、清理与资源测量均通过，结论为 go；合入后先产出 14.3 四组 UI 状态板并等待审核。
+大阶段 14.3 MOBI/AZW3 正式导入：design review。14.2 已以 `6e15884` 合入并推送 v0.3 集成分支；当前分支 `codex/stage14-mobi-import` 只产出四组 UI 状态板，用户批准前不修改生产 React/CSS。
 
 ## 分支策略
 
