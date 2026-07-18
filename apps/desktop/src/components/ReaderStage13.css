@@ -2174,12 +2174,16 @@
 }
 
 .reader-epub-control-row {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   border: 0;
   border-radius: 0;
   background: transparent;
   padding: 0;
+}
+
+.reader-pdf-control-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
 }
 
 .reader-page-navigation {
@@ -2261,12 +2265,8 @@
     right: 4px;
   }
 
-  .reader-epub-control-row {
+  .reader-epub-control-row:not(.reader-pdf-control-row) {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .reader-epub-mode-toggle {
-    justify-self: center;
   }
 
   .reader-epub-controls .reader-page-navigation .reader-tool-button {

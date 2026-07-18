@@ -1,7 +1,5 @@
 import { memo, type CSSProperties } from "react";
 
-export type ReaderSpreadMode = "single" | "double";
-
 export interface PaginatedReaderControlsProps {
   ariaLabel: string;
   chapterTitle: string;
@@ -14,7 +12,6 @@ export interface PaginatedReaderControlsProps {
   onProgressChange: (value: string) => void;
   onProgressCommit: () => void;
   onProgressStart: () => void;
-  onSpreadModeChange: (mode: ReaderSpreadMode) => void;
   pageFieldLabel: string;
   pageInputAriaLabel: string;
   pageInputDisabled: boolean;
@@ -28,9 +25,6 @@ export interface PaginatedReaderControlsProps {
   progressLabel: string;
   progressTooltip: string;
   progressValue: number;
-  requestedSpreadMode: ReaderSpreadMode;
-  spreadAriaLabel: string;
-  spreadModeDescription?: string;
 }
 
 export const PaginatedReaderControls = memo(function PaginatedReaderControls({
@@ -45,7 +39,6 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
   onProgressChange,
   onProgressCommit,
   onProgressStart,
-  onSpreadModeChange,
   pageFieldLabel,
   pageInputAriaLabel,
   pageInputDisabled,
@@ -59,9 +52,6 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
   progressLabel,
   progressTooltip,
   progressValue,
-  requestedSpreadMode,
-  spreadAriaLabel,
-  spreadModeDescription,
 }: PaginatedReaderControlsProps) {
   const normalizedProgressValue = Math.min(1000, Math.max(0, progressValue));
   const progressControlStyle = {
@@ -96,32 +86,6 @@ export const PaginatedReaderControls = memo(function PaginatedReaderControls({
             <span aria-hidden="true">›</span>
           </button>
         </div>
-        <div
-          className="reader-epub-mode-toggle"
-          role="group"
-          aria-label={spreadAriaLabel}
-          title={spreadModeDescription}
-        >
-          <button
-            type="button"
-            aria-pressed={requestedSpreadMode === "single"}
-            onClick={() => onSpreadModeChange("single")}
-          >
-            Single
-          </button>
-          <button
-            type="button"
-            aria-pressed={requestedSpreadMode === "double"}
-            onClick={() => onSpreadModeChange("double")}
-          >
-            Double
-          </button>
-        </div>
-        {spreadModeDescription === undefined ? null : (
-          <span className="reader-spread-mode-note" role="status">
-            {spreadModeDescription}
-          </span>
-        )}
       </div>
       <div className="reader-epub-progress" style={progressControlStyle}>
         <div className="reader-epub-progress__meta">

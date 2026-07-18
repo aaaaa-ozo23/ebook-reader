@@ -1639,7 +1639,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onProgressChange={handleTxtProgressChange}
             onRetry={() => setTxtRetryVersion((version) => version + 1)}
             onNavigationActionsChange={handleNavigationActionsChange}
-            onPaginatedViewModeChange={handleTxtPaginatedViewModeChange}
             onSelectionChange={handleSelectionChange}
             onBackToLibrary={onBackToLibrary}
           />
@@ -1669,7 +1668,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onSelectionCleared={handleClearSelectionUi}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
-            onSpreadModeChange={setEpubSpreadMode}
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
@@ -1684,7 +1682,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
               notePopover !== null
             }
             jumpRequest={pdfJumpRequest}
-            paginatedViewMode={readerExperiencePreferences.pdf.paginatedViewMode}
             theme={theme}
             tocItems={tocItems}
             transition={readerExperiencePreferences.pdf.transition}
@@ -1694,7 +1691,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onAnnotationActivate={handleAnnotationNotesActivate}
             onCurrentLocatorChange={handleCurrentLocatorChange}
             onNavigationActionsChange={handleNavigationActionsChange}
-            onPaginatedViewModeChange={handlePdfPaginatedViewModeChange}
             onSelectionChange={handleSelectionChange}
             onSearchProviderChange={handleSearchProviderChange}
             onTocChange={handleDocumentTocChange}
