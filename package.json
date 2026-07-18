@@ -18,6 +18,7 @@
     "test": "pnpm -r --if-present test",
     "deps:libmobi": "powershell -ExecutionPolicy Bypass -File scripts/deps/build-libmobi.ps1",
     "deps:verify-libmobi": "node scripts/deps/verify-libmobi.mjs",
+    "deps:measure-libmobi": "powershell -ExecutionPolicy Bypass -File scripts/deps/measure-libmobi.ps1",
     "tauri:build:nsis": "node scripts/build-windows-flavor.mjs nsis",
     "tauri:build:msi": "node scripts/build-windows-flavor.mjs msi",
     "release:audit": "node scripts/release/audit-licenses.mjs",

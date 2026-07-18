@@ -1,4 +1,4 @@
-/* global console, process */
+/* global console */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
