@@ -1,9 +1,41 @@
 # 进度日志
 
+## 2026-07-20 大阶段 14.3–14.7：实施启动
+
+### 状态
+- **当前状态：** 14.3 acceptance_complete；等待提交、推送并 `--no-ff` 合回集成分支，随后进入 14.4 design_review_pending
+- **当前分支：** `codex/stage14-mobi-import`
+- **基线：** v0.3 integration `6e15884`；当前设计提交 `ce09786`
+
+### 已执行
+- 用户批准 14.3 四张状态板，并把范围扩展为依次完成 14.3、14.4、14.5、14.6、14.7。
+- 锁定阅读器 UI 修复：全格式 Previous/Next 使用一致 SVG 与文字对齐；三组排版图标按批准稿表达不同语义；Margin 对 EPUB/TXT/PDF 均须真实生效。
+- 完整读取文件规划、前端设计、Build Web Apps、React 性能、前端测试和内置 Browser 规范；恢复三份台账与 Git 现场。
+- session catchup 检出 36 条未同步上下文，均来自本轮计划确认与技能/现场检查；产品代码工作树仍无未提交改动，用户 `.codex/`、`AGENTS.md` 保持未跟踪。
+
+### 阶段顺序
+- 14.3 生产实现、Browser/Playwright/Rust/双构建验收并 `--no-ff` 合回集成分支。
+- 14.4–14.6 各自先提交状态板等待批准，批准后再实现和合并。
+
+### 14.3 完成证据
+
+- migration 0006、source/reader 双身份、事务式转换导入、删除/repair、备份 v2/v1 migrator 与五种导入入口已接通；MOBI/AZW3 书架保留源标签，阅读复用 EPUB adapter 与 EpubLocator。
+- Previous/Next 统一为共享 20px SVG 控件；Line height/Spacing/Margin 使用三套语义图标；TXT/EPUB/PDF 三档 Margin 通过运行态几何与重开持久化断言。
+- 四张批准状态板已与真实运行截图逐项对照，转换与 DRM 部分失败改为独立视图；内置 Browser 的 1280/375 页面无横向溢出、console 0，Playwright axe serious/critical 为 0。
+- `pnpm.cmd check` 通过（Core 9、Desktop 178），Cargo fmt 与 Rust 61/61 通过；Playwright 29/29 均输出通过，命令只在全部断言结束后受既有 Vite teardown 句柄影响超时。
+- libmobi v0.12 sidecar 固定为 296,129 bytes / SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`；三项真实 fixture 转换 39–181 ms、峰值内存低于 6 MiB。
+- NSIS 因当前沙箱不可读用户级签名私钥而停在 bundle 前；MSI 已编译 release EXE 后停在受限 WiX Installer service。两项保留到 14.7，不复用旧产物，不伪造通过。
+- 2026-07-22 用户授权沙箱外 Git、NSIS updater 私钥与 Windows Installer Service 验收；提交前追加书签空态/Add bookmark fidelity、移除 Add note、非 Focus Double 修复。
+- 书签空态已补齐线性图标、标题与解释文案；`Add bookmark` 改为透明整行操作并保留 44px target，Notes 侧栏 `Add note` 已删除，选区添加批注能力不变。
+- EPUB 非 Focus 的根因是 760px CSS 上限永远达不到旧 860px spread 门槛；现 requested Double 先扩展内容列，EPUB/PDF 统一按 820px 实际 frame 判定，并向 DOM 暴露 requested/rendered page view。生成 EPUB/MOBI/AZW3 与 PDF 均验证非 Focus Double；640/375 继续回退 Single。
+- 全量 Playwright 29/29 输出通过；DPR2 500 页 PDF 严格 50ms 性能项目前置隔离执行后通过。拖放 fixture 先等待 Tauri listener 注册，消除测试时序竞态；Windows Vite 仍在全部断言完成后保留 teardown 句柄。
+- 沙箱外原生门禁通过：NSIS 生成 7,520,335-byte installer 与 424-byte updater signature；MSI 生成 9,674,752-byte bundle。两个 installer manifest 均包含固定 hash 的 296,129-byte `mobitool.exe`，包体增量仍远低于门槛。
+- 14.7 执行总验收后停止；不改正式版本、不创建 tag/Release、不启动 Stage 15。
+
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 
 ### 状态
-- **当前状态：** awaiting_user_approval
+- **当前状态：** design_approved
 - **当前分支：** `codex/stage14-mobi-import`
 - **基线：** v0.3 integration `6e15884`
 
@@ -19,7 +51,7 @@
 - 内置 Browser `screenshot()` 返回 JFIF bytes，即使目标名使用 `.png`；不保留错误扩展名。桌面预览以仓库 Chromium 重新截图为 PNG，其余三张以 Windows `System.Drawing` 无缩放转码为真实 PNG。首次 Playwright CLI 截图生成后复现已知的 Windows 清理挂起，产物已成功写入，终止残留命令后未再批量重跑。
 
 ### 待执行
-- 提交并推送设计资产，等待用户逐图批准；批准前不进入生产 UI 或 14.3 功能接线。
+- 设计资产已提交并推送，用户已于 2026-07-20 批准；进入生产 UI 与 14.3 功能接线。
 
 ### 设计验收结果
 - 内置 Browser 逐页确认四组状态板均为单一可见 board、1440×900、无横向或纵向溢出、console warning/error 0。
