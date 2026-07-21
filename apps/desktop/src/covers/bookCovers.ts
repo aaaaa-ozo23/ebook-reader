@@ -1,4 +1,4 @@
-import type { Book } from "@reader/core";
+import { readerFormatForBookFormat, type Book } from "@reader/core";
 
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
@@ -14,7 +14,7 @@ export async function prepareBookCover(book: Book): Promise<Book> {
     return book;
   }
 
-  if (book.format === "txt") {
+  if ((book.readerFormat ?? readerFormatForBookFormat(book.format)) === "txt") {
     return markBookCoverFallback(book.id);
   }
 
@@ -28,11 +28,12 @@ export async function prepareBookCover(book: Book): Promise<Book> {
 }
 
 export async function generateBookCoverBytes(book: Book): Promise<Uint8Array> {
-  if (book.format === "epub") {
+  const readerFormat = book.readerFormat ?? readerFormatForBookFormat(book.format);
+  if (readerFormat === "epub") {
     return extractEpubCover(book);
   }
 
-  if (book.format === "pdf") {
+  if (readerFormat === "pdf") {
     return renderPdfCover(book);
   }
 

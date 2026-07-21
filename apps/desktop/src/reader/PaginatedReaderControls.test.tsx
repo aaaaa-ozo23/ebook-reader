@@ -42,6 +42,12 @@ describe("paginated reader controls", () => {
     expect(screen.getByText("21%")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Single" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Double" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous" })).toContainElement(
+      container.querySelector("svg.reader-page-button__chevron"),
+    );
+    expect(container.querySelectorAll("svg.reader-page-button__chevron")).toHaveLength(
+      2,
+    );
     expect(container.querySelector(".reader-epub-progress")).toHaveStyle({
       "--epub-progress-percent": "21%",
     });

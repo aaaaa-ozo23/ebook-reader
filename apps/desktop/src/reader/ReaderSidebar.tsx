@@ -52,7 +52,6 @@ interface ReaderSidebarProps {
   onBackToLibrary: () => void;
   onClose: () => void;
   onCreateBookmark: () => void;
-  onCreateNote: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
   onJumpToAnnotation: (annotation: Annotation) => void;
@@ -98,7 +97,6 @@ function ReaderSidebar({
   onBackToLibrary,
   onClose,
   onCreateBookmark,
-  onCreateNote,
   onDeleteAnnotation,
   onDeleteBookmark,
   onJumpToAnnotation,
@@ -354,7 +352,13 @@ function ReaderSidebar({
             </p>
           ) : null}
           {bookmarks.length === 0 ? (
-            <p className="reader-sidebar__empty">No bookmarks yet.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="bookmark" />
+              <strong>No bookmarks yet.</strong>
+              <span>
+                Add bookmarks while reading to quickly revisit important parts.
+              </span>
+            </div>
           ) : (
             <div className="reader-bookmarks" role="list">
               {bookmarks.map((bookmark) => (
@@ -392,17 +396,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "notes" ? (
         <section className="reader-sidebar-panel" aria-label="Notes">
-          <div className="reader-sidebar-panel__header">
-            <h2 className="sr-only">Notes</h2>
-            <button
-              type="button"
-              className="reader-sidebar__action"
-              onClick={onCreateNote}
-            >
-              <ReaderIcon name="plus" />
-              Add note
-            </button>
-          </div>
+          <h2 className="sr-only">Notes</h2>
           {annotationError !== null ? (
             <p className="reader-sidebar__error" role="alert">
               {annotationError}

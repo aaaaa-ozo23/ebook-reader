@@ -3313,14 +3313,20 @@ function createAnnotationRecord(
 }
 
 function createBook(overrides: Partial<Book> = {}): Book {
+  const format = overrides.format ?? "epub";
+  const libraryPath = overrides.libraryPath ?? "D:\\library\\sample.epub";
+  const fileHash = overrides.fileHash ?? "sample-hash";
   return {
     id: "book-id",
     title: "Sample Book",
     author: undefined,
-    format: "epub",
+    format,
     sourcePath: "D:\\books\\sample.epub",
-    libraryPath: "D:\\library\\sample.epub",
-    fileHash: "sample-hash",
+    libraryPath,
+    fileHash,
+    readerFormat: format === "mobi" || format === "azw3" ? "epub" : format,
+    readerPath: overrides.readerPath ?? libraryPath,
+    readerHash: overrides.readerHash ?? fileHash,
     coverPath: undefined,
     coverStatus: "fallback",
     createdAt: "2026-06-18T08:00:00.000Z",

@@ -18,7 +18,7 @@ export async function pickImportFiles(): Promise<string[]> {
   const selected = await open({
     directory: false,
     multiple: true,
-    filters: [{ name: "Books", extensions: ["epub", "txt", "pdf"] }],
+    filters: [{ name: "Books", extensions: ["epub", "txt", "pdf", "mobi", "azw3"] }],
   });
   return Array.isArray(selected) ? selected : selected === null ? [] : [selected];
 }

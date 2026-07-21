@@ -3,15 +3,16 @@ use std::{
     fs::{self, File},
     io::Read,
     path::Path,
-    sync::atomic::Ordering,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
 };
 
 use anyhow::{bail, Context};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{backup::DataOperationRegistry, db};
+use crate::{backup::DataOperationRegistry, db, mobi};
 
 const MAX_DEPTH: usize = 32;
 const MAX_ITEMS: usize = 10_000;
@@ -176,8 +177,30 @@ pub fn import_batch(
                 ));
                 continue;
             }
-            let item = match db::import_book_at(&storage.database_path, &storage.library_dir, &path)
-            {
+            emit_progress(
+                app,
+                operation_id,
+                "hashing",
+                index,
+                total,
+                "Hashing source file",
+            );
+            let extension = Path::new(&path)
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if matches!(extension.as_str(), "mobi" | "azw3") {
+                let message = format!(
+                    "Converting {} locally to EPUB",
+                    Path::new(&path)
+                        .file_name()
+                        .and_then(|value| value.to_str())
+                        .unwrap_or("ebook")
+                );
+                emit_progress(app, operation_id, "converting", index, total, &message);
+            }
+            let item = match import_one(app, &storage, Path::new(&path), operation_id, &canceled) {
                 Ok(imported) => {
                     let status = match imported.status {
                         db::ImportBookStatus::Imported => BatchItemStatus::Imported,
@@ -190,7 +213,7 @@ pub fn import_batch(
                     &path,
                     BatchItemStatus::Error,
                     None,
-                    Some(&error.to_string()),
+                    Some(&public_import_error(&error.to_string())),
                 ),
             };
             items.push(item);
@@ -219,7 +242,125 @@ pub fn import_batch(
 
 pub fn import_single(app: &AppHandle, path: &Path) -> anyhow::Result<db::ImportBookResult> {
     let storage = db::init_app_storage(app)?;
-    db::import_book_at(&storage.database_path, &storage.library_dir, path)
+    let canceled = AtomicBool::new(false);
+    import_one(
+        app,
+        &storage,
+        path,
+        &uuid::Uuid::new_v4().to_string(),
+        &canceled,
+    )
+    .map_err(|error| anyhow::anyhow!(public_import_error(&error.to_string())))
+}
+
+fn import_one(
+    app: &AppHandle,
+    storage: &db::AppStoragePaths,
+    path: &Path,
+    operation_id: &str,
+    canceled: &AtomicBool,
+) -> anyhow::Result<db::ImportBookResult> {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if extension != "mobi" && extension != "azw3" {
+        return db::import_book_at(&storage.database_path, &storage.library_dir, path);
+    }
+    let source_hash = db::hash_file(path)?;
+    if let Some(book) = db::find_book_by_file_hash_at(&storage.database_path, &source_hash)? {
+        if Path::new(&book.library_path).is_file() && Path::new(&book.reader_path).is_file() {
+            return Ok(db::ImportBookResult {
+                status: db::ImportBookStatus::Duplicate,
+                book,
+            });
+        }
+    }
+    let converter =
+        mobi::MobiConversionService::new(resolve_converter_path(app)?, Duration::from_secs(120));
+    let artifact = converter.convert(path, &storage.staging_dir, operation_id, canceled)?;
+    emit_progress(
+        app,
+        operation_id,
+        "validating",
+        0,
+        1,
+        "Validating converted EPUB",
+    );
+    emit_progress(
+        app,
+        operation_id,
+        "committing",
+        0,
+        1,
+        "Committing converted book",
+    );
+    let result = db::import_converted_book_at(
+        &storage.database_path,
+        &storage.library_dir,
+        path,
+        &source_hash,
+        &artifact.epub_path,
+        &artifact.epub_hash,
+        artifact.converter_id,
+        artifact.converter_version,
+    );
+    let cleanup = artifact.cleanup();
+    result.and_then(|value| cleanup.map(|_| value))
+}
+
+pub(crate) fn resolve_converter_path(app: &AppHandle) -> anyhow::Result<std::path::PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        candidates.push(resource_dir.join("mobitool.exe"));
+        candidates.push(resource_dir.join("mobitool-x86_64-pc-windows-msvc.exe"));
+    }
+    if let Ok(current_exe) = std::env::current_exe() {
+        if let Some(parent) = current_exe.parent() {
+            candidates.push(parent.join("mobitool.exe"));
+            candidates.push(parent.join("mobitool-x86_64-pc-windows-msvc.exe"));
+        }
+    }
+    candidates.push(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/mobitool-x86_64-pc-windows-msvc.exe"),
+    );
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .context("[mobi-converter-missing] bundled mobitool sidecar is unavailable")
+}
+
+fn public_import_error(error: &str) -> String {
+    const MOBI_ERRORS: [(&str, &str); 6] = [
+        (
+            "mobi-drm-unsupported",
+            "this file is protected; Ebook Reader will not attempt to remove DRM",
+        ),
+        (
+            "mobi-converter-missing",
+            "the bundled MOBI converter is unavailable",
+        ),
+        (
+            "mobi-conversion-timeout",
+            "local conversion exceeded the 120 second limit",
+        ),
+        ("mobi-conversion-canceled", "local conversion was canceled"),
+        (
+            "mobi-output-invalid",
+            "the converted EPUB failed safety validation",
+        ),
+        (
+            "mobi-conversion-failed",
+            "the file could not be converted locally",
+        ),
+    ];
+    for (code, message) in MOBI_ERRORS {
+        if error.contains(&format!("[{code}]")) {
+            return format!("[{code}] {message}");
+        }
+    }
+    error.to_string()
 }
 
 fn collect_path(
@@ -286,7 +427,7 @@ fn collect_path(
                 .and_then(|value| value.to_str())
                 .map(str::to_ascii_lowercase)
                 .as_deref(),
-            Some("epub" | "txt" | "pdf")
+            Some("epub" | "txt" | "pdf" | "mobi" | "azw3")
         );
         items.push(preview_item(
             &canonical,
@@ -299,7 +440,7 @@ fn collect_path(
             if supported {
                 None
             } else {
-                Some("Only EPUB, TXT, and PDF are supported")
+                Some("Only EPUB, TXT, PDF, MOBI, and AZW3 are supported")
             },
         ));
     }

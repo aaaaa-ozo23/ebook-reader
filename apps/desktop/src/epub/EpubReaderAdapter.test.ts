@@ -232,15 +232,22 @@ describe("EPUB layout invalidation", () => {
     const select = vi.fn();
     const font = vi.fn();
     const fontSize = vi.fn();
+    const override = vi.fn();
+    const updateLayout = vi.fn();
     const internals = adapter as unknown as {
       lastPosition: {
         locator: { kind: "epub"; href: string; cfi: string };
       } | null;
       rendition: {
         display: typeof display;
+        manager: {
+          settings: { gap?: number };
+          updateLayout: typeof updateLayout;
+        };
         themes: {
           register: typeof register;
           select: typeof select;
+          override: typeof override;
           font: typeof font;
           fontSize: typeof fontSize;
         };
@@ -255,12 +262,17 @@ describe("EPUB layout invalidation", () => {
     };
     internals.rendition = {
       display,
-      themes: { register, select, font, fontSize },
+      manager: { settings: { gap: 64 }, updateLayout },
+      themes: { register, select, override, font, fontSize },
     };
 
     await adapter.setTheme({ ...defaultReaderTheme, fontSize: 24 });
 
     expect(onLayoutInvalidated).toHaveBeenCalledWith("theme");
+    expect(override).toHaveBeenCalledWith("padding-left", "32px", true);
+    expect(override).toHaveBeenCalledWith("padding-right", "32px", true);
+    expect(internals.rendition.manager.settings.gap).toBe(64);
+    expect(updateLayout).toHaveBeenCalledOnce();
     expect(display).toHaveBeenCalledWith("epubcfi(/6/2!/4/2/2:0)");
   });
 });

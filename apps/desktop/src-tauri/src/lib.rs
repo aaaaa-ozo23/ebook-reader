@@ -136,9 +136,13 @@ fn list_books(app: tauri::AppHandle) -> Result<Vec<db::Book>, String> {
 }
 
 #[tauri::command]
-fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
-    batch_import::import_single(&app, std::path::Path::new(&path))
-        .map_err(|error| error.to_string())
+async fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        batch_import::import_single(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[import-task-failed] {error}"))?
 }
 
 #[tauri::command]

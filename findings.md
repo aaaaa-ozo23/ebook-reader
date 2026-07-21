@@ -1,5 +1,31 @@
 # 发现与决策
 
+## 2026-07-20 大阶段 14.3–14.7：实施决策与阅读器 UI 根因
+
+- **用户决策：** 本轮范围从原 14.3 停止边界扩展到 14.7；14.3 四张 MOBI/AZW3 状态板视为已批准；PDF Margin 也必须通过页面舞台留白与可用宽度变化真实生效。
+- **导航根因：** TXT/EPUB 共用 `PaginatedReaderControls`，已有 Unicode `‹/›`；PDF 使用独立 markup 且只有文字。后续抽取同一 20px SVG chevron 控件，375px 也保留文字与图标，避免格式和断点漂移。
+- **图标根因：** `TypographyChoice` 使用 `label.toLowerCase()` 拼 class，`Line height` 生成包含空格的 class，`.theme-typography-glyph--line-*` 永远不命中；Spacing/Margin 又复用三横线并仅改变水平对齐，因此视觉几乎一致。后续改为显式 `line/spacing/margin` variant 与三套独立 SVG。
+- **Margin 根因：** TXT continuous 只把 `pageMargin` 用作顶部 padding，水平 padding 仍由固定 clamp 控制；TXT paginated 页面没有消费该变量；PDF `setTheme` 只更新 canvas 背景。EPUB 已向 iframe body 注入横向 padding，但仍需验证重排锚点。修复必须让三档在三格式产生几何差异，同时保持 TXT charOffset、EPUB CFI/href 和 PDF page/scale。
+- **设计流程：** 14.3 直接按批准稿实现；14.4–14.6 各阶段先出完整桌面/375px 状态板并等待用户批准。现有暖纸、深墨、青绿、琥珀、44px target、焦点恢复、手势阻尼和 reduced-motion 均为硬规格。
+- **EPUB Margin 根因：** epub.js 的 column layout 会根据 `manager.settings.gap` 重写 iframe body 横向 padding；只注入主题 CSS 会被 layout 覆盖。最终把 Margin 同步为 rendition gap，并在恢复当前 CFI 前触发 layout update，使三档真实改变列内缩且不丢位置。
+- **数据身份：** MOBI/AZW3 去重必须使用 source hash，而阅读缓存与 adapter 使用 derivative reader hash/path。`book_derivatives` 保持一对一映射，避免转换器升级导致 CFI、书签、批注和进度漂移。
+- **状态板 fidelity：** 初版运行态把转换与结果继续塞在预览列表中，虽功能正确但未达到批准信息层级；最终拆为独立阶段轨和双栏结果报告。差异证据见 `docs/design/v0.3/stage14-mobi-fidelity.md`。
+- **打包边界：** sidecar hash、许可和真实转换基准通过；当前沙箱无法读取 updater 私钥且 WiX `light.exe` 无法访问 Installer 服务。旧安装包不计入本阶段证据，两个原生 bundle 门保留到 14.7。
+- **最终边界：** 14.7 结束后不改正式版本、不创建 tag/Release、不开始 Stage 15；`.codex/` 与 `AGENTS.md` 继续保持未跟踪、未修改。
+- **2026-07-22 书签 fidelity：** 批准稿的 bookmarks 空态包含 32px 线性书签图标、`No bookmarks yet.` 和两行解释；Add bookmark 是无填充的整行文字动作，只有加号图标和细分隔线。当前实现缺少图标/说明，且把动作做成高权重青绿按钮。
+- **2026-07-22 Notes 范围：** 用户明确要求移除 `+ Add note`。Notes 仍保留选区菜单和批注列表/空态，但侧栏不再提供基于当前位置的新建入口。
+- **2026-07-22 Double 缺陷：** EPUB/PDF 在非 Focus 即使窗口足够宽仍显示 Single，Focus 后恢复 Double，说明偏好本身已保存，错误更可能位于 reader chrome/侧栏宽度参与 spread 可用宽度判定或窄屏自动降级条件，而不是设置面板状态。
+- **2026-07-22 Double 根因确认：** Stage 13 的后置 CSS 把普通 EPUB page 固定为最大 760px，但 adapter 的双页门槛是 860px，形成非 Focus 下必然 Single、Focus 扩宽后才 Double 的结构矛盾。PDF 的 920px 门槛也高于 1280px 桌面在常驻侧栏后的常见 850px 左右 frame。修复让 requested Double 先扩展 EPUB 内容列，并把 EPUB/PDF 的实际 rendered mode 暴露为可断言状态；双页门槛统一收敛为 820px，640/375 仍按实际宽度回退 Single。
+
+## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
+
+- **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。
+- **信息层级：** 导入预览先回答“哪些会导入、哪些会本地转换、哪些被跳过”；MOBI/AZW3 源标签始终保留，`Will convert locally to EPUB` 是辅助说明而非把展示格式改成 EPUB。
+- **诚实进度：** 整体 track 只表达已完成项目数，单本转换只显示当前阶段；六阶段为 `Scanning / Hashing / Converting / Validating / Committing / Completed`，不显示 libmobi 不提供的单本百分比。
+- **DRM 边界：** 结果页明确“应用不会尝试移除 DRM”，没有密码、解密或在线转换入口；成功兄弟项不回滚，失败项同时说明没有留下 library record 或 managed file。
+- **移动端：** drop overlay 明确“Nothing imports until you confirm”；review sheet 375px 宽、近全高、顶部拖动 handle、sticky 48px actions，后续实现必须继承现有手势阻尼、焦点恢复和 reduced-motion。
+- **审核状态：** 四张状态板已通过 Browser 1440×900、无溢出、console 0 的静态检查，并于 2026-07-20 获用户批准；生产实现必须逐图 fidelity 对照。
+
 ## 2026-07-19 大阶段 14.1：MOBI/AZW3 引擎与分发评估
 
 - **已批准决策：** 正式离线支持采用 libmobi v0.12，作为 Tauri Windows x64 sidecar 随应用分发；Calibre、KindleUnpack、foliate-js 仅保留为决策对比，不进入正式实现。

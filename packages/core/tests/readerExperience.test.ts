@@ -5,6 +5,7 @@ import {
   normalizePdfLocator,
   normalizeReaderExperiencePreferences,
   readerCapabilitiesByFormat,
+  readerFormatForBookFormat,
   resolveEffectivePageTransition,
   type EpubViewMode,
   type PageTransitionMode,
@@ -62,6 +63,22 @@ describe("reader experience contracts", () => {
       "cover",
       "slide",
     ]);
+  });
+
+  it("keeps MOBI and AZW3 source identity while routing both through EPUB", () => {
+    expect(readerFormatForBookFormat("mobi")).toBe("epub");
+    expect(readerFormatForBookFormat("azw3")).toBe("epub");
+    expect(readerFormatForBookFormat("txt")).toBe("txt");
+    expect(
+      resolveEffectivePageTransition(
+        "mobi",
+        {
+          ...defaultReaderExperiencePreferences,
+          epub: { viewMode: "paginated", transition: "cover" },
+        },
+        false,
+      ),
+    ).toBe("cover");
   });
 
   it("normalizes partial and invalid preferences field by field", () => {

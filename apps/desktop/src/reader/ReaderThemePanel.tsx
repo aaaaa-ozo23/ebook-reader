@@ -344,18 +344,21 @@ export function ReaderThemePanel({
         </div>
         <TypographyChoice
           label="Line height"
+          variant="line"
           value={theme.lineHeight}
           options={[1.5, 1.75, 2]}
           onChange={handleNumberChange("lineHeight")}
         />
         <TypographyChoice
           label="Spacing"
+          variant="spacing"
           value={theme.paragraphSpacing}
           options={[6, 12, 20]}
           onChange={handleNumberChange("paragraphSpacing")}
         />
         <TypographyChoice
           label="Margin"
+          variant="margin"
           value={theme.pageMargin}
           options={[20, 32, 56]}
           onChange={handleNumberChange("pageMargin")}
@@ -683,12 +686,29 @@ function handleRadioKeyDown<T extends string>(
 
 interface TypographyChoiceProps {
   label: "Line height" | "Spacing" | "Margin";
+  variant: "line" | "spacing" | "margin";
   onChange: (value: number) => void;
   options: readonly number[];
   value: number;
 }
 
-function TypographyChoice({ label, onChange, options, value }: TypographyChoiceProps) {
+const TYPOGRAPHY_CHOICE_NAMES = {
+  line: ["Compact line height", "Comfortable line height", "Relaxed line height"],
+  spacing: [
+    "Compact paragraph spacing",
+    "Standard paragraph spacing",
+    "Wide paragraph spacing",
+  ],
+  margin: ["Narrow page margin", "Medium page margin", "Wide page margin"],
+} as const;
+
+function TypographyChoice({
+  label,
+  onChange,
+  options,
+  value,
+  variant,
+}: TypographyChoiceProps) {
   const selectedIndex = options.reduce(
     (closestIndex, option, index) =>
       Math.abs(option - value) < Math.abs((options[closestIndex] ?? option) - value)
@@ -711,7 +731,7 @@ function TypographyChoice({ label, onChange, options, value }: TypographyChoiceP
             type="button"
             role="radio"
             aria-checked={index === selectedIndex}
-            aria-label={`${label} ${index + 1}`}
+            aria-label={TYPOGRAPHY_CHOICE_NAMES[variant][index]}
             tabIndex={index === selectedIndex ? 0 : -1}
             onClick={() => onChange(option)}
             onKeyDown={(event) => {
@@ -736,18 +756,60 @@ function TypographyChoice({ label, onChange, options, value }: TypographyChoiceP
               if (nextValue !== undefined) onChange(nextValue);
             }}
           >
-            <span
-              className={`theme-typography-glyph theme-typography-glyph--${label.toLowerCase()} theme-typography-glyph--${index + 1}`}
-              aria-hidden="true"
-            >
-              <i />
-              <i />
-              <i />
-            </span>
+            <TypographyGlyph index={index} variant={variant} />
           </button>
         ))}
       </div>
     </div>
+  );
+}
+
+function TypographyGlyph({
+  index,
+  variant,
+}: {
+  index: number;
+  variant: TypographyChoiceProps["variant"];
+}) {
+  const lineY = [
+    [6, 10, 14],
+    [4, 10, 16],
+    [2, 10, 18],
+  ][index] ?? [4, 10, 16];
+  const spacingY = [
+    [4, 7, 11, 14],
+    [3, 6, 12, 15],
+    [2, 5, 13, 16],
+  ][index] ?? [3, 6, 12, 15];
+  const marginInset = [1, 4, 7][index] ?? 4;
+  const ys = variant === "line" ? lineY : spacingY;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className={`theme-typography-glyph theme-typography-glyph--${variant}`}
+      viewBox="0 0 24 20"
+      width="24"
+      height="20"
+    >
+      {variant === "margin" ? (
+        <>
+          <path d={`M${marginInset} 2v16M${24 - marginInset} 2v16`} />
+          <path
+            d={`M${marginInset + 3} 5H${21 - marginInset}M${marginInset + 3} 10H${21 - marginInset}M${marginInset + 3} 15H${21 - marginInset}`}
+          />
+        </>
+      ) : (
+        ys.map((y, lineIndex) => (
+          <path
+            key={`${variant}-${y}`}
+            d={
+              variant === "spacing" && lineIndex % 2 === 1 ? `M5 ${y}h14` : `M3 ${y}h18`
+            }
+          />
+        ))
+      )}
+    </svg>
   );
 }
 

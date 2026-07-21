@@ -682,12 +682,11 @@
 .reader-viewport {
   min-height: 0;
   overflow: auto;
-  padding: var(--txt-reader-page-margin, 32px) clamp(18px, 5vw, 64px)
-    clamp(20px, 3vh, 36px);
+  padding: clamp(20px, 3vh, 36px) var(--txt-reader-page-margin, 32px);
 }
 
 .reader-page {
-  width: min(100%, 780px);
+  width: min(100%, calc(844px - (var(--txt-reader-page-margin, 32px) * 2)));
   margin: 0 auto;
   color: var(--txt-reader-text, #25211d);
   font-family: var(--txt-reader-font-family);
@@ -728,7 +727,7 @@
 }
 
 .reader-txt-page-window--single .reader-txt-spread {
-  width: min(100%, 780px);
+  width: min(100%, calc(844px - (var(--txt-reader-page-margin, 32px) * 2)));
   margin: 0 auto;
 }
 
@@ -750,7 +749,7 @@
 .reader-txt-page {
   box-sizing: border-box;
   height: 100%;
-  padding: 2px clamp(8px, 2vw, 24px);
+  padding: 2px var(--txt-reader-page-margin, 32px);
 }
 
 .reader-txt-page-fragment.reader-virtual-row {
@@ -1134,7 +1133,7 @@
   align-items: start;
   justify-content: center;
   gap: 14px;
-  padding: 14px;
+  padding: 14px var(--txt-reader-page-margin, 32px);
 }
 
 .reader-pdf-stage--double {
@@ -1151,7 +1150,7 @@
   height: 100%;
   min-height: 0;
   place-items: start center;
-  padding: 14px;
+  padding: 14px var(--txt-reader-page-margin, 32px);
 }
 
 .reader-pdf-spread {
@@ -1193,7 +1192,7 @@
   width: 100%;
   align-items: flex-start;
   justify-content: center;
-  padding: 14px 14px 0;
+  padding: 14px var(--txt-reader-page-margin, 32px) 0;
 }
 
 .reader-pdf-page-surface {
@@ -1392,7 +1391,7 @@
 
 .reader-shell--chrome-hidden .reader-pdf-stage {
   min-height: 0;
-  padding: 12px;
+  padding: 12px var(--txt-reader-page-margin, 32px);
 }
 
 .reader-shell--chrome-hidden .reader-pdf-controls {
@@ -1828,7 +1827,7 @@
   .reader-pdf-stage--double {
     min-height: 58vh;
     grid-template-columns: minmax(0, auto);
-    padding: 12px;
+    padding: 12px var(--txt-reader-page-margin, 32px);
   }
 
   .reader-epub-control-row {

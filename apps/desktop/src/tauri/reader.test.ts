@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   getReaderCache,
+  getEpubBookSource,
   getReaderExperiencePreferences,
   getReaderLayoutPreferences,
   saveReaderCache,
@@ -28,6 +29,19 @@ describe("reader cache fallback", () => {
     await expect(
       getReaderCache(createBook("hash-v2"), "epub_toc_v1"),
     ).resolves.toBeNull();
+  });
+
+  it("opens MOBI and AZW3 through their derived EPUB reader path", async () => {
+    const mobi: Book = {
+      ...createBook("source-hash"),
+      format: "mobi",
+      libraryPath: "D:\\library\\source.mobi",
+      readerFormat: "epub",
+      readerPath: "D:\\library\\source.reader.epub",
+      readerHash: "reader-hash",
+    };
+
+    await expect(getEpubBookSource(mobi)).resolves.toBe(mobi.readerPath);
   });
 });
 
@@ -188,6 +202,9 @@ function createBook(fileHash: string): Book {
     format: "epub",
     libraryPath: "D:\\library\\cached.epub",
     fileHash,
+    readerFormat: "epub",
+    readerPath: "D:\\library\\cached.epub",
+    readerHash: fileHash,
     coverStatus: "fallback",
     createdAt: "2026-06-29T00:00:00.000Z",
     updatedAt: "2026-06-29T00:00:00.000Z",

@@ -28,6 +28,7 @@ import {
   type TxtDocument,
   type TxtLocator,
   type TxtPaginatedViewMode,
+  readerFormatForBookFormat,
 } from "@reader/core";
 import "../components/ReaderShell.css";
 import "../components/ReaderStage13.css";
@@ -139,11 +140,12 @@ interface PdfJumpRequest {
 }
 
 export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
+  const readerFormat = book.readerFormat ?? readerFormatForBookFormat(book.format);
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
   const readerExperienceDirtyBookIdRef = useRef<string | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(book.format === "txt");
+  const [isLoading, setIsLoading] = useState(readerFormat === "txt");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
@@ -372,7 +374,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   useEffect(() => {
     let isCurrent = true;
 
-    if (book.format !== "txt") {
+    if (readerFormat !== "txt") {
       return () => {
         isCurrent = false;
       };
@@ -425,7 +427,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     return () => {
       isCurrent = false;
     };
-  }, [book.format, book.id, txtRetryVersion]);
+  }, [book.id, readerFormat, txtRetryVersion]);
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -718,7 +720,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "txt") {
+      if (readerFormat === "txt") {
         const chapter = chapterById.get(tocItem.id);
 
         if (chapter !== undefined && document !== null) {
@@ -740,7 +742,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "epub" && tocItem.locator?.kind === "epub") {
+      if (readerFormat === "epub" && tocItem.locator?.kind === "epub") {
         setEpubJumpRequest((currentRequest) => ({
           locator: tocItem.locator as EpubLocator,
           requestId: (currentRequest?.requestId ?? 0) + 1,
@@ -749,7 +751,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "pdf" && tocItem.locator?.kind === "pdf") {
+      if (readerFormat === "pdf" && tocItem.locator?.kind === "pdf") {
         setPdfJumpRequest((currentRequest) => ({
           locator: tocItem.locator as PdfLocator,
           requestId: (currentRequest?.requestId ?? 0) + 1,
@@ -757,7 +759,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         setActiveTocItemId(tocItem.id);
       }
     },
-    [book.format, chapterById, document, handleTxtProgressChange, tocItems],
+    [chapterById, document, handleTxtProgressChange, readerFormat, tocItems],
   );
 
   const handleDocumentTocChange = useCallback((nextTocItems: TocItem[]) => {
@@ -832,7 +834,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "txt") {
+      if (readerFormat === "txt") {
         if (document === null) {
           setSearchResults([]);
           setSearchError("Search is still loading.");
@@ -868,7 +870,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           setIsSearchLoading(false);
         });
     },
-    [book.format, document],
+    [document, readerFormat],
   );
 
   const handleJumpToSearchResult = useCallback(
@@ -906,44 +908,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         setBookmarkError(getErrorMessage(bookmarkCreateError));
       });
   }, [activeTocItemId, book, currentBookmarkLocator, tocItems]);
-
-  const handleCreateLocationNote = useCallback(() => {
-    const locator = currentBookmarkLocator;
-
-    if (locator === null) {
-      setAnnotationError("Current reading location is not available yet.");
-      return;
-    }
-
-    const selectedText = getBookmarkLabel(book, tocItems, activeTocItemId, locator);
-    const contentLeft = window.matchMedia("(min-width: 900px)").matches
-      ? layoutPreferences.sidebarWidth
-      : 0;
-
-    setAnnotationError(null);
-    setSelectionSnapshot(null);
-    setNotePopover(null);
-    setNoteEditor({
-      color: DEFAULT_HIGHLIGHT_COLOR,
-      contextAfter: locator.contextAfter,
-      contextBefore: locator.contextBefore,
-      draft: "",
-      locator,
-      menuX: contentLeft + (window.innerWidth - contentLeft) / 2,
-      menuY: 116,
-      selectedText,
-    });
-
-    if (window.matchMedia("(max-width: 520px)").matches) {
-      setIsSidebarOpen(false);
-    }
-  }, [
-    activeTocItemId,
-    book,
-    currentBookmarkLocator,
-    layoutPreferences.sidebarWidth,
-    tocItems,
-  ]);
 
   const handleJumpToBookmark = useCallback(
     (bookmark: Bookmark<Locator>) => {
@@ -1454,7 +1418,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
         onCreateBookmark={handleCreateBookmark}
-        onCreateNote={handleCreateLocationNote}
         onDeleteAnnotation={handleDeleteAnnotation}
         onDeleteBookmark={handleDeleteBookmark}
         onJumpToAnnotation={handleJumpToAnnotation}
@@ -1615,7 +1578,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             <span>Exit focus</span>
           </button>
         ) : null}
-        {book.format === "txt" ? (
+        {readerFormat === "txt" ? (
           <MemoizedTxtReaderContent
             annotations={visibleAnnotations}
             blocks={blocks}
@@ -1643,7 +1606,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
           />
         ) : null}
-        {book.format === "epub" ? (
+        {readerFormat === "epub" ? (
           <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
@@ -1671,7 +1634,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
-        {book.format === "pdf" ? (
+        {readerFormat === "pdf" ? (
           <MemoizedPdfReaderContent
             annotations={visibleAnnotations}
             book={book}
@@ -1699,28 +1662,28 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         <ReaderThemePanel
           isOpen={isThemePanelOpen}
           pageViewDisabled={
-            book.format === "txt"
+            readerFormat === "txt"
               ? readerExperiencePreferences.txt.viewMode === "scroll"
-              : book.format === "pdf"
+              : readerFormat === "pdf"
                 ? readerExperiencePreferences.pdf.viewMode === "continuous"
                 : false
           }
           pageViewDisabledMessage={
-            book.format === "txt"
+            readerFormat === "txt"
               ? "Double page view is not available in Continuous reading mode."
-              : book.format === "pdf"
+              : readerFormat === "pdf"
                 ? "Page view is not available in Continuous reading mode."
                 : undefined
           }
           pageViewMode={
-            book.format === "epub"
+            readerFormat === "epub"
               ? epubSpreadMode
-              : book.format === "txt"
+              : readerFormat === "txt"
                 ? readerExperiencePreferences.txt.paginatedViewMode
                 : readerExperiencePreferences.pdf.paginatedViewMode
           }
           pageTransition={
-            book.format === "epub"
+            readerFormat === "epub"
               ? readerExperiencePreferences.epub.transition
               : undefined
           }
@@ -1729,7 +1692,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           theme={theme}
           themeError={themeError}
           pdfReadingMode={
-            book.format === "pdf"
+            readerFormat === "pdf"
               ? readerExperiencePreferences.pdf.viewMode === "continuous"
                 ? "continuous"
                 : readerExperiencePreferences.pdf.transition
@@ -1737,7 +1700,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           }
           pdfReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           txtReadingMode={
-            book.format === "txt"
+            readerFormat === "txt"
               ? readerExperiencePreferences.txt.viewMode === "scroll"
                 ? "continuous"
                 : readerExperiencePreferences.txt.transition
@@ -1747,9 +1710,9 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           onClose={closeThemePanel}
           onPageTransitionChange={handleEpubTransitionChange}
           onPageViewModeChange={
-            book.format === "epub"
+            readerFormat === "epub"
               ? setEpubSpreadMode
-              : book.format === "txt"
+              : readerFormat === "txt"
                 ? handleTxtPaginatedViewModeChange
                 : handlePdfPaginatedViewModeChange
           }

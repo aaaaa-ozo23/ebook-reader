@@ -573,7 +573,7 @@ function App() {
       {isDropActive ? (
         <div className="book-drop-overlay" role="status">
           <strong>Drop to review books</strong>
-          <span>EPUB, TXT, PDF, or a folder</span>
+          <span>EPUB, TXT, PDF, MOBI, AZW3, or a folder</span>
         </div>
       ) : null}
     </>
