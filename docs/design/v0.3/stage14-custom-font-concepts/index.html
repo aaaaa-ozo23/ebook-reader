@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stage 14.4 custom font concepts</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+        --paper: #fcfbf8;
+        --white: #fff;
+        --chrome: #1f3035;
+        --ink: #20211f;
+        --muted: #667078;
+        --teal: #235f62;
+        --teal-2: #2f797b;
+        --teal-soft: #eef4f2;
+        --amber: #f2b84b;
+        --terra: #b94b35;
+        --danger: #a63f32;
+        --border: #dfe1de;
+        --shadow: 0 28px 80px rgba(17, 30, 34, 0.22);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #e7e9e6;
+        color: var(--ink);
+      }
+      button {
+        font: inherit;
+      }
+      svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .board {
+        display: none;
+        position: relative;
+        width: 1440px;
+        height: 900px;
+        overflow: hidden;
+        margin: 0 auto;
+        background: var(--paper);
+      }
+      body[data-board="library"] .board--library,
+      body[data-board="import"] .board--import,
+      body[data-board="states"] .board--states,
+      body[data-board="mobile"] .board--mobile {
+        display: block;
+      }
+      body[data-board="mobile"] .board {
+        width: 375px;
+        height: 812px;
+      }
+
+      .settings {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-columns: 292px 1fr;
+      }
+      .sidebar {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        overflow: hidden;
+        padding: 28px 24px;
+        background:
+          radial-gradient(circle at 25% 0, rgba(63, 105, 107, 0.32), transparent 26rem),
+          var(--chrome);
+        color: #f6f4ee;
+      }
+      .sidebar:after {
+        position: absolute;
+        right: -90px;
+        bottom: -110px;
+        width: 260px;
+        height: 260px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 50%;
+        content: "";
+      }
+      .back {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        gap: 9px;
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font-size: 14px;
+        font-weight: 720;
+      }
+      .mark {
+        display: grid;
+        width: 52px;
+        height: 52px;
+        place-items: center;
+        border-radius: 10px;
+        background: linear-gradient(145deg, #ffd06b, #efae36);
+        color: #26393d;
+        font-weight: 850;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
+      }
+      .side-heading {
+        display: grid;
+        gap: 7px;
+        padding: 4px 8px 0;
+      }
+      .eyebrow {
+        color: #f2c362;
+        font-size: 11px;
+        font-weight: 820;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      .side-heading strong {
+        max-width: 190px;
+        font-family: Georgia, serif;
+        font-size: 25px;
+        font-weight: 500;
+        line-height: 1.15;
+      }
+      nav {
+        display: grid;
+        gap: 8px;
+      }
+      .nav-item {
+        display: grid;
+        min-height: 54px;
+        grid-template-columns: 24px 1fr auto;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        color: rgba(246, 244, 238, 0.68);
+        padding: 0 14px;
+      }
+      .nav-item.active {
+        border-color: rgba(117, 190, 191, 0.25);
+        background: linear-gradient(
+          90deg,
+          rgba(45, 111, 114, 0.78),
+          rgba(45, 111, 114, 0.32)
+        );
+        color: #fff;
+        box-shadow: inset 3px 0 var(--amber);
+      }
+      .nav-item small {
+        color: rgba(246, 244, 238, 0.43);
+      }
+      .privacy {
+        margin-top: auto;
+        color: rgba(246, 244, 238, 0.52);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .content {
+        width: min(970px, 100%);
+        padding: 50px 64px 60px;
+      }
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      .header p {
+        margin: 0;
+        color: var(--teal);
+        font-size: 11px;
+        font-weight: 850;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+      .header h1 {
+        margin: 8px 0 0;
+        font-size: 50px;
+        line-height: 1;
+        letter-spacing: -0.045em;
+      }
+      .header span {
+        display: block;
+        max-width: 610px;
+        margin-top: 14px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.55;
+      }
+      .close {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+      .notice {
+        display: grid;
+        grid-template-columns: 24px 1fr;
+        gap: 14px;
+        margin-top: 28px;
+        border: 1px solid rgba(35, 95, 98, 0.22);
+        border-radius: 10px;
+        background: rgba(238, 244, 242, 0.78);
+        color: #315558;
+        padding: 15px 18px;
+      }
+      .notice strong,
+      .notice p {
+        margin: 0;
+      }
+      .notice p {
+        margin-top: 3px;
+        color: #5d6e70;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .section-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        margin: 28px 0 12px;
+      }
+      .section-head h2 {
+        margin: 0;
+        font-size: 19px;
+      }
+      .section-head span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.76);
+        box-shadow: 0 9px 28px rgba(35, 48, 53, 0.04);
+      }
+      .preview {
+        display: grid;
+        grid-template-columns: 1fr 250px;
+        overflow: hidden;
+      }
+      .preview-copy {
+        padding: 22px 24px;
+      }
+      .preview-copy span {
+        color: var(--teal);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .preview-copy p {
+        margin: 12px 0 0;
+        font-family: Georgia, serif;
+        font-size: 22px;
+        line-height: 1.45;
+      }
+      .preview-meta {
+        display: grid;
+        place-content: center;
+        gap: 6px;
+        border-left: 1px solid var(--border);
+        background: #f7f3e9;
+        padding: 20px;
+      }
+      .preview-meta strong {
+        font-family: Georgia, serif;
+        font-size: 19px;
+      }
+      .preview-meta small {
+        color: var(--muted);
+      }
+      .font-list {
+        overflow: hidden;
+      }
+      .font-row {
+        display: grid;
+        min-height: 88px;
+        grid-template-columns: 44px minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 15px;
+        padding: 14px 17px;
+      }
+      .font-row + .font-row {
+        border-top: 1px solid var(--border);
+      }
+      .sample {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border-radius: 9px;
+        background: #f3efe4;
+        color: var(--teal);
+        font-family: Georgia, serif;
+        font-size: 20px;
+      }
+      .font-copy {
+        min-width: 0;
+      }
+      .font-copy strong {
+        display: block;
+        font-size: 15px;
+      }
+      .font-copy small {
+        display: block;
+        margin-top: 5px;
+        color: var(--muted);
+      }
+      .pill {
+        display: inline-flex;
+        min-height: 28px;
+        align-items: center;
+        border: 1px solid rgba(35, 95, 98, 0.22);
+        border-radius: 999px;
+        background: var(--teal-soft);
+        color: var(--teal);
+        padding: 0 10px;
+        font-size: 11px;
+        font-weight: 760;
+      }
+      .pill.builtin {
+        border-color: var(--border);
+        background: #f5f5f2;
+        color: #667078;
+      }
+      .switch {
+        position: relative;
+        width: 44px;
+        height: 26px;
+        border: 0;
+        border-radius: 999px;
+        background: #c9cecc;
+      }
+      .switch:after {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: white;
+        content: "";
+        box-shadow: 0 2px 7px rgba(0, 0, 0, 0.16);
+      }
+      .switch.on {
+        background: var(--teal);
+      }
+      .switch.on:after {
+        left: 21px;
+      }
+      .primary,
+      .secondary,
+      .danger {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        border-radius: 8px;
+        padding: 0 17px;
+        font-weight: 760;
+      }
+      .primary {
+        border: 1px solid var(--teal);
+        background: var(--teal);
+        color: white;
+      }
+      .secondary {
+        border: 1px solid var(--border);
+        background: white;
+        color: var(--ink);
+      }
+      .danger {
+        border: 1px solid rgba(166, 63, 50, 0.3);
+        background: white;
+        color: var(--danger);
+      }
+      .footnote {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 13px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .scrim {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(18, 29, 33, 0.56);
+        backdrop-filter: blur(4px);
+      }
+      .modal {
+        width: 620px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 14px;
+        background: var(--white);
+        box-shadow: var(--shadow);
+      }
+      .modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+        padding: 23px 26px 20px;
+      }
+      .modal-head h2 {
+        margin: 3px 0 0;
+        font-size: 25px;
+        letter-spacing: -0.025em;
+      }
+      .modal-body {
+        padding: 24px 26px;
+      }
+      .dropzone {
+        display: grid;
+        min-height: 132px;
+        place-items: center;
+        align-content: center;
+        gap: 8px;
+        border: 1px dashed #aeb9b6;
+        border-radius: 10px;
+        background: #fafbf9;
+        text-align: center;
+      }
+      .dropzone .drop-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--teal-soft);
+        color: var(--teal);
+      }
+      .dropzone strong {
+        font-size: 14px;
+      }
+      .dropzone span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .file-review {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 13px;
+        margin-top: 15px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px;
+      }
+      .file-review .file-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 8px;
+        background: #f3efe4;
+        color: var(--teal);
+        font-weight: 850;
+      }
+      .file-review strong,
+      .file-review small {
+        display: block;
+      }
+      .file-review small {
+        margin-top: 4px;
+        color: var(--muted);
+      }
+      .file-review dl {
+        display: grid;
+        grid-template-columns: auto auto;
+        gap: 5px 14px;
+        margin: 0;
+        font-size: 12px;
+      }
+      .file-review dt {
+        color: var(--muted);
+      }
+      .file-review dd {
+        margin: 0;
+        font-weight: 700;
+      }
+      .license {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 11px;
+        margin-top: 15px;
+        border-radius: 9px;
+        background: #fff8e3;
+        color: #705522;
+        padding: 13px 14px;
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        border-top: 1px solid var(--border);
+        background: #fafaf8;
+        padding: 16px 26px;
+      }
+
+      .states-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin-top: 30px;
+      }
+      .state-card {
+        min-height: 220px;
+        padding: 22px;
+      }
+      .state-card .state-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border-radius: 9px;
+        background: #f5efe3;
+        color: var(--terra);
+      }
+      .state-card h2 {
+        margin: 16px 0 7px;
+        font-size: 20px;
+      }
+      .state-card p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .state-card .match {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-top: 18px;
+        border-top: 1px solid var(--border);
+        padding-top: 15px;
+      }
+      .state-card .match strong,
+      .state-card .match small {
+        display: block;
+      }
+      .state-card .match small {
+        margin-top: 3px;
+        color: var(--muted);
+      }
+      .dialog-demo {
+        position: relative;
+        min-height: 326px;
+        grid-column: 1 / -1;
+        overflow: hidden;
+        padding: 22px;
+        background: linear-gradient(120deg, #f7f4ec, #edf3f1);
+      }
+      .confirm {
+        position: absolute;
+        top: 36px;
+        left: 50%;
+        width: 520px;
+        transform: translateX(-50%);
+        border: 1px solid var(--border);
+        border-radius: 13px;
+        background: white;
+        box-shadow: 0 22px 55px rgba(31, 48, 53, 0.17);
+        padding: 24px;
+      }
+      .confirm h2 {
+        margin: 0;
+        font-size: 22px;
+      }
+      .confirm p {
+        margin: 9px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+      .fallback {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 17px;
+        border: 1px solid rgba(35, 95, 98, 0.18);
+        border-radius: 9px;
+        background: var(--teal-soft);
+        padding: 13px;
+      }
+      .fallback .arrow {
+        color: var(--teal);
+      }
+      .confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 20px;
+      }
+
+      .mobile-canvas {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #dfe4e1;
+      }
+      .phone {
+        position: relative;
+        width: 375px;
+        height: 812px;
+        overflow: hidden;
+        background: var(--paper);
+        box-shadow: 0 24px 70px rgba(17, 30, 34, 0.25);
+      }
+      .grabber {
+        width: 40px;
+        height: 4px;
+        margin: 8px auto 0;
+        border-radius: 999px;
+        background: #c4c8c5;
+      }
+      .mobile-head {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: grid;
+        grid-template-columns: 44px 1fr 44px;
+        align-items: center;
+        min-height: 66px;
+        border-bottom: 1px solid var(--border);
+        background: rgba(252, 251, 248, 0.96);
+        padding: 0 12px;
+      }
+      .mobile-head button {
+        display: grid;
+        width: 44px;
+        height: 44px;
+        place-items: center;
+        border: 0;
+        background: transparent;
+      }
+      .mobile-head strong {
+        text-align: center;
+        font-size: 15px;
+      }
+      .mobile-scroll {
+        height: calc(100% - 128px);
+        overflow: hidden;
+        padding: 24px 18px 30px;
+      }
+      .mobile-scroll .eyebrow {
+        color: var(--teal);
+      }
+      .mobile-scroll h1 {
+        margin: 7px 0 8px;
+        font-size: 31px;
+        letter-spacing: -0.04em;
+      }
+      .mobile-scroll > p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      .mobile-preview {
+        margin-top: 19px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: white;
+        padding: 16px;
+      }
+      .mobile-preview p {
+        margin: 8px 0 0;
+        font-family: Georgia, serif;
+        font-size: 18px;
+        line-height: 1.4;
+      }
+      .mobile-fonts {
+        overflow: hidden;
+        margin-top: 18px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: white;
+      }
+      .mobile-font-row {
+        display: grid;
+        min-height: 72px;
+        grid-template-columns: 40px 1fr 44px;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+      }
+      .mobile-font-row + .mobile-font-row {
+        border-top: 1px solid var(--border);
+      }
+      .mobile-font-row .sample {
+        width: 40px;
+        height: 40px;
+      }
+      .mobile-font-row strong,
+      .mobile-font-row small {
+        display: block;
+      }
+      .mobile-font-row small {
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .mobile-note {
+        display: grid;
+        grid-template-columns: 20px 1fr;
+        gap: 9px;
+        margin-top: 16px;
+        color: #6d5728;
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .mobile-actions {
+        position: absolute;
+        inset: auto 0 0;
+        display: grid;
+        min-height: 62px;
+        border-top: 1px solid var(--border);
+        background: rgba(252, 251, 248, 0.97);
+        padding: 9px 18px;
+        box-shadow: 0 -10px 25px rgba(31, 48, 53, 0.06);
+      }
+      .mobile-actions .primary {
+        width: 100%;
+      }
+      .gesture-tab {
+        position: absolute;
+        right: 0;
+        top: 620px;
+        width: 25px;
+        height: 76px;
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.55);
+        border-right: 0;
+        border-radius: 13px 0 0 13px;
+        background: var(--chrome);
+        color: white;
+        font-weight: 900;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="board board--library">
+      <div class="settings">
+        <aside class="sidebar">
+          <button class="back">
+            <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>Back to shelf
+          </button>
+          <div class="mark">ER</div>
+          <div class="side-heading">
+            <span class="eyebrow">Settings</span
+            ><strong>Your library, your rules.</strong>
+          </div>
+          <nav>
+            <button class="nav-item">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16M8 3v8M16 13v8" /></svg
+              ><span>Data & Backup</span><small>01</small>
+            </button>
+            <button class="nav-item active">
+              <svg viewBox="0 0 24 24"><path d="M5 19L12 4l7 15M8 14h8" /></svg
+              ><span>Reading & Fonts</span><small>02</small>
+            </button>
+            <button class="nav-item">
+              <svg viewBox="0 0 24 24"><path d="M5 12h14M12 5v14" /></svg
+              ><span>Updates</span><small>03</small>
+            </button>
+          </nav>
+          <p class="privacy">Font files stay on this device and are never uploaded.</p>
+        </aside>
+        <main class="content">
+          <header class="header">
+            <div>
+              <p>Reading preferences</p>
+              <h1>Reading & Fonts</h1>
+              <span
+                >Bring your own typeface to TXT and EPUB without installing it into
+                Windows. PDF continues to use the fonts embedded in each document.</span
+              >
+            </div>
+            <button class="close" aria-label="Close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </header>
+          <div class="notice">
+            <svg viewBox="0 0 24 24"><path d="M12 3v18M5 7h14M7 17h10" /></svg>
+            <div>
+              <strong>App-local by design</strong>
+              <p>
+                Imported files are copied into Ebook Reader's private font library.
+                Nothing is installed system-wide or sent online.
+              </p>
+            </div>
+          </div>
+          <div class="section-head">
+            <h2>Reading preview</h2>
+            <span>Applied to TXT and EPUB</span>
+          </div>
+          <section class="card preview">
+            <div class="preview-copy">
+              <span>Selected font · Literata</span>
+              <p>Every page should feel quiet enough for the story to speak.</p>
+            </div>
+            <div class="preview-meta">
+              <strong>Literata Regular</strong><small>Custom · Enabled</small>
+            </div>
+          </section>
+          <div class="section-head">
+            <h2>Font library</h2>
+            <button class="primary">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>Import font
+            </button>
+          </div>
+          <section class="card font-list">
+            <div class="font-row">
+              <div class="sample">Aa</div>
+              <div class="font-copy">
+                <strong>Lora</strong><small>Built-in reading font · Fallback</small>
+              </div>
+              <span class="pill builtin">Built in</span
+              ><button class="switch on" aria-label="Lora enabled"></button>
+            </div>
+            <div class="font-row">
+              <div class="sample" style="font-family: Georgia, serif">Aa</div>
+              <div class="font-copy">
+                <strong>Literata</strong><small>Regular · 238 KB</small>
+              </div>
+              <span class="pill">Selected</span
+              ><button class="switch on" aria-label="Literata enabled"></button>
+            </div>
+            <div class="font-row">
+              <div class="sample" style="font-family: Arial, sans-serif">Aa</div>
+              <div class="font-copy">
+                <strong>Atkinson Hyperlegible</strong><small>Regular · 156 KB</small>
+              </div>
+              <span class="pill">Custom</span
+              ><button class="switch on" aria-label="Atkinson enabled"></button>
+            </div>
+          </section>
+          <p class="footnote">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 8v5M12 17h.01" />
+              <circle cx="12" cy="12" r="9" /></svg
+            >Static TTF and OTF only · 20 MiB maximum per file
+          </p>
+        </main>
+      </div>
+    </section>
+
+    <section class="board board--import">
+      <div class="settings">
+        <aside class="sidebar">
+          <button class="back">
+            <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>Back to shelf
+          </button>
+          <div class="mark">ER</div>
+          <div class="side-heading">
+            <span class="eyebrow">Settings</span
+            ><strong>Your library, your rules.</strong>
+          </div>
+          <nav>
+            <button class="nav-item">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16" /></svg
+              ><span>Data & Backup</span><small>01</small></button
+            ><button class="nav-item active">
+              <svg viewBox="0 0 24 24"><path d="M5 19L12 4l7 15M8 14h8" /></svg
+              ><span>Reading & Fonts</span><small>02</small>
+            </button>
+          </nav>
+        </aside>
+        <main class="content">
+          <header class="header">
+            <div>
+              <p>Reading preferences</p>
+              <h1>Reading & Fonts</h1>
+              <span>Manage private, app-local typefaces for TXT and EPUB.</span>
+            </div>
+            <button class="close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </header>
+          <div class="section-head"><h2>Font library</h2></div>
+          <section class="card preview">
+            <div class="preview-copy">
+              <span>Selected font</span>
+              <p>Every page should feel quiet enough for the story to speak.</p>
+            </div>
+            <div class="preview-meta">
+              <strong>Lora</strong><small>Built-in fallback</small>
+            </div>
+          </section>
+        </main>
+      </div>
+      <div class="scrim">
+        <section class="modal" role="dialog" aria-label="Import font">
+          <header class="modal-head">
+            <div>
+              <span class="eyebrow" style="color: var(--teal)">Local font</span>
+              <h2>Review before importing</h2>
+            </div>
+            <button class="close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </header>
+          <div class="modal-body">
+            <div class="dropzone">
+              <div class="drop-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
+              </div>
+              <strong>Drop a TTF or OTF file here</strong
+              ><span>or choose a local file · maximum 20 MiB</span>
+            </div>
+            <div class="file-review">
+              <div class="file-icon">OTF</div>
+              <div>
+                <strong>Literata-Regular.otf</strong
+                ><small>Parsed successfully · SHA-256 duplicate check passed</small>
+              </div>
+              <dl>
+                <dt>Family</dt>
+                <dd>Literata</dd>
+                <dt>Style</dt>
+                <dd>Regular</dd>
+                <dt>Size</dt>
+                <dd>238 KB</dd>
+              </dl>
+            </div>
+            <div class="license">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 8v5M12 17h.01" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+              <div>
+                <strong>Use fonts you have permission to use.</strong><br />Ebook Reader
+                stores this file locally and cannot verify its license. Importing
+                confirms that you accept responsibility for its use.
+              </div>
+            </div>
+          </div>
+          <footer class="modal-actions">
+            <button class="secondary">Cancel</button
+            ><button class="primary">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>Import
+              Literata
+            </button>
+          </footer>
+        </section>
+      </div>
+    </section>
+
+    <section class="board board--states">
+      <div class="settings">
+        <aside class="sidebar">
+          <button class="back">
+            <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg>Back to shelf
+          </button>
+          <div class="mark">ER</div>
+          <div class="side-heading">
+            <span class="eyebrow">Settings</span
+            ><strong>Your library, your rules.</strong>
+          </div>
+          <nav>
+            <button class="nav-item active">
+              <svg viewBox="0 0 24 24"><path d="M5 19L12 4l7 15M8 14h8" /></svg
+              ><span>Reading & Fonts</span><small>02</small>
+            </button>
+          </nav>
+          <p class="privacy">
+            Clear feedback, recoverable choices, no hidden system changes.
+          </p>
+        </aside>
+        <main class="content">
+          <header class="header">
+            <div>
+              <p>Font safeguards</p>
+              <h1>Clear outcomes</h1>
+              <span
+                >Invalid files never enter the library. Removing an active font always
+                shows the exact fallback before confirmation.</span
+              >
+            </div>
+            <button class="close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </header>
+          <div class="states-grid">
+            <section class="card state-card">
+              <div class="state-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M8 12h8M12 8v8" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              </div>
+              <h2>Already in your library</h2>
+              <p>
+                This file matches an existing font. No duplicate copy or record was
+                created.
+              </p>
+              <div class="match">
+                <div class="sample">Aa</div>
+                <div><strong>Literata</strong><small>Regular · Selected</small></div>
+              </div>
+            </section>
+            <section class="card state-card">
+              <div class="state-icon">
+                <svg viewBox="0 0 24 24">
+                  <path d="M12 8v5M12 17h.01" />
+                  <path d="M12 3l9 17H3z" />
+                </svg>
+              </div>
+              <h2>Font format not supported</h2>
+              <p>
+                <strong>Collection.ttc</strong> is a font collection. v0.3 accepts
+                static TTF and OTF files only.
+              </p>
+              <div style="margin-top: 18px">
+                <button class="secondary">Choose another file</button>
+              </div>
+            </section>
+            <section class="card dialog-demo">
+              <div class="confirm">
+                <h2>Remove Literata?</h2>
+                <p>
+                  Literata is your current reading font. TXT and EPUB books will
+                  immediately return to the built-in Lora font. PDF appearance will not
+                  change.
+                </p>
+                <div class="fallback">
+                  <div class="sample">Aa</div>
+                  <div>
+                    <strong>Reading font fallback</strong><br /><small
+                      >Literata → Lora</small
+                    >
+                  </div>
+                  <span class="arrow">Saved automatically</span>
+                </div>
+                <div class="confirm-actions">
+                  <button class="secondary">Keep font</button
+                  ><button class="danger">Remove and use Lora</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </section>
+
+    <section class="board board--mobile">
+      <div class="mobile-canvas">
+        <div class="phone">
+          <div class="grabber"></div>
+          <header class="mobile-head">
+            <button aria-label="Back">
+              <svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button
+            ><strong>Reading & Fonts</strong
+            ><button aria-label="Close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          </header>
+          <main class="mobile-scroll">
+            <span class="eyebrow">Reading preferences</span>
+            <h1>Your type, locally.</h1>
+            <p>Custom fonts apply to TXT and EPUB. PDF keeps its embedded typefaces.</p>
+            <section class="mobile-preview">
+              <span class="eyebrow">Literata · Selected</span>
+              <p>Every page should feel quiet enough for the story to speak.</p>
+            </section>
+            <section class="mobile-fonts">
+              <div class="mobile-font-row">
+                <div class="sample">Aa</div>
+                <div><strong>Lora</strong><small>Built-in fallback</small></div>
+                <button class="switch on" aria-label="Lora enabled"></button>
+              </div>
+              <div class="mobile-font-row">
+                <div class="sample">Aa</div>
+                <div><strong>Literata</strong><small>Custom · Selected</small></div>
+                <button class="switch on" aria-label="Literata enabled"></button>
+              </div>
+              <div class="mobile-font-row">
+                <div class="sample" style="font-family: Arial, sans-serif">Aa</div>
+                <div><strong>Atkinson</strong><small>Custom · 156 KB</small></div>
+                <button class="switch on" aria-label="Atkinson enabled"></button>
+              </div>
+            </section>
+            <div class="mobile-note">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 8v5M12 17h.01" />
+                <circle cx="12" cy="12" r="9" /></svg
+              ><span
+                >TTF and OTF only, up to 20 MiB. You are responsible for permission to
+                use imported fonts.</span
+              >
+            </div>
+          </main>
+          <footer class="mobile-actions">
+            <button class="primary">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>Import font
+            </button>
+          </footer>
+          <div class="gesture-tab">≡</div>
+        </div>
+      </div>
+    </section>
+    <script>
+      const board = new URLSearchParams(location.search).get("board") || "library";
+      document.body.dataset.board = board;
+    </script>
+  </body>
+</html>

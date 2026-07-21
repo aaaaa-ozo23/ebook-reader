@@ -3,9 +3,9 @@
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态
-- **当前状态：** 14.3 acceptance_complete；等待提交、推送并 `--no-ff` 合回集成分支，随后进入 14.4 design_review_pending
-- **当前分支：** `codex/stage14-mobi-import`
-- **基线：** v0.3 integration `6e15884`；当前设计提交 `ce09786`
+- **当前状态：** 14.4 design_review_pending；14.3 已提交、推送并 `--no-ff` 合回集成分支
+- **当前分支：** `codex/stage14-custom-fonts`
+- **基线：** v0.3 integration merge `1bdd2a7`
 
 ### 已执行
 - 用户批准 14.3 四张状态板，并把范围扩展为依次完成 14.3、14.4、14.5、14.6、14.7。
@@ -31,6 +31,19 @@
 - 全量 Playwright 29/29 输出通过；DPR2 500 页 PDF 严格 50ms 性能项目前置隔离执行后通过。拖放 fixture 先等待 Tauri listener 注册，消除测试时序竞态；Windows Vite 仍在全部断言完成后保留 teardown 句柄。
 - 沙箱外原生门禁通过：NSIS 生成 7,520,335-byte installer 与 424-byte updater signature；MSI 生成 9,674,752-byte bundle。两个 installer manifest 均包含固定 hash 的 296,129-byte `mobitool.exe`，包体增量仍远低于门槛。
 - 14.7 执行总验收后停止；不改正式版本、不创建 tag/Release、不启动 Stage 15。
+
+### 14.3 Git 收口
+
+- 实现提交 `7a82b07`、测试提交 `47ee17f`、文档提交 `0d405eb` 已推送至 `codex/stage14-mobi-import`。
+- `codex/stage14-mobi-import` 已通过 `--no-ff` 合入并推送 `codex/v0.3.0-integration`，合并提交为 `1bdd2a7`。
+- `.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+
+### 14.4 自定义字体设计审核
+
+- 从最新集成分支创建并推送 `codex/stage14-custom-fonts`；本次只产生设计资产与审核契约，没有创建 `0007_custom_fonts.sql`、Tauri 命令或生产 React/CSS。
+- 四张状态板覆盖桌面 Reading & Fonts 字体库、TTF/OTF 导入确认、重复/不支持/删除当前字体回退，以及 375px 全屏 sheet。
+- 设计明确 app-local、不安装到 Windows、20 MiB 上限、许可责任前置、hash 去重、删除当前字体立即回退 Lora，以及 PDF 保留文档嵌入字体。
+- 静态源在 1440×900 与 375×812 真实渲染后逐图检查；移动端手势把手避开所有字体开关，主操作保持 44px 以上。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 
