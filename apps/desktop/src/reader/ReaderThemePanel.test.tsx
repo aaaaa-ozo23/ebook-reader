@@ -7,6 +7,30 @@ import { ReaderThemePanel } from "./ReaderThemePanel";
 const MODES: readonly PageTransitionMode[] = ["none", "page-curl", "cover", "slide"];
 
 describe("ReaderThemePanel page transitions", () => {
+  it("uses distinct semantic controls for line, spacing, and margin presets", () => {
+    const { container } = render(
+      <ReaderThemePanel
+        isOpen
+        onClose={vi.fn()}
+        theme={defaultReaderTheme}
+        themeError={null}
+        onThemeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("radio", { name: "Compact line height" })).toBeVisible();
+    expect(
+      screen.getByRole("radio", { name: "Standard paragraph spacing" }),
+    ).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Wide page margin" })).toBeVisible();
+    expect(container.querySelectorAll(".theme-typography-glyph--line")).toHaveLength(3);
+    expect(container.querySelectorAll(".theme-typography-glyph--spacing")).toHaveLength(
+      3,
+    );
+    expect(container.querySelectorAll(".theme-typography-glyph--margin")).toHaveLength(
+      3,
+    );
+  });
   it("uses an in-system font listbox instead of the platform select popup", () => {
     const onThemeChange = vi.fn();
     render(

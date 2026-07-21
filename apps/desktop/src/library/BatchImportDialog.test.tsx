@@ -28,6 +28,12 @@ describe("BatchImportDialog", () => {
           selected: true,
         },
         {
+          path: "D:\\books\\kindle.azw3",
+          name: "kindle.azw3",
+          status: "valid",
+          selected: false,
+        },
+        {
           path: "D:\\books\\copy.epub",
           name: "copy.epub",
           status: "duplicate",
@@ -38,6 +44,14 @@ describe("BatchImportDialog", () => {
           name: "notes.md",
           status: "unsupported",
           selected: false,
+        },
+        {
+          path: "D:\\books\\protected.mobi",
+          name: "protected.mobi",
+          status: "error",
+          selected: false,
+          message:
+            "[mobi-drm-unsupported] this ebook is DRM-protected; Ebook Reader will not remove DRM",
         },
       ],
     });
@@ -61,6 +75,12 @@ describe("BatchImportDialog", () => {
     expect(await screen.findByText("one.epub")).toBeVisible();
     expect(screen.getByText("copy.epub")).toBeVisible();
     expect(screen.getByText("notes.md")).toBeVisible();
+    expect(screen.getByText("AZW3 · Will convert locally to EPUB")).toBeVisible();
+    expect(
+      screen.getByText(
+        "This file is protected. Ebook Reader will not attempt to remove DRM.",
+      ),
+    ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Import 1 selected" }));
 
     await waitFor(() => expect(importBatch).toHaveBeenCalled());
