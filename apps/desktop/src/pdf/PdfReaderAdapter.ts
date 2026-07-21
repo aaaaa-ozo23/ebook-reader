@@ -87,7 +87,7 @@ interface PdfOutlineNode {
 const PDF_MIN_SCALE = 0.5;
 const PDF_MAX_SCALE = 3;
 const PDF_DEFAULT_SCALE = 1;
-const PDF_DOUBLE_VIEW_MIN_WIDTH = 920;
+const PDF_DOUBLE_VIEW_MIN_WIDTH = 820;
 
 export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   private readonly bookId: string;

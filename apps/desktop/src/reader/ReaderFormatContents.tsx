@@ -49,6 +49,7 @@ import {
   type EpubPosition,
   type EpubProgressPreview,
   type EpubSpreadMode,
+  type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
 import {
   nextPdfSpreadStart,
@@ -67,6 +68,7 @@ import {
 } from "./readerAnnotationPresentation";
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
 import { PaginatedReaderControls } from "./PaginatedReaderControls";
+import { ReaderPageButton } from "./ReaderPageButton";
 import { TxtPageWindow } from "./TxtPageWindow";
 import {
   createTxtDomPageMeasurer,
@@ -702,7 +704,7 @@ function TxtPaginatedReaderContent({
     () =>
       [
         txtDocument?.book.id,
-        txtDocument?.book.fileHash,
+        txtDocument?.book.readerHash ?? txtDocument?.book.fileHash,
         txtDocument?.charCount,
         JSON.stringify(layoutSignature),
       ].join("|"),
@@ -1339,6 +1341,8 @@ export function EpubReaderContent({
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [locationInput, setLocationInput] = useState("1");
   const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] = useState(false);
+  const [renderedSpreadMode, setRenderedSpreadMode] =
+    useState<EpubSpreadMode>("single");
   const [position, setPosition] = useState<EpubPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
@@ -1557,6 +1561,7 @@ export function EpubReaderContent({
       setActiveImage(null);
       onBlockingOverlayChange(false);
       setIsAdapterReadyForHighlights(false);
+      setRenderedSpreadMode("single");
       setPosition(null);
       setPreviewPosition(null);
       setLocationInput("1");
@@ -1598,6 +1603,11 @@ export function EpubReaderContent({
           onImageActivate: handleImageActivate,
           onLayoutInvalidated: () => {
             transitionControllerRef.current?.cancel();
+          },
+          onSpreadChange: (spreadState: EpubSpreadState) => {
+            if (isCurrent) {
+              setRenderedSpreadMode(spreadState.rendered);
+            }
           },
           onLocationsGenerated: (serializedLocations) => {
             void saveReaderCache(
@@ -1957,7 +1967,11 @@ export function EpubReaderContent({
       data-page-transition={transition}
       aria-label={`${book.title} content`}
     >
-      <article className="reader-page reader-page--epub">
+      <article
+        className="reader-page reader-page--epub"
+        data-rendered-page-view={renderedSpreadMode}
+        data-requested-page-view={requestedSpreadMode}
+      >
         <div className="reader-epub-frame">
           {isLoading ? <ReaderLoadingState format="epub" overlay /> : null}
           {error !== null ? (
@@ -2771,6 +2785,7 @@ export function PdfReaderContent({
     activeProgress === null
       ? "0%"
       : `${Math.round(Math.min(Math.max(activeProgress.progression, 0), 1) * 100)}%`;
+  const pdfAvailableWidth = Math.max(240, frameWidth - theme.pageMargin * 2);
   const activeSectionTitle =
     activeProgress === null
       ? book.title
@@ -2786,7 +2801,11 @@ export function PdfReaderContent({
       data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
       data-page-transition={transition}
     >
-      <article className="reader-page reader-page--pdf">
+      <article
+        className="reader-page reader-page--pdf"
+        data-rendered-page-view={position?.renderedMode ?? "single"}
+        data-requested-page-view={viewMode}
+      >
         <div
           ref={frameRef}
           className="reader-pdf-frame reader-transition-host"
@@ -2825,7 +2844,7 @@ export function PdfReaderContent({
             <MemoizedPdfContinuousView
               adapter={pdfAdapter}
               annotations={annotations}
-              availableWidth={frameWidth}
+              availableWidth={pdfAvailableWidth}
               frameRef={frameRef}
               navigationVersion={pdfNavigationVersion}
               onAnnotationActivate={handlePdfAnnotationActivate}
@@ -2837,7 +2856,7 @@ export function PdfReaderContent({
             <MemoizedPdfPaginatedView
               adapter={pdfAdapter}
               annotations={annotations}
-              availableWidth={frameWidth}
+              availableWidth={pdfAvailableWidth}
               isTransitioning={isPdfTransitioning}
               onAnnotationActivate={handlePdfAnnotationActivate}
               onSelectionEnd={capturePdfSelection}
@@ -2851,21 +2870,13 @@ export function PdfReaderContent({
           aria-label="PDF navigation"
         >
           <div className="reader-epub-control-row reader-pdf-control-row">
-            <button
-              type="button"
-              className="reader-tool-button"
-              onClick={handlePrevious}
-            >
-              Previous
-            </button>
+            <ReaderPageButton direction="previous" onClick={handlePrevious} />
             <div className="reader-epub-status reader-pdf-status" aria-live="polite">
               <span>{activeSectionTitle}</span>
               <strong>{pageLabel}</strong>
               <span>{progressLabel}</span>
             </div>
-            <button type="button" className="reader-tool-button" onClick={handleNext}>
-              Next
-            </button>
+            <ReaderPageButton direction="next" onClick={handleNext} />
           </div>
           <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
             <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">

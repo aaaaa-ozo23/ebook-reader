@@ -61,6 +61,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "book_user_metadata",
         sql: include_str!("../migrations/0005_book_user_metadata.sql"),
     },
+    Migration {
+        version: 6,
+        name: "book_derivatives",
+        sql: include_str!("../migrations/0006_book_derivatives.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -73,6 +78,16 @@ pub struct AppHealth {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BookFormat {
+    Epub,
+    Txt,
+    Pdf,
+    Mobi,
+    Azw3,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReaderFormat {
     Epub,
     Txt,
     Pdf,
@@ -131,7 +146,9 @@ impl BookFormat {
             "epub" => Ok(Self::Epub),
             "txt" => Ok(Self::Txt),
             "pdf" => Ok(Self::Pdf),
-            _ => bail!("unsupported book format; expected epub, txt, or pdf"),
+            "mobi" => Ok(Self::Mobi),
+            "azw3" => Ok(Self::Azw3),
+            _ => bail!("unsupported book format; expected epub, txt, pdf, mobi, or azw3"),
         }
     }
 
@@ -140,6 +157,8 @@ impl BookFormat {
             "epub" => Ok(Self::Epub),
             "txt" => Ok(Self::Txt),
             "pdf" => Ok(Self::Pdf),
+            "mobi" => Ok(Self::Mobi),
+            "azw3" => Ok(Self::Azw3),
             _ => Err(rusqlite::Error::FromSqlConversionFailure(
                 3,
                 rusqlite::types::Type::Text,
@@ -153,6 +172,18 @@ impl BookFormat {
             Self::Epub => "epub",
             Self::Txt => "txt",
             Self::Pdf => "pdf",
+            Self::Mobi => "mobi",
+            Self::Azw3 => "azw3",
+        }
+    }
+}
+
+impl BookFormat {
+    fn reader_format(self) -> ReaderFormat {
+        match self {
+            Self::Epub | Self::Mobi | Self::Azw3 => ReaderFormat::Epub,
+            Self::Txt => ReaderFormat::Txt,
+            Self::Pdf => ReaderFormat::Pdf,
         }
     }
 }
@@ -180,6 +211,9 @@ pub struct Book {
     pub source_path: Option<String>,
     pub library_path: String,
     pub file_hash: String,
+    pub reader_format: ReaderFormat,
+    pub reader_path: String,
+    pub reader_hash: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_path: Option<String>,
     pub cover_status: BookCoverStatus,
@@ -534,6 +568,7 @@ struct TextLine {
 pub(crate) struct AppStoragePaths {
     pub(crate) database_path: PathBuf,
     pub(crate) library_dir: PathBuf,
+    pub(crate) staging_dir: PathBuf,
 }
 
 pub fn app_health(app: &AppHandle) -> anyhow::Result<AppHealth> {
@@ -791,6 +826,12 @@ pub(crate) fn init_app_storage(app: &AppHandle) -> anyhow::Result<AppStoragePath
             storage_paths.library_dir.display()
         )
     })?;
+    fs::create_dir_all(&storage_paths.staging_dir).with_context(|| {
+        format!(
+            "failed to create staging directory {}",
+            storage_paths.staging_dir.display()
+        )
+    })?;
 
     Ok(storage_paths)
 }
@@ -804,6 +845,7 @@ fn resolve_app_storage_paths(app: &AppHandle) -> anyhow::Result<AppStoragePaths>
     Ok(AppStoragePaths {
         database_path: app_data_dir.join(DB_FILE_NAME),
         library_dir: app_data_dir.join(LIBRARY_DIR_NAME),
+        staging_dir: app_data_dir.join("staging"),
     })
 }
 
@@ -902,7 +944,10 @@ pub fn import_book_at<P: AsRef<Path>>(
         format,
         source_path: Some(path_to_string(&source_path)),
         library_path: path_to_string(&library_path),
-        file_hash,
+        file_hash: file_hash.clone(),
+        reader_format: format.reader_format(),
+        reader_path: path_to_string(&library_path),
+        reader_hash: file_hash.clone(),
         cover_path: None,
         cover_status,
         availability: BookAvailability::Available,
@@ -919,13 +964,151 @@ pub fn import_book_at<P: AsRef<Path>>(
     })
 }
 
+pub(crate) fn find_book_by_file_hash_at(
+    database_path: &Path,
+    file_hash: &str,
+) -> anyhow::Result<Option<Book>> {
+    init_database_at(database_path)?;
+    let conn = open_database(database_path)?;
+    Ok(find_book_by_hash(&conn, file_hash)?)
+}
+
+pub(crate) fn import_converted_book_at(
+    database_path: &Path,
+    library_dir: &Path,
+    source_path: &Path,
+    source_hash: &str,
+    epub_path: &Path,
+    epub_hash: &str,
+    converter_id: &str,
+    converter_version: &str,
+) -> anyhow::Result<ImportBookResult> {
+    init_database_at(database_path)?;
+    let source_path = canonicalize_import_path(source_path)?;
+    let format = BookFormat::from_path(&source_path)?;
+    if !matches!(format, BookFormat::Mobi | BookFormat::Azw3) {
+        bail!("[mobi-source-invalid] converted imports require .mobi or .azw3 sources");
+    }
+    fs::create_dir_all(library_dir)?;
+
+    let raw_path = library_dir.join(format!("{source_hash}.{}", format.as_str()));
+    let reader_path = library_dir.join(format!("{source_hash}.reader.epub"));
+    let mut conn = open_database(database_path)?;
+    let existing = find_book_by_hash(&conn, source_hash)?;
+    if existing.as_ref().is_some_and(|book| {
+        Path::new(&book.library_path).is_file() && Path::new(&book.reader_path).is_file()
+    }) {
+        return Ok(ImportBookResult {
+            status: ImportBookStatus::Duplicate,
+            book: existing.expect("checked above"),
+        });
+    }
+
+    let raw_was_created = !raw_path.exists();
+    let reader_was_created = !reader_path.exists();
+    if raw_was_created {
+        copy_file_to_library(&source_path, &raw_path)?;
+    }
+    if reader_was_created {
+        if let Err(error) = copy_file_to_library(epub_path, &reader_path) {
+            if raw_was_created {
+                let _ = fs::remove_file(&raw_path);
+            }
+            return Err(error);
+        }
+    }
+
+    let result = (|| {
+        let now = current_timestamp(&conn)?;
+        let (book_id, created_at, last_opened_at, cover_path, cover_status, author) =
+            if let Some(book) = existing.as_ref() {
+                (
+                    book.id.clone(),
+                    book.created_at.clone(),
+                    book.last_opened_at.clone(),
+                    book.cover_path.clone(),
+                    book.cover_status,
+                    book.author.clone(),
+                )
+            } else {
+                (
+                    Uuid::new_v4().to_string(),
+                    now.clone(),
+                    None,
+                    None,
+                    BookCoverStatus::Pending,
+                    None,
+                )
+            };
+        let transaction = conn.transaction()?;
+        if existing.is_some() {
+            transaction.execute(
+                "UPDATE books SET source_path = ?1, library_path = ?2, updated_at = ?3 WHERE id = ?4",
+                params![path_to_string(&source_path), path_to_string(&raw_path), now, book_id],
+            )?;
+        } else {
+            transaction.execute(
+                "INSERT INTO books (id, title, author, format, source_path, library_path, file_hash, cover_path, created_at, updated_at, last_opened_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![
+                    book_id,
+                    title_from_path(&source_path),
+                    author,
+                    format.as_str(),
+                    path_to_string(&source_path),
+                    path_to_string(&raw_path),
+                    source_hash,
+                    cover_path,
+                    created_at,
+                    now,
+                    last_opened_at,
+                ],
+            )?;
+            transaction.execute(
+                "INSERT INTO book_cover_state (book_id, status, updated_at) VALUES (?1, ?2, ?3)",
+                params![book_id, cover_status.as_str(), now],
+            )?;
+        }
+        transaction.execute(
+            "INSERT INTO book_derivatives (book_id, format, path, file_hash, converter_id, converter_version, created_at, updated_at)
+             VALUES (?1, 'epub', ?2, ?3, ?4, ?5, ?6, ?6)
+             ON CONFLICT(book_id) DO UPDATE SET path=excluded.path, file_hash=excluded.file_hash,
+               converter_id=excluded.converter_id, converter_version=excluded.converter_version, updated_at=excluded.updated_at",
+            params![book_id, path_to_string(&reader_path), epub_hash, converter_id, converter_version, now],
+        )?;
+        transaction.commit()?;
+        find_book_by_id(&conn, &book_id)?
+            .with_context(|| format!("book not found after converted import: {book_id}"))
+    })();
+
+    match result {
+        Ok(book) => Ok(ImportBookResult {
+            status: if existing.is_some() {
+                ImportBookStatus::Repaired
+            } else {
+                ImportBookStatus::Imported
+            },
+            book,
+        }),
+        Err(error) => {
+            if raw_was_created {
+                let _ = fs::remove_file(&raw_path);
+            }
+            if reader_was_created {
+                let _ = fs::remove_file(&reader_path);
+            }
+            Err(error)
+        }
+    }
+}
+
 pub fn mark_book_opened_at(database_path: &Path, book_id: &str) -> anyhow::Result<Book> {
     init_database_at(database_path)?;
     let details = get_book_details_at(database_path, book_id)?;
     let conn = open_database(database_path)?;
     let book = details.book.clone();
 
-    if !Path::new(&book.library_path).is_file() {
+    if !Path::new(&book.reader_path).is_file() {
         bail!("library copy is missing; re-import the original file to repair this book");
     }
 
@@ -971,6 +1154,19 @@ pub fn remove_book_at(
                 library_path.display()
             )
         })?;
+    }
+
+    if book.reader_path != book.library_path {
+        let reader_path = PathBuf::from(&book.reader_path);
+        if reader_path.exists() {
+            assert_library_file_is_within_dir(&reader_path, library_dir)?;
+            fs::remove_file(&reader_path).with_context(|| {
+                format!(
+                    "failed to delete derived reader file at {}",
+                    reader_path.display()
+                )
+            })?;
+        }
     }
 
     if let Some(cover_path) = book.cover_path.as_deref().map(PathBuf::from) {
@@ -1178,7 +1374,10 @@ pub fn get_reader_cache_at(
          INNER JOIN books ON books.id = reader_cache.book_id
          WHERE reader_cache.book_id = ?1
            AND reader_cache.cache_key = ?2
-           AND reader_cache.source_hash = books.file_hash",
+           AND reader_cache.source_hash = COALESCE(
+             (SELECT file_hash FROM book_derivatives WHERE book_id = books.id),
+             books.file_hash
+           )",
         params![book_id, cache_key],
         |row| row.get(0),
     )
@@ -1213,7 +1412,7 @@ pub fn save_reader_cache_at(
            source_hash = excluded.source_hash,
            value_json = excluded.value_json,
            updated_at = excluded.updated_at",
-        params![book_id, cache_key, book.file_hash, value_json, now],
+        params![book_id, cache_key, book.reader_hash, value_json, now],
     )?;
     Ok(())
 }
@@ -1551,7 +1750,7 @@ fn canonicalize_import_path(path: &Path) -> anyhow::Result<PathBuf> {
     Ok(canonical_path)
 }
 
-fn hash_file(path: &Path) -> anyhow::Result<String> {
+pub(crate) fn hash_file(path: &Path) -> anyhow::Result<String> {
     let mut file = File::open(path)
         .with_context(|| format!("failed to open import file {}", path.display()))?;
     let mut hasher = Sha256::new();
@@ -1968,7 +2167,7 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
             Ok(())
         }
         (BookFormat::Txt, _) => bail!("TXT books can only use txt locators"),
-        (BookFormat::Epub, Locator::Epub(epub_locator)) => {
+        (BookFormat::Epub | BookFormat::Mobi | BookFormat::Azw3, Locator::Epub(epub_locator)) => {
             let has_cfi = epub_locator
                 .cfi
                 .as_deref()
@@ -1985,7 +2184,9 @@ fn normalize_locator_for_book(format: BookFormat, locator: &mut Locator) -> anyh
                 .map(|value| value.clamp(0.0, 1.0));
             Ok(())
         }
-        (BookFormat::Epub, _) => bail!("EPUB books can only use epub locators"),
+        (BookFormat::Epub | BookFormat::Mobi | BookFormat::Azw3, _) => {
+            bail!("EPUB-backed books can only use epub locators")
+        }
         (BookFormat::Pdf, Locator::Pdf(pdf_locator)) => {
             pdf_locator.page = pdf_locator.page.max(1);
             pdf_locator.page_offset_ratio = normalize_progress(pdf_locator.page_offset_ratio);
@@ -2177,7 +2378,9 @@ fn select_books(conn: &Connection) -> anyhow::Result<Vec<Book>> {
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
                 CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
-            )
+            ),
+            (SELECT path FROM book_derivatives WHERE book_id = books.id),
+            (SELECT file_hash FROM book_derivatives WHERE book_id = books.id)
         FROM books
         ORDER BY COALESCE(last_opened_at, created_at) DESC, created_at DESC, id ASC",
     )?;
@@ -2206,7 +2409,9 @@ fn find_book_by_hash(conn: &Connection, file_hash: &str) -> rusqlite::Result<Opt
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
                 CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
-            )
+            ),
+            (SELECT path FROM book_derivatives WHERE book_id = books.id),
+            (SELECT file_hash FROM book_derivatives WHERE book_id = books.id)
         FROM books
         WHERE file_hash = ?1",
         params![file_hash],
@@ -2232,7 +2437,9 @@ fn find_book_by_id(conn: &Connection, book_id: &str) -> rusqlite::Result<Option<
             COALESCE(
                 (SELECT status FROM book_cover_state WHERE book_id = books.id),
                 CASE WHEN (SELECT user_cover_path FROM book_user_metadata WHERE book_id = books.id) IS NOT NULL OR cover_path IS NOT NULL THEN 'ready' WHEN format = 'txt' THEN 'fallback' ELSE 'pending' END
-            )
+            ),
+            (SELECT path FROM book_derivatives WHERE book_id = books.id),
+            (SELECT file_hash FROM book_derivatives WHERE book_id = books.id)
         FROM books
         WHERE id = ?1",
         params![book_id],
@@ -2257,21 +2464,35 @@ fn find_annotation_by_id(
 
 fn row_to_book(row: &Row<'_>) -> rusqlite::Result<Book> {
     let format_value: String = row.get(3)?;
+    let format = BookFormat::from_database(&format_value)?;
     let library_path: String = row.get(5)?;
+    let derivative_path: Option<String> = row.get(12)?;
+    let derivative_hash: Option<String> = row.get(13)?;
+    let file_hash: String = row.get(6)?;
+    let (reader_path, reader_hash) = match format {
+        BookFormat::Mobi | BookFormat::Azw3 => (
+            derivative_path.unwrap_or_default(),
+            derivative_hash.unwrap_or_default(),
+        ),
+        _ => (library_path.clone(), file_hash.clone()),
+    };
 
     Ok(Book {
         id: row.get(0)?,
         title: row.get(1)?,
         author: row.get(2)?,
-        format: BookFormat::from_database(&format_value)?,
+        format,
         source_path: row.get(4)?,
-        availability: if Path::new(&library_path).is_file() {
+        availability: if Path::new(&reader_path).is_file() {
             BookAvailability::Available
         } else {
             BookAvailability::Missing
         },
         library_path,
-        file_hash: row.get(6)?,
+        file_hash,
+        reader_format: format.reader_format(),
+        reader_path,
+        reader_hash,
         cover_path: row.get(7)?,
         created_at: row.get(8)?,
         updated_at: row.get(9)?,
@@ -2629,23 +2850,23 @@ mod tests {
     use super::{
         create_annotation_at, create_bookmark_at, delete_annotation_at, delete_bookmark_at,
         get_book_details_at, get_reader_cache_at, get_reader_experience_preferences_at,
-        get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at,
-        import_book_at, init_database_at, list_annotations_at, list_bookmarks_at, list_books_at,
-        mark_book_cover_fallback_at, mark_book_opened_at, open_txt_book_at, remove_book_at,
-        reset_book_overrides_at, save_book_cover_at, save_book_metadata_overrides_at,
-        save_reader_cache_at, save_reader_experience_preferences_at,
-        save_reader_layout_preferences_at, save_reader_theme_at, save_reading_progress_at,
-        save_user_book_cover_at, schema_version, update_annotation_at, AnnotationKind,
-        BookCoverOrigin, BookCoverStatus, BookFormat, BookMetadataOverridePatch,
-        EpubExperiencePreferences, EpubLocator, EpubViewMode, ImportBookStatus, Locator,
-        PageTransitionMode, PdfExperiencePreferences, PdfLocator, PdfPaginatedViewMode, PdfRect,
-        PdfViewMode, PdfZoomMode, ReaderExperiencePreferences, ReaderLayoutPreferences,
-        ReaderTheme, ReaderThemeMode, TextOverridePatch, TxtExperiencePreferences, TxtLocator,
-        TxtPaginatedViewMode, TxtViewMode, DB_FILE_NAME,
+        get_reader_layout_preferences_at, get_reader_theme_at, get_reading_progress_at, hash_file,
+        import_book_at, import_converted_book_at, init_database_at, list_annotations_at,
+        list_bookmarks_at, list_books_at, mark_book_cover_fallback_at, mark_book_opened_at,
+        open_txt_book_at, remove_book_at, reset_book_overrides_at, save_book_cover_at,
+        save_book_metadata_overrides_at, save_reader_cache_at,
+        save_reader_experience_preferences_at, save_reader_layout_preferences_at,
+        save_reader_theme_at, save_reading_progress_at, save_user_book_cover_at, schema_version,
+        update_annotation_at, AnnotationKind, BookCoverOrigin, BookCoverStatus, BookFormat,
+        BookMetadataOverridePatch, EpubExperiencePreferences, EpubLocator, EpubViewMode,
+        ImportBookStatus, Locator, PageTransitionMode, PdfExperiencePreferences, PdfLocator,
+        PdfPaginatedViewMode, PdfRect, PdfViewMode, PdfZoomMode, ReaderExperiencePreferences,
+        ReaderFormat, ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TextOverridePatch,
+        TxtExperiencePreferences, TxtLocator, TxtPaginatedViewMode, TxtViewMode, DB_FILE_NAME,
     };
 
     #[test]
-    fn migration_v5_creates_expected_tables_and_is_idempotent() {
+    fn migration_v6_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2664,7 +2885,8 @@ mod tests {
                     'app_settings',
                     'book_cover_state',
                     'reader_cache',
-                    'book_user_metadata'
+                    'book_user_metadata',
+                    'book_derivatives'
                 )",
                 [],
                 |row| row.get(0),
@@ -2676,7 +2898,7 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 9);
+        assert_eq!(table_count, 10);
         let bookmark_updated_at_columns: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
@@ -2685,8 +2907,8 @@ mod tests {
             )
             .expect("count bookmark updated_at columns");
 
-        assert_eq!(migration_count, 5);
-        assert_eq!(schema_version(&conn).expect("schema version"), 5);
+        assert_eq!(migration_count, 6);
+        assert_eq!(schema_version(&conn).expect("schema version"), 6);
         assert_eq!(bookmark_updated_at_columns, 1);
     }
 
@@ -2757,6 +2979,43 @@ mod tests {
             .library_path
             .ends_with(&format!("{}.txt", result.book.file_hash)));
         assert!(PathBuf::from(&result.book.library_path).exists());
+    }
+
+    #[test]
+    fn converted_mobi_keeps_source_identity_and_removes_both_managed_files() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("sample.mobi");
+        let epub_path = temp_dir.path().join("sample.reader.epub");
+        fs::write(&source_path, b"source mobi bytes").expect("source");
+        fs::write(&epub_path, b"validated epub bytes").expect("epub");
+        let source_hash = hash_file(&source_path).expect("source hash");
+        let reader_hash = hash_file(&epub_path).expect("reader hash");
+
+        let imported = import_converted_book_at(
+            &database_path,
+            &library_dir,
+            &source_path,
+            &source_hash,
+            &epub_path,
+            &reader_hash,
+            "libmobi",
+            "0.12",
+        )
+        .expect("converted import");
+
+        assert_eq!(imported.book.format, BookFormat::Mobi);
+        assert_eq!(imported.book.reader_format, ReaderFormat::Epub);
+        assert_eq!(imported.book.reader_hash, reader_hash);
+        assert!(PathBuf::from(&imported.book.library_path).is_file());
+        assert!(PathBuf::from(&imported.book.reader_path).is_file());
+
+        let source_copy = PathBuf::from(&imported.book.library_path);
+        let reader_copy = PathBuf::from(&imported.book.reader_path);
+        remove_book_at(&database_path, &library_dir, &imported.book.id).expect("remove");
+        assert!(!source_copy.exists());
+        assert!(!reader_copy.exists());
     }
 
     #[test]
@@ -3759,7 +4018,7 @@ mod tests {
             .contains("TXT books can only use txt locators"));
         assert!(epub_book_error
             .to_string()
-            .contains("EPUB books can only use epub locators"));
+            .contains("EPUB-backed books can only use epub locators"));
         assert!(invalid_epub_error
             .to_string()
             .contains("EPUB locator requires an href or cfi"));

@@ -61,6 +61,13 @@ export function BatchImportDialog({
       next.set(item.status, (next.get(item.status) ?? 0) + 1);
     return [...next.entries()];
   }, [preview]);
+  const isImporting = progress !== null && result === null;
+  const resultCounts = useMemo(() => {
+    const imported =
+      result?.items.filter((item) => item.book !== undefined).length ?? 0;
+    const issues = result?.items.filter((item) => item.status === "error") ?? [];
+    return { imported, issues };
+  }, [result]);
 
   if (paths === null) return null;
 
@@ -86,11 +93,26 @@ export function BatchImportDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        data-view={result !== null ? "result" : isImporting ? "progress" : "preview"}
       >
         <header>
           <div>
-            <p>Review before import</p>
-            <h2 id={titleId}>Import books</h2>
+            <p>
+              {result !== null
+                ? "Import report"
+                : isImporting
+                  ? "Local conversion"
+                  : "Review before import"}
+            </p>
+            <h2 id={titleId}>
+              {result !== null
+                ? resultCounts.issues.length > 0
+                  ? "Some books need attention"
+                  : "Import complete"
+                : isImporting
+                  ? "Importing books"
+                  : "Import books"}
+            </h2>
           </div>
           <button type="button" aria-label="Close import preview" onClick={onClose}>
             ×
@@ -101,7 +123,7 @@ export function BatchImportDialog({
             Scanning folders and checking duplicates…
           </div>
         ) : null}
-        {preview !== null ? (
+        {preview !== null && !isImporting && result === null ? (
           <>
             <div className="batch-summary">
               {counts.map(([status, count]) => (
@@ -116,7 +138,12 @@ export function BatchImportDialog({
             </div>
             <div className="batch-list" role="list" aria-label="Import preview">
               {preview.items.map((item) => (
-                <label key={item.path} className="batch-item" data-status={item.status}>
+                <label
+                  key={item.path}
+                  className="batch-item"
+                  data-status={item.status}
+                  role="listitem"
+                >
                   <input
                     type="checkbox"
                     checked={selected.has(item.path)}
@@ -130,9 +157,18 @@ export function BatchImportDialog({
                       })
                     }
                   />
+                  <i className="batch-item__format" aria-hidden="true">
+                    {formatBadge(item.path)}
+                  </i>
                   <span>
                     <strong>{item.name}</strong>
-                    <small>{item.message ?? item.path}</small>
+                    <small>
+                      {item.status === "valid" && isMobiPath(item.path)
+                        ? `${formatFromPath(item.path)} · Will convert locally to EPUB`
+                        : item.status === "error"
+                          ? friendlyImportMessage(item.message)
+                          : (item.message ?? item.path)}
+                    </small>
                   </span>
                   <em>{item.status}</em>
                 </label>
@@ -140,20 +176,97 @@ export function BatchImportDialog({
             </div>
           </>
         ) : null}
-        {progress !== null && result === null ? (
+        {isImporting ? (
           <div className="batch-progress" role="status">
-            {progress.message} · {progress.completed}/{progress.total}
+            <div className="batch-progress__current">
+              <i className="batch-item__format" aria-hidden="true">
+                {formatBadge(progress.message)}
+              </i>
+              <span>
+                <strong>{progress.message}</strong>
+                <small>
+                  {progress.phase === "converting"
+                    ? "Converting locally with libmobi 0.12"
+                    : phaseLabel(progress.phase)}
+                </small>
+              </span>
+              <em>
+                {Math.min(progress.completed + 1, progress.total)} of {progress.total}
+              </em>
+            </div>
+            <div className="batch-progress__meter" aria-hidden="true">
+              <span
+                style={{
+                  width: `${Math.max(8, (progress.completed / Math.max(1, progress.total)) * 100)}%`,
+                }}
+              />
+            </div>
+            <ol className="batch-progress__stages" aria-label="Import stages">
+              {[
+                "scanning",
+                "hashing",
+                "converting",
+                "validating",
+                "committing",
+                "complete",
+              ].map((phase) => (
+                <li key={phase} data-active={phase === progress.phase}>
+                  {phase === "complete" ? "Completed" : phaseLabel(phase)}
+                </li>
+              ))}
+            </ol>
+            <p className="batch-progress__privacy">
+              The source file stays on this computer. No book content is uploaded.
+            </p>
           </div>
         ) : null}
         {result !== null ? (
           <div className="batch-result" role="status">
-            <strong>
-              {result.status === "completed" ? "Import complete" : "Import canceled"}
-            </strong>
-            <span>
-              {result.items.filter((item) => item.book !== undefined).length} books
-              added or repaired.
-            </span>
+            <section className="batch-result__summary">
+              <span aria-hidden="true">
+                {resultCounts.issues.length > 0 ? "!" : "✓"}
+              </span>
+              <strong>
+                {resultCounts.imported} of {result.items.length} imported
+              </strong>
+              <p>
+                Successful books are already on the shelf. Failed items did not create
+                library records or leftover files.
+              </p>
+              {resultCounts.issues.some((item) =>
+                item.message?.includes("mobi-drm-unsupported"),
+              ) ? (
+                <aside className="batch-result__drm">
+                  <strong>DRM-protected file</strong>
+                  <p>
+                    This file is protected. Ebook Reader will not attempt to remove DRM.
+                    Use an unprotected copy from its publisher or seller.
+                  </p>
+                </aside>
+              ) : null}
+            </section>
+            <ul className="batch-result__items" aria-label="Import item results">
+              {result.items.map((item) => (
+                <li key={item.path} data-status={item.status}>
+                  <i aria-hidden="true">{item.book === undefined ? "!" : "✓"}</i>
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {item.book === undefined
+                        ? friendlyImportMessage(item.message)
+                        : isMobiPath(item.path)
+                          ? "Imported · converted locally to EPUB"
+                          : "Imported"}
+                    </small>
+                  </span>
+                  <em>
+                    {item.book === undefined
+                      ? importIssueLabel(item.message)
+                      : formatBadge(item.path)}
+                  </em>
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
         {error === null ? null : (
@@ -174,7 +287,7 @@ export function BatchImportDialog({
           <button type="button" className="dialog-button" onClick={onClose}>
             {result === null ? "Cancel" : "Done"}
           </button>
-          {preview !== null && result === null ? (
+          {preview !== null && !isImporting && result === null ? (
             <button
               type="button"
               className="dialog-button dialog-button--primary"
@@ -201,4 +314,31 @@ function errorMessage(error: unknown): string {
   return error instanceof Error
     ? error.message
     : String(error).replace(/^\[[^\]]+\]\s*/, "");
+}
+
+function formatFromPath(path: string): "MOBI" | "AZW3" {
+  return path.toLowerCase().endsWith(".azw3") ? "AZW3" : "MOBI";
+}
+
+function formatBadge(path: string): string {
+  return path.split(".").pop()?.slice(0, 4).toUpperCase() ?? "FILE";
+}
+
+function isMobiPath(path: string): boolean {
+  return /\.(mobi|azw3)$/i.test(path);
+}
+
+function friendlyImportMessage(message?: string): string {
+  if (message?.includes("[mobi-drm-unsupported]")) {
+    return "This file is protected. Ebook Reader will not attempt to remove DRM.";
+  }
+  return message?.replace(/^\[[^\]]+\]\s*/, "") ?? "Import failed";
+}
+
+function importIssueLabel(message?: string): string {
+  return message?.includes("mobi-drm-unsupported") ? "DRM" : "Failed";
+}
+
+function phaseLabel(phase: string): string {
+  return phase.charAt(0).toUpperCase() + phase.slice(1);
 }

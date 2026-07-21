@@ -1,7 +1,3 @@
-// Stage 14.2 keeps this prototype behind an internal boundary until the 14.3
-// import service wires it into production commands.
-#![allow(dead_code)]
-
 use std::{
     collections::HashSet,
     fs::{self, File},

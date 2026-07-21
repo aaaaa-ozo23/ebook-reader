@@ -53,6 +53,20 @@
         "description": "PDF document",
         "mimeType": "application/pdf",
         "role": "Viewer"
+      },
+      {
+        "ext": ["mobi"],
+        "name": "MOBI Ebook",
+        "description": "MOBI ebook",
+        "mimeType": "application/x-mobipocket-ebook",
+        "role": "Viewer"
+      },
+      {
+        "ext": ["azw3"],
+        "name": "AZW3 Ebook",
+        "description": "AZW3 ebook",
+        "mimeType": "application/vnd.amazon.ebook",
+        "role": "Viewer"
       }
     ],
     "icon": [

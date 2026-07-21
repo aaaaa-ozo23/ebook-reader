@@ -111,12 +111,14 @@ interface EpubSearchableBook {
 
 const EPUB_THEME_NAME = "reader-theme";
 const EPUB_LOCATION_CHARS = 1500;
-const EPUB_MIN_SPREAD_WIDTH = 860;
+const EPUB_MIN_SPREAD_WIDTH = 820;
 const SELECTION_CONTEXT_LENGTH = 80;
 
 type RenderedRendition = Rendition & {
   manager?: {
     resize?: (width: number, height: number) => void;
+    settings?: { gap?: number };
+    updateLayout?: () => void;
   };
 };
 
@@ -389,8 +391,22 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onLayoutInvalidated?.("theme");
     this.rendition.themes.register(EPUB_THEME_NAME, buildEpubThemeRules(theme));
     this.rendition.themes.select(EPUB_THEME_NAME);
+    // epub.js reuses the named stylesheet while a rendition is mounted. Explicit
+    // body overrides make page-margin changes observable immediately and ensure
+    // newly mounted spine views inherit the same inset after reflow.
+    this.rendition.themes.override("padding-left", `${theme.pageMargin}px`, true);
+    this.rendition.themes.override("padding-right", `${theme.pageMargin}px`, true);
     this.rendition.themes.font(theme.fontFamily);
     this.rendition.themes.fontSize(`${theme.fontSize}px`);
+    const manager = (this.rendition as RenderedRendition).manager;
+    if (manager?.settings !== undefined) {
+      // epub.js owns paginated body padding and rewrites it to half of its
+      // column gap during every layout pass. Keep the layout gap synchronized
+      // with the product margin token so all current and future spine views use
+      // the requested inset instead of snapping back to the library default.
+      manager.settings.gap = theme.pageMargin * 2;
+      manager.updateLayout?.();
+    }
     await this.restoreCurrentPositionAfterReflow();
   }
 

@@ -1,4 +1,5 @@
-export type BookFormat = "epub" | "txt" | "pdf";
+export type BookFormat = "epub" | "txt" | "pdf" | "mobi" | "azw3";
+export type ReaderFormat = "epub" | "txt" | "pdf";
 export type BookCoverStatus = "pending" | "ready" | "fallback";
 export type BookAvailability = "available" | "missing";
 
@@ -46,6 +47,9 @@ export interface Book {
   sourcePath?: string;
   libraryPath: string;
   fileHash: string;
+  readerFormat: ReaderFormat;
+  readerPath: string;
+  readerHash: string;
   coverPath?: string;
   coverStatus: BookCoverStatus;
   availability?: BookAvailability;
@@ -229,6 +233,10 @@ export interface BackupOptions {
 export type DataOperationKind = "backup-export" | "backup-restore" | "batch-import";
 export type OperationProgressPhase =
   | "preparing"
+  | "scanning"
+  | "hashing"
+  | "converting"
+  | "validating"
   | "reading"
   | "writing"
   | "verifying"
@@ -253,7 +261,7 @@ export interface BackupPayloadDescriptor {
 
 export interface BackupManifest {
   formatIdentifier: "ebook-reader-backup";
-  formatVersion: 1;
+  formatVersion: 1 | 2;
   appVersion: string;
   schemaVersion: number;
   exportedAt: string;
@@ -396,7 +404,7 @@ export const defaultReaderTheme: ReaderTheme = {
 const EPUB_PAGE_TRANSITIONS = ["none", "page-curl", "cover", "slide"] as const;
 
 export const readerCapabilitiesByFormat: Readonly<
-  Record<BookFormat, ReaderCapabilities>
+  Record<ReaderFormat, ReaderCapabilities>
 > = {
   epub: {
     viewModes: ["paginated"],
@@ -488,7 +496,11 @@ export function resolveEffectivePageTransition(
     return "none";
   }
 
-  return preferences[format].transition;
+  return preferences[readerFormatForBookFormat(format)].transition;
+}
+
+export function readerFormatForBookFormat(format: BookFormat): ReaderFormat {
+  return format === "mobi" || format === "azw3" ? "epub" : format;
 }
 
 export function normalizePdfLocator(locator: PdfLocator): PdfLocator {

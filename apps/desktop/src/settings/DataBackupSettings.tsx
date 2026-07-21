@@ -304,7 +304,7 @@ export function SettingsCenter({
                 />
                 <BackupOption
                   checked={options.includeBooks}
-                  description="Original EPUB, TXT, and PDF library copies. This can make the backup much larger."
+                  description="Original EPUB, TXT, PDF, MOBI, and AZW3 library copies. MOBI/AZW3 backups also include their verified reader EPUB."
                   label="Original book files"
                   onChange={(checked) =>
                     setOptions((current) => ({ ...current, includeBooks: checked }))

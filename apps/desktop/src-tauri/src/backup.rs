@@ -17,11 +17,11 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
-use crate::db;
+use crate::{batch_import, db, mobi};
 
 pub const BACKUP_PROGRESS_EVENT: &str = "data-operation-progress";
 const BACKUP_FORMAT_IDENTIFIER: &str = "ebook-reader-backup";
-const BACKUP_FORMAT_VERSION: u8 = 1;
+const BACKUP_FORMAT_VERSION: u8 = 2;
 const MAX_ARCHIVE_ENTRIES: usize = 20_000;
 const MAX_ENTRY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 25 * 1024 * 1024 * 1024;
@@ -239,6 +239,16 @@ struct PortableBook {
     cover_status: String,
     cover_archive_path: Option<String>,
     book_archive_path: Option<String>,
+    #[serde(default)]
+    reader_format: Option<String>,
+    #[serde(default)]
+    reader_hash: Option<String>,
+    #[serde(default)]
+    reader_archive_path: Option<String>,
+    #[serde(default)]
+    converter_id: Option<String>,
+    #[serde(default)]
+    converter_version: Option<String>,
     created_at: String,
     updated_at: String,
     last_opened_at: Option<String>,
@@ -462,21 +472,37 @@ pub fn inspect_backup(
     let mut matched_books = 0_u64;
     let mut missing_files = 0_u64;
     for book in &inspected.data.books {
-        let local: Option<String> = conn
+        let local: Option<(String, Option<String>)> = conn
             .query_row(
-                "SELECT library_path FROM books WHERE file_hash = ?1",
+                "SELECT books.library_path, derivatives.path
+                 FROM books LEFT JOIN book_derivatives derivatives ON derivatives.book_id = books.id
+                 WHERE books.file_hash = ?1",
                 params![&book.file_hash],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        if let Some(local_path) = local {
+        if let Some((local_path, local_reader_path)) = local {
             matched_books += 1;
-            if !Path::new(&local_path).is_file() && book.book_archive_path.is_none() {
+            let local_available = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                local_reader_path
+                    .as_deref()
+                    .is_some_and(|path| Path::new(path).is_file())
+            } else {
+                Path::new(&local_path).is_file()
+            };
+            let backup_can_supply =
+                book.reader_archive_path.is_some() || book.book_archive_path.is_some();
+            if !local_available && !backup_can_supply {
                 missing_files += 1;
             }
         } else {
             new_books += 1;
-            if book.book_archive_path.is_none() {
+            let backup_can_supply = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                book.reader_archive_path.is_some() || book.book_archive_path.is_some()
+            } else {
+                book.book_archive_path.is_some()
+            };
+            if !backup_can_supply {
                 missing_files += 1;
             }
         }
@@ -535,7 +561,7 @@ pub fn restore_backup(
         1,
         "Rechecking backup safety",
     );
-    let inspected = inspect_archive(backup_path, &canceled)?;
+    let mut inspected = inspect_archive(backup_path, &canceled)?;
     ensure_not_canceled(&canceled)?;
 
     let storage = db::init_app_storage(app)?;
@@ -566,6 +592,16 @@ pub fn restore_backup(
             &storage.library_dir,
             &staging_dir,
             &inspected.manifest,
+            &mut created_files,
+        )?;
+        rebuild_missing_mobi_derivatives(
+            app,
+            operation_id,
+            &mut inspected.data,
+            &moved_files,
+            &storage.library_dir,
+            &staging_dir,
+            &canceled,
             &mut created_files,
         )?;
         ensure_not_canceled(&canceled)?;
@@ -749,7 +785,7 @@ fn validate_manifest(manifest: &BackupManifest) -> anyhow::Result<()> {
     if manifest.format_identifier != BACKUP_FORMAT_IDENTIFIER {
         bail!("[format-identifier-unsupported] this is not an Ebook Reader backup");
     }
-    if manifest.format_version != BACKUP_FORMAT_VERSION {
+    if !matches!(manifest.format_version, 1 | BACKUP_FORMAT_VERSION) {
         bail!("[format-version-unsupported] backup major format version is unsupported");
     }
     if manifest
@@ -781,7 +817,10 @@ fn validate_portable_data(
     for book in &data.books {
         if book.id.trim().is_empty()
             || book.title.trim().is_empty()
-            || !matches!(book.format.as_str(), "epub" | "txt" | "pdf")
+            || !matches!(
+                book.format.as_str(),
+                "epub" | "txt" | "pdf" | "mobi" | "azw3"
+            )
             || book.file_hash.len() != 64
             || !book.file_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
@@ -798,6 +837,19 @@ fn validate_portable_data(
                 .context("[book-payload-missing] book payload is not declared")?;
             if descriptor.sha256 != book.file_hash {
                 bail!("[book-hash-mismatch] included book does not match its file hash");
+            }
+        }
+        if let Some(path) = &book.reader_archive_path {
+            if !path.starts_with("books/") {
+                bail!("[reader-payload-invalid] reader archive path is invalid");
+            }
+            let descriptor = manifest
+                .payloads
+                .iter()
+                .find(|payload| &payload.path == path)
+                .context("[reader-payload-missing] reader payload is not declared")?;
+            if book.reader_hash.as_deref() != Some(descriptor.sha256.as_str()) {
+                bail!("[reader-hash-mismatch] included reader file does not match its hash");
             }
         }
         if let Some(path) = &book.cover_archive_path {
@@ -983,6 +1035,11 @@ fn merge_restore_data(
             .as_ref()
             .and_then(|path| moved_files.get(path))
             .cloned();
+        let restored_reader_path = book
+            .reader_archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path))
+            .cloned();
         if let Some((
             local_id,
             local_library_path,
@@ -1064,6 +1121,13 @@ fn merge_restore_data(
                     None
                 },
             )?;
+            merge_book_derivative(
+                transaction,
+                book,
+                &local_id,
+                restored_reader_path.as_deref(),
+                library_dir,
+            )?;
         } else {
             let local_id = if is_uuid_like(&book.id) {
                 book.id.clone()
@@ -1110,7 +1174,20 @@ fn merge_restore_data(
                 "INSERT INTO book_cover_state (book_id, status, updated_at) VALUES (?1, ?2, ?3)",
                 params![&local_id, cover_status, &book.updated_at],
             )?;
-            let available = Path::new(&expected_library_path).is_file();
+            merge_book_derivative(
+                transaction,
+                book,
+                &local_id,
+                restored_reader_path.as_deref(),
+                library_dir,
+            )?;
+            let available = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                restored_reader_path
+                    .as_deref()
+                    .is_some_and(|path| Path::new(path).is_file())
+            } else {
+                Path::new(&expected_library_path).is_file()
+            };
             items.push(restore_item(
                 "book",
                 &local_id,
@@ -1149,6 +1226,128 @@ fn merge_restore_data(
     merge_annotations(transaction, &data.annotations, &book_id_map, &mut items)?;
     merge_settings(transaction, &data.settings, &mut items)?;
     Ok(items)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rebuild_missing_mobi_derivatives(
+    app: &AppHandle,
+    operation_id: &str,
+    data: &mut PortableBackupData,
+    moved_files: &HashMap<String, String>,
+    library_dir: &Path,
+    staging_dir: &Path,
+    canceled: &AtomicBool,
+    created_files: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    for book in &mut data.books {
+        if !matches!(book.format.as_str(), "mobi" | "azw3") || book.reader_archive_path.is_some() {
+            continue;
+        }
+        let Some(source_path) = book
+            .book_archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path))
+            .map(PathBuf::from)
+        else {
+            continue;
+        };
+        ensure_not_canceled(canceled)?;
+        emit_restore_progress(
+            app,
+            operation_id,
+            "converting",
+            0,
+            1,
+            "Rebuilding a missing MOBI reader file locally",
+        );
+        let converter = mobi::MobiConversionService::new(
+            batch_import::resolve_converter_path(app)?,
+            std::time::Duration::from_secs(120),
+        );
+        let artifact = converter.convert(&source_path, staging_dir, operation_id, canceled)?;
+        if let Some(expected_hash) = book.reader_hash.as_deref() {
+            if expected_hash != artifact.epub_hash {
+                let _ = artifact.cleanup();
+                bail!("[reader-hash-mismatch] rebuilt derivative differs from backup metadata");
+            }
+        }
+        let destination = library_dir.join(format!("{}.reader.epub", book.file_hash));
+        if destination.exists() {
+            let existing = descriptor_for_file("reader", &destination)?;
+            if existing.sha256 != artifact.epub_hash {
+                let _ = artifact.cleanup();
+                bail!("[content-address-conflict] existing reader file has different content");
+            }
+        } else {
+            fs::rename(&artifact.epub_path, &destination)?;
+            created_files.push(destination);
+        }
+        book.reader_format = Some("epub".to_string());
+        book.reader_hash = Some(artifact.epub_hash.clone());
+        book.converter_id = Some(artifact.converter_id.to_string());
+        book.converter_version = Some(artifact.converter_version.to_string());
+        artifact.cleanup()?;
+    }
+    Ok(())
+}
+
+fn merge_book_derivative(
+    transaction: &Transaction<'_>,
+    book: &PortableBook,
+    local_book_id: &str,
+    restored_reader_path: Option<&str>,
+    library_dir: &Path,
+) -> anyhow::Result<()> {
+    let Some(reader_hash) = book.reader_hash.as_deref() else {
+        return Ok(());
+    };
+    let existing_derivative = transaction
+        .query_row(
+            "SELECT path, file_hash FROM book_derivatives WHERE book_id = ?1",
+            params![local_book_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()?;
+    if let Some((existing_path, existing_hash)) = existing_derivative {
+        let existing_path = Path::new(&existing_path);
+        if existing_path.is_file()
+            && descriptor_for_file("reader", existing_path)
+                .is_ok_and(|descriptor| descriptor.sha256 == existing_hash)
+        {
+            // A matching source book may already have a valid derivative produced by an
+            // earlier converter. Keep that local reader identity so restore cannot move EPUB
+            // locators, bookmarks, annotations, or progress merely because converter output
+            // changed between app versions.
+            return Ok(());
+        }
+    }
+    let reader_path = restored_reader_path
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            library_dir
+                .join(format!("{}.reader.epub", book.file_hash))
+                .display()
+                .to_string()
+        });
+    transaction.execute(
+        "INSERT INTO book_derivatives (book_id, format, path, file_hash, converter_id, converter_version, created_at, updated_at)
+         VALUES (?1, 'epub', ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(book_id) DO UPDATE SET
+           path = CASE WHEN excluded.path != '' THEN excluded.path ELSE path END,
+           file_hash = excluded.file_hash,
+           converter_id = excluded.converter_id,
+           converter_version = excluded.converter_version,
+           updated_at = excluded.updated_at",
+        params![
+            local_book_id,
+            reader_path,
+            reader_hash,
+            book.converter_id.as_deref().unwrap_or("libmobi"),
+            book.converter_version.as_deref().unwrap_or("0.12"),
+            &book.updated_at,
+        ],
+    )?;
+    Ok(())
 }
 
 fn merge_book_overrides(
@@ -1531,17 +1730,20 @@ fn collect_portable_data(
                        WHEN books.format = 'txt' THEN 'fallback' ELSE 'pending' END)
                 , metadata.user_title, metadata.title_updated_at,
                   metadata.user_author, metadata.author_updated_at,
-                  metadata.user_cover_path IS NOT NULL, metadata.cover_updated_at
+                  metadata.user_cover_path IS NOT NULL, metadata.cover_updated_at,
+                  derivatives.format, derivatives.path, derivatives.file_hash,
+                  derivatives.converter_id, derivatives.converter_version
          FROM books
          LEFT JOIN book_cover_state ON book_cover_state.book_id = books.id
          LEFT JOIN book_user_metadata metadata ON metadata.book_id = books.id
+         LEFT JOIN book_derivatives derivatives ON derivatives.book_id = books.id
          ORDER BY books.id",
     )?;
     let books = statement
         .query_map([], |row| portable_book_from_row(row))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut portable_books = Vec::with_capacity(books.len());
-    for (mut book, library_path, cover_path) in books {
+    for (mut book, library_path, cover_path, reader_path) in books {
         if options.include_books {
             if let Some(payload) = file_payload(
                 &canonical_library,
@@ -1550,6 +1752,21 @@ fn collect_portable_data(
             )? {
                 book.book_archive_path = Some(payload.archive_path.clone());
                 file_payloads.push(payload);
+            }
+            if let (Some(reader_path), Some(reader_hash)) =
+                (reader_path.as_deref(), book.reader_hash.as_deref())
+            {
+                if let Some(payload) = file_payload(
+                    &canonical_library,
+                    reader_path,
+                    format!("books/{}.reader.epub", book.file_hash),
+                )? {
+                    if payload.descriptor.sha256 != reader_hash {
+                        bail!("[reader-hash-mismatch] managed derivative hash changed");
+                    }
+                    book.reader_archive_path = Some(payload.archive_path.clone());
+                    file_payloads.push(payload);
+                }
             }
         }
         if options.include_covers {
@@ -1586,7 +1803,7 @@ fn collect_portable_data(
 
 fn portable_book_from_row(
     row: &Row<'_>,
-) -> rusqlite::Result<(PortableBook, String, Option<String>)> {
+) -> rusqlite::Result<(PortableBook, String, Option<String>, Option<String>)> {
     let format: String = row.get(3)?;
     Ok((
         PortableBook {
@@ -1598,6 +1815,11 @@ fn portable_book_from_row(
             cover_status: row.get(10)?,
             cover_archive_path: None,
             book_archive_path: None,
+            reader_format: row.get(17)?,
+            reader_archive_path: None,
+            reader_hash: row.get(19)?,
+            converter_id: row.get(20)?,
+            converter_version: row.get(21)?,
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             last_opened_at: row.get(9)?,
@@ -1610,6 +1832,7 @@ fn portable_book_from_row(
         },
         row.get(4)?,
         row.get(6)?,
+        row.get(18)?,
     ))
 }
 
@@ -1936,9 +2159,9 @@ fn canceled_result(operation_id: &str) -> BackupResult {
 mod tests {
     use super::*;
     use crate::db::{
-        create_bookmark_at, get_reading_progress_at, import_book_at, init_database_at,
-        list_books_at, save_reader_cache_at, save_reading_progress_at, ImportBookStatus, Locator,
-        TxtLocator,
+        create_bookmark_at, get_reading_progress_at, hash_file, import_book_at,
+        import_converted_book_at, init_database_at, list_books_at, save_reader_cache_at,
+        save_reading_progress_at, ImportBookStatus, Locator, TxtLocator,
     };
     use std::io::Read;
     use tempfile::tempdir;
@@ -2054,7 +2277,7 @@ mod tests {
             restored_manifest.format_identifier,
             BACKUP_FORMAT_IDENTIFIER
         );
-        assert_eq!(restored_manifest.format_version, 1);
+        assert_eq!(restored_manifest.format_version, 2);
         assert!(restored_manifest
             .payloads
             .iter()
@@ -2092,7 +2315,7 @@ mod tests {
         let data_bytes = serde_json::to_vec(&empty_portable_data()).expect("data json");
         let manifest = BackupManifest {
             format_identifier: BACKUP_FORMAT_IDENTIFIER.to_string(),
-            format_version: BACKUP_FORMAT_VERSION,
+            format_version: 1,
             app_version: "0.1.0".to_string(),
             schema_version: 4,
             exported_at: "2026-07-16T00:00:00Z".to_string(),
@@ -2300,5 +2523,60 @@ mod tests {
                 .progress,
             Some(0.8)
         );
+    }
+
+    #[test]
+    fn restore_keeps_a_valid_local_reader_derivative_for_the_same_source() {
+        let directory = tempdir().expect("tempdir");
+        let database_path = directory.path().join("reader.sqlite3");
+        let library_dir = directory.path().join("library");
+        let source_path = directory.path().join("local.mobi");
+        let reader_path = directory.path().join("local.epub");
+        fs::write(&source_path, b"local mobi source").expect("source");
+        fs::write(&reader_path, b"stable local reader identity").expect("reader");
+        let source_hash = hash_file(&source_path).expect("source hash");
+        let reader_hash = hash_file(&reader_path).expect("reader hash");
+        let imported = import_converted_book_at(
+            &database_path,
+            &library_dir,
+            &source_path,
+            &source_hash,
+            &reader_path,
+            &reader_hash,
+            "libmobi",
+            "0.12",
+        )
+        .expect("converted import");
+
+        let conn = Connection::open(&database_path).expect("database");
+        let (mut data, _) = collect_portable_data(
+            &conn,
+            &library_dir,
+            BackupOptions {
+                include_books: false,
+                ..BackupOptions::default()
+            },
+        )
+        .expect("portable data");
+        drop(conn);
+        data.books[0].reader_hash = Some("different-converter-output".to_string());
+        data.books[0].converter_version = Some("future-version".to_string());
+
+        let mut conn = Connection::open(&database_path).expect("database");
+        let transaction = conn.transaction().expect("transaction");
+        merge_restore_data(&transaction, &data, &HashMap::new(), &library_dir)
+            .expect("restore merge");
+        transaction.commit().expect("commit");
+
+        let conn = Connection::open(&database_path).expect("database");
+        let (stored_hash, converter_version): (String, String) = conn
+            .query_row(
+                "SELECT file_hash, converter_version FROM book_derivatives WHERE book_id = ?1",
+                params![imported.book.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("derivative row");
+        assert_eq!(stored_hash, reader_hash);
+        assert_eq!(converter_version, "0.12");
     }
 }
