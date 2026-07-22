@@ -3,6 +3,7 @@ mod batch_import;
 mod db;
 mod file_open;
 mod fonts;
+mod library_search;
 mod mobi;
 mod updater;
 
@@ -174,6 +175,38 @@ async fn import_batch(
     })
     .await
     .map_err(|error| format!("[batch-import-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn get_library_search_status(
+    app: tauri::AppHandle,
+) -> Result<library_search::LibrarySearchStatus, String> {
+    library_search::get_status(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn rebuild_library_search_index(
+    app: tauri::AppHandle,
+    operation_id: String,
+) -> Result<library_search::LibrarySearchRebuildResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        library_search::rebuild(&app, &operations, &operation_id).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[library-search-index-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn search_library(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<library_search::LibrarySearchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        library_search::search(&app, &query).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[library-search-task-failed] {error}"))?
 }
 
 #[tauri::command]
@@ -475,6 +508,9 @@ pub fn run() {
             import_book,
             scan_import_paths,
             import_batch,
+            get_library_search_status,
+            rebuild_library_search_index,
+            search_library,
             mark_book_opened,
             remove_book,
             get_book_details,

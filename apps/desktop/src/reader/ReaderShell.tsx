@@ -17,6 +17,7 @@ import {
   type Book,
   type EpubLocator,
   type Locator,
+  type LibrarySearchHit,
   type PdfLocator,
   type PdfPaginatedViewMode,
   type PageTransitionMode,
@@ -75,6 +76,7 @@ import {
 } from "./ReaderFormatContents";
 import { ReaderIcon } from "./ReaderIcons";
 import { NoteEditor, NotePopover, SelectionMenu } from "./ReaderOverlays";
+import { findLibrarySearchTargetHit } from "./ReaderSearchTarget";
 import {
   clampSidebarWidth,
   MemoizedReaderSidebar,
@@ -121,6 +123,7 @@ function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
 
 export interface ReaderShellProps {
   book: Book;
+  librarySearchRequest?: LibrarySearchHit | null;
   onBackToLibrary: () => void;
 }
 
@@ -141,9 +144,14 @@ interface PdfJumpRequest {
   requestId: number;
 }
 
-export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
+export function ReaderShell({
+  book,
+  librarySearchRequest = null,
+  onBackToLibrary,
+}: ReaderShellProps) {
   const readerFormat = book.readerFormat ?? readerFormatForBookFormat(book.format);
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
+  const processedLibrarySearchRequestRef = useRef<string | null>(null);
   const readerExperienceDirtyBookIdRef = useRef<string | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,6 +192,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<SearchHit<Locator>>>([]);
+  const [searchProviderVersion, setSearchProviderVersion] = useState(0);
   const [currentBookmarkPosition, setCurrentBookmarkPosition] = useState<{
     bookId: string;
     locator: Locator;
@@ -866,6 +875,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const handleSearchProviderChange = useCallback(
     (provider: ReaderSearchProvider | null) => {
       searchProviderRef.current = provider;
+      setSearchProviderVersion((version) => version + 1);
     },
     [],
   );
@@ -928,6 +938,69 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     },
     [handleJumpToLocator],
   );
+
+  useEffect(() => {
+    if (
+      librarySearchRequest === null ||
+      librarySearchRequest.bookId !== book.id ||
+      processedLibrarySearchRequestRef.current === librarySearchRequest.id
+    ) {
+      return;
+    }
+
+    if (librarySearchRequest.target.kind === "metadata") {
+      processedLibrarySearchRequestRef.current = librarySearchRequest.id;
+      return;
+    }
+
+    if (readerFormat === "txt" && document === null) return;
+    const provider = searchProviderRef.current;
+    if (readerFormat !== "txt" && provider === null) return;
+
+    processedLibrarySearchRequestRef.current = librarySearchRequest.id;
+    setIsChromeHidden(false);
+    setIsThemePanelOpen(false);
+    setSidebarTab("search");
+    setIsSidebarOpen(true);
+    setSearchQuery(
+      librarySearchRequest.excerpt.slice(
+        librarySearchRequest.excerptMatchStart,
+        librarySearchRequest.excerptMatchEnd,
+      ),
+    );
+    setSearchError(null);
+    setIsSearchLoading(true);
+
+    const query = librarySearchRequest.excerpt.slice(
+      librarySearchRequest.excerptMatchStart,
+      librarySearchRequest.excerptMatchEnd,
+    );
+    const searchPromise =
+      readerFormat === "txt"
+        ? Promise.resolve(searchTxtDocument(document!, query))
+        : provider!(query);
+
+    void searchPromise
+      .then((hits) => {
+        const visibleHits = hits.slice(0, 100) as Array<SearchHit<Locator>>;
+        setSearchResults(visibleHits);
+        const targetHit = findLibrarySearchTargetHit(visibleHits, librarySearchRequest);
+        if (targetHit !== undefined) handleJumpToLocator(targetHit.locator);
+        focusElementSoon(searchInputRef);
+      })
+      .catch((searchFailure: unknown) => {
+        setSearchResults([]);
+        setSearchError(getErrorMessage(searchFailure));
+      })
+      .finally(() => setIsSearchLoading(false));
+  }, [
+    book.id,
+    document,
+    handleJumpToLocator,
+    librarySearchRequest,
+    readerFormat,
+    searchProviderVersion,
+  ]);
 
   const handleCreateBookmark = useCallback(() => {
     const locator = currentBookmarkLocator;

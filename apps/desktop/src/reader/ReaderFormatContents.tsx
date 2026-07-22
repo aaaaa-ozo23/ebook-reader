@@ -69,6 +69,7 @@ import {
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
 import { PaginatedReaderControls } from "./PaginatedReaderControls";
 import { ReaderPageButton } from "./ReaderPageButton";
+import { buildMappedSearchExcerpt, findSearchTextMatches } from "./searchText";
 import { TxtPageWindow } from "./TxtPageWindow";
 import {
   createTxtDomPageMeasurer,
@@ -3051,43 +3052,39 @@ export function searchTxtDocument(
   document: TxtDocument,
   query: string,
 ): Array<SearchHit<TxtLocator>> {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-
-  if (normalizedQuery.length === 0) {
+  if (query.trim().length === 0) {
     return [];
   }
 
   const hits: Array<SearchHit<TxtLocator>> = [];
 
   for (const chapter of document.chapters) {
-    const normalizedText = chapter.text.toLocaleLowerCase();
-    let matchIndex = normalizedText.indexOf(normalizedQuery);
+    const chapterMatches = findSearchTextMatches(
+      chapter.text,
+      query,
+      100 - hits.length,
+    );
 
-    while (matchIndex !== -1 && hits.length < 100) {
-      const charOffset = chapter.startChar + matchIndex;
-      const selectedText = chapter.text.slice(matchIndex, matchIndex + query.length);
+    for (const match of chapterMatches) {
+      const charOffset = chapter.startChar + match.start;
+      const selectedText = chapter.text.slice(match.start, match.end);
+      const excerpt = buildMappedSearchExcerpt(chapter.text, match, 28, 48);
 
       hits.push({
-        id: `txt-search-${chapter.id}-${matchIndex}`,
+        id: `txt-search-${chapter.id}-${match.start}`,
         locator: {
           kind: "txt",
           chapterId: chapter.id,
           charOffset,
-          endCharOffset: charOffset + query.length,
+          endCharOffset: chapter.startChar + match.end,
           selectedText,
-          contextBefore: chapter.text.slice(Math.max(0, matchIndex - 80), matchIndex),
-          contextAfter: chapter.text.slice(
-            matchIndex + query.length,
-            matchIndex + query.length + 80,
-          ),
+          contextBefore: chapter.text.slice(Math.max(0, match.start - 80), match.start),
+          contextAfter: chapter.text.slice(match.end, match.end + 80),
         },
-        excerpt: buildSearchExcerpt(chapter.text, matchIndex, query.length),
+        excerpt: excerpt.text,
+        excerptMatchStart: excerpt.matchStart,
+        excerptMatchEnd: excerpt.matchEnd,
       });
-
-      matchIndex = normalizedText.indexOf(
-        normalizedQuery,
-        matchIndex + Math.max(1, normalizedQuery.length),
-      );
     }
 
     if (hits.length >= 100) {
@@ -3096,19 +3093,6 @@ export function searchTxtDocument(
   }
 
   return hits;
-}
-
-export function buildSearchExcerpt(
-  text: string,
-  matchIndex: number,
-  queryLength: number,
-): string {
-  const excerptStart = Math.max(0, matchIndex - 28);
-  const excerptEnd = Math.min(text.length, matchIndex + queryLength + 48);
-  const prefix = excerptStart > 0 ? "..." : "";
-  const suffix = excerptEnd < text.length ? "..." : "";
-
-  return `${prefix}${text.slice(excerptStart, excerptEnd).trim()}${suffix}`;
 }
 
 export function renderAnnotatedText(
