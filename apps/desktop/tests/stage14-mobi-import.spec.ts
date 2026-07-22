@@ -43,7 +43,7 @@ test("previews local MOBI conversion, drag overlay, progress, and partial DRM fa
       if (command === "list_books") return [];
       if (command === "take_pending_open_files") return [];
       if (command === "plugin:dialog|open") {
-        return ["D:\\books\\local-sample.mobi", "D:\\books\\protected.azw3"];
+        return "D:\\books";
       }
       if (command === "plugin:event|listen") {
         const event = String(args.event);
@@ -61,6 +61,24 @@ test("previews local MOBI conversion, drag overlay, progress, and partial DRM fa
         return null;
       }
       if (command === "scan_import_paths") {
+        emit("data-operation-progress", {
+          operationId: args.operationId,
+          kind: "batch-import",
+          phase: "scanning",
+          completed: 0,
+          total: 0,
+          message: "Discovering books in selected folders",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        emit("data-operation-progress", {
+          operationId: args.operationId,
+          kind: "batch-import",
+          phase: "hashing",
+          completed: 1,
+          total: 2,
+          message: "Checking local-sample.mobi",
+        });
+        await new Promise((resolve) => setTimeout(resolve, 180));
         return {
           operationId: args.operationId,
           truncated: false,
@@ -177,9 +195,17 @@ test("previews local MOBI conversion, drag overlay, progress, and partial DRM fa
   await expect(page.getByText("Drop to review books")).toBeHidden();
 
   await page.getByRole("button", { name: "More import options" }).click();
-  await page.getByRole("menuitem", { name: "Import files" }).click();
+  await page.getByRole("menuitem", { name: "Import folder" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Scanning folder" })).toBeVisible();
+  await expect(dialog.getByText("Discovering books in this folder")).toBeVisible();
+  await expect(dialog.getByText("Checking discovered books")).toBeVisible();
+  await expect(dialog.getByText("1 of 2")).toBeVisible();
+  await page.screenshot({
+    animations: "disabled",
+    path: testInfo.outputPath("stage14-folder-scan-hashing.png"),
+  });
   await expect(dialog.getByText("MOBI · Will convert locally to EPUB")).toBeVisible();
   await expect(dialog.getByText("AZW3 · Will convert locally to EPUB")).toBeVisible();
   await page.screenshot({
