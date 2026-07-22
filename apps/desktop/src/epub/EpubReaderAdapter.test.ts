@@ -215,6 +215,42 @@ describe("EPUB rendition image lifecycle", () => {
     expect(frame).toHaveAttribute("title", "Chapter One content");
     frame.remove();
   });
+
+  it("injects the selected app-local font only into EPUB content documents", () => {
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-custom-font",
+      container: document.createElement("div"),
+      sourceUrl: "blob:epub-custom-font",
+      theme: {
+        ...defaultReaderTheme,
+        fontId: "font-quiet",
+        fontFamily: '"EbookReaderFont_quiet"',
+      },
+      customFontSources: {
+        "font-quiet": "asset://localhost/fonts/quiet.ttf",
+      },
+    });
+    const frameDocument = document.implementation.createHTMLDocument("Custom font");
+    const renditionHandlers = new Map<string, (...args: unknown[]) => void>();
+    const internals = adapter as unknown as {
+      registerRenditionEvents: (rendition: {
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+      }) => void;
+    };
+    internals.registerRenditionEvents({
+      on: (event, handler) => renditionHandlers.set(event, handler),
+    });
+
+    renditionHandlers.get("rendered")?.({}, { document: frameDocument });
+
+    expect(
+      frameDocument.getElementById("ebook-reader-custom-font")?.textContent,
+    ).toContain('@font-face { font-family: "EbookReaderFont_quiet"');
+    expect(
+      frameDocument.getElementById("ebook-reader-custom-font")?.textContent,
+    ).toContain('url("asset://localhost/fonts/quiet.ttf")');
+    expect(document.getElementById("ebook-reader-custom-font")).toBeNull();
+  });
 });
 
 describe("EPUB layout invalidation", () => {
