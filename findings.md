@@ -17,6 +17,18 @@
 - **2026-07-22 Double 缺陷：** EPUB/PDF 在非 Focus 即使窗口足够宽仍显示 Single，Focus 后恢复 Double，说明偏好本身已保存，错误更可能位于 reader chrome/侧栏宽度参与 spread 可用宽度判定或窄屏自动降级条件，而不是设置面板状态。
 - **2026-07-22 Double 根因确认：** Stage 13 的后置 CSS 把普通 EPUB page 固定为最大 760px，但 adapter 的双页门槛是 860px，形成非 Focus 下必然 Single、Focus 扩宽后才 Double 的结构矛盾。PDF 的 920px 门槛也高于 1280px 桌面在常驻侧栏后的常见 850px 左右 frame。修复让 requested Double 先扩展 EPUB 内容列，并把 EPUB/PDF 的实际 rendered mode 暴露为可断言状态；双页门槛统一收敛为 820px，640/375 仍按实际宽度回退 Single。
 
+## 2026-07-22 大阶段 14.4：自定义字体状态板
+
+- **入口层级：** 沿用现有 Settings Center，在 Data & Backup 与 Updates 之间增加 `Reading & Fonts`，不把字体管理塞入每本书的 Reading Settings；阅读器面板只负责选择已启用字体。
+- **系统边界：** 首屏直接说明字体只复制到应用私有目录，不安装到 Windows、不上传；PDF 明确继续使用文档嵌入字体，避免暗示可替换 PDF 排版。
+- **导入确认：** 先解析真实 family/style/size 并完成 hash 去重，再显示确认按钮；许可责任提示在确认操作之前常驻可见。文件名不作为字体身份。
+- **失败与回退：** duplicate 指向既有条目，TTC 示例用明确的静态 TTF/OTF 范围解释；删除当前字体必须在确认框中预告 `Literata → Lora`，确认后立即保存回退。
+- **移动端：** 375px 使用现有全屏 sheet、顶部 back/close、底部 sticky Import font 与右缘可中断手势把手；把手位于空白区，不覆盖字体开关或许可提示。
+- **设计边界：** 当前分支只提交四张状态板与可编辑 HTML，等待用户批准；不提前创建 schema、后端命令或生产 UI。
+- **批准状态：** 用户已批准全部四张状态板；实现必须忠实保留入口层级、导入确认、许可提示、duplicate/unsupported 结果、当前字体删除回退和 375px sticky action，不再重新解释设计。
+- **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
+- **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
+
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 
 - **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。

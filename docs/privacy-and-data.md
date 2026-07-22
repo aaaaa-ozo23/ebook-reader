@@ -45,7 +45,7 @@ Clear the site's storage in the browser's developer tools to remove fallback dat
   import.
 - **Reset all desktop data:** close Ebook Reader, then delete its app data directory shown above.
   This permanently removes the local database, app-managed book copies, cover thumbnails, and
-  reader caches.
+  reader caches, including app-local custom font copies.
 - **Uninstalling:** operating systems or installer settings may preserve app data after uninstall.
   Delete the app data directory separately when a complete local-data removal is required.
 
@@ -55,7 +55,8 @@ Back up the app data directory before a manual reset if progress or annotations 
 
 **Settings → Data & Backup** exports a versioned `.erbackup` archive. Core reading data and
 managed covers are included by default; original book files are opt-in. Absolute paths and reader
-caches are never exported. Export writes a temporary file and only publishes the final archive
+caches are never exported. App-local custom font registrations and their content-addressed files
+are included with core data by default. Export writes a temporary file and only publishes the final archive
 after all payloads have been written successfully.
 
 Version 1 archives are not encrypted. They can contain private annotations, reading history,

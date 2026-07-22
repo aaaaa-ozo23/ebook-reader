@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   defaultReaderTheme,
+  type CustomFont,
   type PageTransitionMode,
   type ReaderTheme,
   type ReaderThemeMode,
@@ -80,6 +81,7 @@ export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string>
 }
 
 interface ReaderThemePanelProps {
+  customFonts?: readonly CustomFont[];
   isOpen: boolean;
   onClose: () => void;
   pageViewDisabled?: boolean;
@@ -112,6 +114,7 @@ interface MobileSheetGesture {
 }
 
 export function ReaderThemePanel({
+  customFonts = [],
   isOpen,
   onClose,
   pageViewDisabled = false,
@@ -145,8 +148,8 @@ export function ReaderThemePanel({
     [onThemeChange, theme],
   );
   const handleFontFamilyChange = useCallback(
-    (fontFamily: string) => {
-      onThemeChange({ ...theme, fontFamily });
+    (fontId: string | undefined, fontFamily: string) => {
+      onThemeChange({ ...theme, fontId, fontFamily });
     },
     [onThemeChange, theme],
   );
@@ -329,6 +332,8 @@ export function ReaderThemePanel({
           <div className="theme-field theme-field--font">
             <span>Font</span>
             <FontFamilySelect
+              customFonts={customFonts}
+              fontId={theme.fontId}
               value={theme.fontFamily}
               onChange={handleFontFamilyChange}
             />
@@ -514,19 +519,43 @@ export function ReaderThemePanel({
 }
 
 interface FontFamilySelectProps {
-  onChange: (value: string) => void;
+  customFonts: readonly CustomFont[];
+  fontId?: string;
+  onChange: (fontId: string | undefined, value: string) => void;
   value: string;
 }
 
-function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
+function FontFamilySelect({
+  customFonts,
+  fontId,
+  onChange,
+  value,
+}: FontFamilySelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const options = [
+    ...FONT_OPTIONS.map((option) => ({
+      ...option,
+      id: undefined as string | undefined,
+    })),
+    ...customFonts
+      .filter((font) => font.enabled)
+      .map((font) => ({
+        id: font.id,
+        label: font.familyName,
+        value: `"${font.familyAlias}"`,
+      })),
+  ];
   const selectedIndex = Math.max(
     0,
-    FONT_OPTIONS.findIndex((option) => option.value === value),
+    options.findIndex((option) =>
+      fontId === undefined
+        ? option.id === undefined && option.value === value
+        : option.id === fontId,
+    ),
   );
-  const selectedOption = FONT_OPTIONS[selectedIndex] ?? FONT_OPTIONS[0];
+  const selectedOption = options[selectedIndex] ?? options[0];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -556,9 +585,9 @@ function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
   }, [isOpen]);
 
   const selectIndex = (index: number) => {
-    const option = FONT_OPTIONS[index];
+    const option = options[index];
     if (option === undefined) return;
-    onChange(option.value);
+    onChange(option.id, option.value);
     setIsOpen(false);
   };
 
@@ -583,22 +612,21 @@ function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
       </button>
       {isOpen ? (
         <div id={listboxId} className="theme-font-select__menu" role="listbox">
-          {FONT_OPTIONS.map((option, index) => (
+          {options.map((option, index) => (
             <button
-              key={option.label}
+              key={option.id ?? option.label}
               type="button"
               role="option"
               aria-selected={index === selectedIndex}
               onClick={() => selectIndex(index)}
               onKeyDown={(event) => {
                 let nextIndex: number | null = null;
-                if (event.key === "ArrowDown")
-                  nextIndex = (index + 1) % FONT_OPTIONS.length;
+                if (event.key === "ArrowDown") nextIndex = (index + 1) % options.length;
                 if (event.key === "ArrowUp") {
-                  nextIndex = (index - 1 + FONT_OPTIONS.length) % FONT_OPTIONS.length;
+                  nextIndex = (index - 1 + options.length) % options.length;
                 }
                 if (event.key === "Home") nextIndex = 0;
-                if (event.key === "End") nextIndex = FONT_OPTIONS.length - 1;
+                if (event.key === "End") nextIndex = options.length - 1;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   selectIndex(index);

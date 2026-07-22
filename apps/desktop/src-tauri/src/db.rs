@@ -66,6 +66,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "book_derivatives",
         sql: include_str!("../migrations/0006_book_derivatives.sql"),
     },
+    Migration {
+        version: 7,
+        name: "custom_fonts",
+        sql: include_str!("../migrations/0007_custom_fonts.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -316,6 +321,8 @@ pub enum ReaderThemeMode {
 #[serde(rename_all = "camelCase")]
 pub struct ReaderTheme {
     pub mode: ReaderThemeMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_id: Option<String>,
     pub font_family: String,
     pub font_size: f64,
     pub line_height: f64,
@@ -2019,6 +2026,7 @@ fn fallback_chapter_title(default_title: &str) -> String {
 fn default_reader_theme() -> ReaderTheme {
     ReaderTheme {
         mode: ReaderThemeMode::Sepia,
+        font_id: None,
         font_family: "\"Noto Serif SC\", \"Songti SC\", \"Microsoft YaHei\", Georgia, serif"
             .to_string(),
         font_size: 18.0,
@@ -2866,7 +2874,7 @@ mod tests {
     };
 
     #[test]
-    fn migration_v6_creates_expected_tables_and_is_idempotent() {
+    fn migration_v7_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2886,7 +2894,8 @@ mod tests {
                     'book_cover_state',
                     'reader_cache',
                     'book_user_metadata',
-                    'book_derivatives'
+                    'book_derivatives',
+                    'custom_fonts'
                 )",
                 [],
                 |row| row.get(0),
@@ -2898,7 +2907,7 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 10);
+        assert_eq!(table_count, 11);
         let bookmark_updated_at_columns: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
@@ -2907,8 +2916,8 @@ mod tests {
             )
             .expect("count bookmark updated_at columns");
 
-        assert_eq!(migration_count, 6);
-        assert_eq!(schema_version(&conn).expect("schema version"), 6);
+        assert_eq!(migration_count, 7);
+        assert_eq!(schema_version(&conn).expect("schema version"), 7);
         assert_eq!(bookmark_updated_at_columns, 1);
     }
 
@@ -3650,6 +3659,7 @@ mod tests {
         let database_path = temp_dir.path().join(DB_FILE_NAME);
         let theme = ReaderTheme {
             mode: ReaderThemeMode::Dark,
+            font_id: None,
             font_family: "system-ui".to_string(),
             font_size: 42.0,
             line_height: 1.5,

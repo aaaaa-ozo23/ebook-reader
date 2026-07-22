@@ -23,7 +23,7 @@
       "csp": "default-src 'self' ipc: http://ipc.localhost http://localhost:1420 http://127.0.0.1:1420; connect-src 'self' ipc: http://ipc.localhost http://localhost:1420 http://127.0.0.1:1420 ws://localhost:1421 ws://127.0.0.1:1421 asset: http://asset.localhost; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob: data:; font-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline' asset: http://asset.localhost; script-src 'self' 'unsafe-inline'; frame-src 'self' asset: http://asset.localhost blob: data:",
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPDATA/library/**"]
+        "scope": ["$APPDATA/library/**", "$APPDATA/fonts/**"]
       }
     }
   },

@@ -52,6 +52,59 @@ describe("ReaderThemePanel page transitions", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("selects only enabled app-local fonts and preserves their stable ID", () => {
+    const onThemeChange = vi.fn();
+    render(
+      <ReaderThemePanel
+        isOpen
+        onClose={vi.fn()}
+        theme={defaultReaderTheme}
+        themeError={null}
+        customFonts={[
+          {
+            id: "font-quiet",
+            familyName: "Quiet Serif",
+            styleName: "Regular",
+            fileName: "Quiet.ttf",
+            filePath: "C:\\app-data\\fonts\\quiet.ttf",
+            fileHash: "a".repeat(64),
+            fileSize: 1024,
+            familyAlias: "EbookReaderFont_quiet",
+            enabled: true,
+            importedAt: "2026-07-22T00:00:00Z",
+            updatedAt: "2026-07-22T00:00:00Z",
+          },
+          {
+            id: "font-disabled",
+            familyName: "Disabled Serif",
+            styleName: "Regular",
+            fileName: "Disabled.ttf",
+            filePath: "C:\\app-data\\fonts\\disabled.ttf",
+            fileHash: "b".repeat(64),
+            fileSize: 1024,
+            familyAlias: "EbookReaderFont_disabled",
+            enabled: false,
+            importedAt: "2026-07-22T00:00:00Z",
+            updatedAt: "2026-07-22T00:00:00Z",
+          },
+        ]}
+        onThemeChange={onThemeChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Lora" }));
+    expect(
+      screen.queryByRole("option", { name: "Disabled Serif" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("option", { name: "Quiet Serif" }));
+    expect(onThemeChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fontId: "font-quiet",
+        fontFamily: '"EbookReaderFont_quiet"',
+      }),
+    );
+  });
+
   it("restores the complete reader theme defaults", () => {
     const onThemeChange = vi.fn();
     render(
