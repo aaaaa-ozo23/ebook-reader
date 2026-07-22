@@ -1276,6 +1276,7 @@ function TxtPaginatedReaderContent({
 export interface EpubReaderContentProps {
   annotations: Annotation[];
   book: Book;
+  customFontSources?: Readonly<Record<string, string>>;
   isPageCurlBlocked: boolean;
   jumpRequest: EpubJumpRequest | null;
   theme: ReaderTheme;
@@ -1298,6 +1299,7 @@ export interface EpubReaderContentProps {
 export function EpubReaderContent({
   annotations,
   book,
+  customFontSources = {},
   isPageCurlBlocked,
   jumpRequest,
   theme,
@@ -1316,6 +1318,7 @@ export function EpubReaderContent({
   onSearchProviderChange,
   onTocChange,
 }: EpubReaderContentProps) {
+  const customFontSourcesRef = useRef(customFontSources);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<EpubReaderAdapter | null>(null);
   const transitionControllerRef = useRef<PageTransitionController<PageSnapshot> | null>(
@@ -1596,6 +1599,7 @@ export function EpubReaderContent({
           cachedPublicationPageList: cachedPublicationPageList ?? undefined,
           sourceUrl,
           container: hostRef.current,
+          customFontSources: customFontSourcesRef.current,
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
@@ -1713,6 +1717,11 @@ export function EpubReaderContent({
     onTocChange,
     retryVersion,
   ]);
+
+  useEffect(() => {
+    customFontSourcesRef.current = customFontSources;
+    adapterRef.current?.setCustomFontSources?.(customFontSources);
+  }, [customFontSources]);
 
   useEffect(() => {
     const adapter = adapterRef.current;

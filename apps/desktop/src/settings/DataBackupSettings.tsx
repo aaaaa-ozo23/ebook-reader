@@ -17,6 +17,7 @@ import {
   restoreBackup,
 } from "../tauri/backup";
 import { UpdatesSettings } from "./UpdatesSettings";
+import { ReadingFontsSettings } from "./ReadingFontsSettings";
 
 import "./SettingsCenter.css";
 
@@ -33,7 +34,7 @@ export function SettingsCenter({
   onClose: () => void;
   onLibraryChanged?: () => void;
 }) {
-  const [section, setSection] = useState<"data" | "updates">("data");
+  const [section, setSection] = useState<"data" | "fonts" | "updates">("data");
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
@@ -193,7 +194,10 @@ export function SettingsCenter({
     options.includeData || options.includeCovers || options.includeBooks;
 
   return (
-    <main className="settings-shell" aria-labelledby={titleId}>
+    <main
+      className={`settings-shell settings-shell--${section}`}
+      aria-labelledby={titleId}
+    >
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="settings-sidebar__mark" aria-hidden="true">
           ER
@@ -212,6 +216,15 @@ export function SettingsCenter({
           <strong>Keep your library yours.</strong>
         </div>
         <nav aria-label="Settings sections">
+          <button
+            type="button"
+            className="settings-nav-item"
+            aria-current={section === "fonts" ? "page" : undefined}
+            onClick={() => setSection("fonts")}
+          >
+            <FontIcon />
+            <span>Reading &amp; Fonts</span>
+          </button>
           <button
             type="button"
             className="settings-nav-item"
@@ -234,14 +247,63 @@ export function SettingsCenter({
       </aside>
 
       <section className="settings-content">
+        {section === "fonts" ? (
+          <header className="settings-mobile-header">
+            <button
+              type="button"
+              aria-label="Back to settings"
+              onClick={() => setSection("data")}
+            >
+              <BackIcon />
+            </button>
+            <strong>Reading &amp; Fonts</strong>
+            <button type="button" aria-label="Close settings" onClick={onClose}>
+              <CloseIcon />
+            </button>
+          </header>
+        ) : null}
         <header className="settings-content__header">
           <div>
-            <p>{section === "data" ? "Local-first controls" : "Release track"}</p>
-            <h1 id={titleId}>{section === "data" ? "Data & Backup" : "Updates"}</h1>
-            <span>
+            <p>
               {section === "data"
-                ? "Create a portable copy of your library data whenever you choose."
-                : "You decide when the app checks, downloads, and installs."}
+                ? "Local-first controls"
+                : section === "fonts"
+                  ? "Reading preferences"
+                  : "Release track"}
+            </p>
+            <h1 id={titleId}>
+              {section === "data" ? (
+                "Data & Backup"
+              ) : section === "fonts" ? (
+                <>
+                  <span className="settings-fonts-title--desktop">
+                    Reading &amp; Fonts
+                  </span>
+                  <span className="settings-fonts-title--mobile">
+                    Your type, locally.
+                  </span>
+                </>
+              ) : (
+                "Updates"
+              )}
+            </h1>
+            <span>
+              {section === "data" ? (
+                "Create a portable copy of your library data whenever you choose."
+              ) : section === "fonts" ? (
+                <>
+                  <span className="settings-fonts-copy--desktop">
+                    Bring your own typeface to TXT and EPUB without installing it into
+                    Windows. PDF continues to use the fonts embedded in each document.
+                  </span>
+                  <span className="settings-fonts-copy--mobile">
+                    Custom fonts apply to TXT and EPUB. PDF keeps its embedded
+                    typefaces.
+                  </span>
+                </>
+              ) : (
+                "You decide when the app checks, downloads, and installs."
+              )}
             </span>
           </div>
           <button
@@ -256,6 +318,8 @@ export function SettingsCenter({
 
         {section === "updates" ? (
           <UpdatesSettings />
+        ) : section === "fonts" ? (
+          <ReadingFontsSettings />
         ) : (
           <>
             <div className="backup-notice" role="note">
@@ -622,6 +686,11 @@ const DatabaseIcon = () => (
   <SvgIcon>
     <ellipse cx="12" cy="5" rx="7" ry="3" />
     <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
+  </SvgIcon>
+);
+const FontIcon = () => (
+  <SvgIcon>
+    <path d="M5 19 12 4l7 15M8 14h8" />
   </SvgIcon>
 );
 const UpdateIcon = () => (

@@ -226,6 +226,24 @@ struct PortableBackupData {
     bookmarks: Vec<PortableBookmark>,
     annotations: Vec<PortableAnnotation>,
     settings: Vec<PortableSetting>,
+    #[serde(default)]
+    custom_fonts: Vec<PortableCustomFont>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableCustomFont {
+    id: String,
+    family_name: String,
+    style_name: String,
+    file_name: String,
+    file_hash: String,
+    file_size: u64,
+    family_alias: String,
+    enabled: bool,
+    imported_at: String,
+    updated_at: String,
+    archive_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -771,6 +789,7 @@ fn inspect_archive(backup_path: &Path, canceled: &AtomicBool) -> anyhow::Result<
             bookmarks: Vec::new(),
             annotations: Vec::new(),
             settings: Vec::new(),
+            custom_fonts: Vec::new(),
         }
     };
     validate_portable_data(&data, &manifest)?;
@@ -863,6 +882,41 @@ fn validate_portable_data(
             }
         }
     }
+    let font_ids: HashSet<&str> = data
+        .custom_fonts
+        .iter()
+        .map(|font| font.id.as_str())
+        .collect();
+    if font_ids.len() != data.custom_fonts.len() {
+        bail!("[duplicate-font-id] data contains duplicate font IDs");
+    }
+    for font in &data.custom_fonts {
+        if font.id.trim().is_empty()
+            || font.family_name.trim().is_empty()
+            || font.family_alias.trim().is_empty()
+            || font.file_hash.len() != 64
+            || !font.file_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || font.file_size == 0
+            || font.file_size > 20 * 1024 * 1024
+        {
+            bail!("[font-record-invalid] portable font metadata is invalid");
+        }
+        let path = font
+            .archive_path
+            .as_deref()
+            .context("[font-payload-missing] portable font has no file payload")?;
+        if !path.starts_with("fonts/") {
+            bail!("[font-payload-invalid] font archive path is invalid");
+        }
+        let descriptor = manifest
+            .payloads
+            .iter()
+            .find(|payload| payload.path == path)
+            .context("[font-payload-missing] font payload is not declared")?;
+        if descriptor.sha256 != font.file_hash || descriptor.size != font.file_size {
+            bail!("[font-hash-mismatch] included font does not match its metadata");
+        }
+    }
     for book_id in data
         .reading_progress
         .iter()
@@ -933,7 +987,11 @@ fn extract_restore_payloads(
         .manifest
         .payloads
         .iter()
-        .filter(|payload| payload.path.starts_with("books/") || payload.path.starts_with("covers/"))
+        .filter(|payload| {
+            payload.path.starts_with("books/")
+                || payload.path.starts_with("covers/")
+                || payload.path.starts_with("fonts/")
+        })
         .collect();
     let total = file_payloads.len() as u64;
     for (index, payload) in file_payloads.into_iter().enumerate() {
@@ -979,18 +1037,25 @@ fn commit_restore_files(
 ) -> anyhow::Result<HashMap<String, String>> {
     fs::create_dir_all(library_dir)?;
     fs::create_dir_all(library_dir.join("covers"))?;
+    let font_dir = library_dir
+        .parent()
+        .context("[storage-path-invalid] library has no app-data parent")?
+        .join("fonts");
+    fs::create_dir_all(&font_dir)?;
     let mut moved = HashMap::new();
-    for payload in manifest
-        .payloads
-        .iter()
-        .filter(|payload| payload.path.starts_with("books/") || payload.path.starts_with("covers/"))
-    {
+    for payload in manifest.payloads.iter().filter(|payload| {
+        payload.path.starts_with("books/")
+            || payload.path.starts_with("covers/")
+            || payload.path.starts_with("fonts/")
+    }) {
         let staged = staging_dir.join(Path::new(&payload.path));
         let file_name = Path::new(&payload.path)
             .file_name()
             .context("[payload-path-invalid] payload has no file name")?;
         let destination = if payload.path.starts_with("covers/") {
             library_dir.join("covers").join(file_name)
+        } else if payload.path.starts_with("fonts/") {
+            font_dir.join(file_name)
         } else {
             library_dir.join(file_name)
         };
@@ -1224,8 +1289,118 @@ fn merge_restore_data(
     )?;
     merge_bookmarks(transaction, &data.bookmarks, &book_id_map, &mut items)?;
     merge_annotations(transaction, &data.annotations, &book_id_map, &mut items)?;
-    merge_settings(transaction, &data.settings, &mut items)?;
+    let font_id_map = merge_custom_fonts(transaction, &data.custom_fonts, moved_files, &mut items)?;
+    let remapped_settings = remap_font_settings(&data.settings, &font_id_map);
+    merge_settings(transaction, &remapped_settings, &mut items)?;
     Ok(items)
+}
+
+fn merge_custom_fonts(
+    transaction: &Transaction<'_>,
+    records: &[PortableCustomFont],
+    moved_files: &HashMap<String, String>,
+    items: &mut Vec<RestoreResultItem>,
+) -> anyhow::Result<HashMap<String, String>> {
+    let mut id_map = HashMap::new();
+    for record in records {
+        let restored_path = record
+            .archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path));
+        let existing: Option<(String, String)> = transaction
+            .query_row(
+                "SELECT id, updated_at FROM custom_fonts WHERE file_hash = ?1",
+                params![&record.file_hash],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((local_id, local_updated_at)) = existing {
+            id_map.insert(record.id.clone(), local_id.clone());
+            let newer = record.updated_at > local_updated_at;
+            if newer {
+                transaction.execute(
+                    "UPDATE custom_fonts SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![record.enabled, &record.updated_at, &local_id],
+                )?;
+            }
+            items.push(restore_item(
+                "font",
+                &local_id,
+                &record.family_name,
+                if newer {
+                    RestoreItemStatus::Merged
+                } else {
+                    RestoreItemStatus::LocalKept
+                },
+                if newer {
+                    "Font registration merged by file hash"
+                } else {
+                    "Local font registration was newer or equal"
+                },
+            ));
+            continue;
+        }
+        let Some(restored_path) = restored_path else {
+            items.push(restore_item(
+                "font",
+                &record.id,
+                &record.family_name,
+                RestoreItemStatus::Skipped,
+                "Font file was not available",
+            ));
+            continue;
+        };
+        transaction.execute(
+            "INSERT INTO custom_fonts (
+                id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                family_alias, enabled, imported_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                &record.id,
+                &record.family_name,
+                &record.style_name,
+                &record.file_name,
+                restored_path,
+                &record.file_hash,
+                record.file_size as i64,
+                &record.family_alias,
+                record.enabled,
+                &record.imported_at,
+                &record.updated_at,
+            ],
+        )?;
+        id_map.insert(record.id.clone(), record.id.clone());
+        items.push(restore_item(
+            "font",
+            &record.id,
+            &record.family_name,
+            RestoreItemStatus::Restored,
+            "Font and registration restored",
+        ));
+    }
+    Ok(id_map)
+}
+
+fn remap_font_settings(
+    records: &[PortableSetting],
+    font_id_map: &HashMap<String, String>,
+) -> Vec<PortableSetting> {
+    records
+        .iter()
+        .cloned()
+        .map(|mut record| {
+            if record.key == "reader_theme" {
+                if let Some(font_id) = record.value.get("fontId").and_then(Value::as_str) {
+                    if let Some(local_id) = font_id_map.get(font_id) {
+                        record.value["fontId"] = Value::String(local_id.clone());
+                    } else if let Some(object) = record.value.as_object_mut() {
+                        object.remove("fontId");
+                    }
+                }
+            }
+            record
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1789,6 +1964,63 @@ fn collect_portable_data(
         portable_books.push(book);
     }
 
+    let mut custom_fonts = Vec::new();
+    if options.include_data {
+        let font_dir = library_dir
+            .parent()
+            .context("[storage-path-invalid] library has no app-data parent")?
+            .join("fonts");
+        let mut statement = conn.prepare(
+            "SELECT id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                    family_alias, enabled, imported_at, updated_at
+             FROM custom_fonts ORDER BY id",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    PortableCustomFont {
+                        id: row.get(0)?,
+                        family_name: row.get(1)?,
+                        style_name: row.get(2)?,
+                        file_name: row.get(3)?,
+                        file_hash: row.get(5)?,
+                        file_size: row.get::<_, i64>(6)? as u64,
+                        family_alias: row.get(7)?,
+                        enabled: row.get(8)?,
+                        imported_at: row.get(9)?,
+                        updated_at: row.get(10)?,
+                        archive_path: None,
+                    },
+                    row.get::<_, String>(4)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !rows.is_empty() {
+            let canonical_fonts = font_dir
+                .canonicalize()
+                .context("[font-storage-unavailable] failed to resolve managed fonts")?;
+            for row in rows {
+                let (mut font, file_path) = row;
+                let extension = Path::new(&file_path)
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("ttf")
+                    .to_ascii_lowercase();
+                let archive_path = format!("fonts/{}.{}", font.file_hash, extension);
+                let payload = file_payload(&canonical_fonts, &file_path, archive_path)?
+                    .context("[font-payload-missing] managed font file is unavailable")?;
+                if payload.descriptor.sha256 != font.file_hash
+                    || payload.descriptor.size != font.file_size
+                {
+                    bail!("[font-hash-mismatch] managed font changed after import");
+                }
+                font.archive_path = Some(payload.archive_path.clone());
+                file_payloads.push(payload);
+                custom_fonts.push(font);
+            }
+        }
+    }
+
     Ok((
         PortableBackupData {
             books: portable_books,
@@ -1796,6 +2028,7 @@ fn collect_portable_data(
             bookmarks: query_bookmarks(conn)?,
             annotations: query_annotations(conn)?,
             settings: query_settings(conn)?,
+            custom_fonts,
         },
         file_payloads,
     ))
@@ -1993,6 +2226,7 @@ fn record_counts(data: &PortableBackupData, files: &[FilePayload]) -> BTreeMap<S
     counts.insert("bookmarks".to_string(), data.bookmarks.len() as u64);
     counts.insert("annotations".to_string(), data.annotations.len() as u64);
     counts.insert("settings".to_string(), data.settings.len() as u64);
+    counts.insert("customFonts".to_string(), data.custom_fonts.len() as u64);
     counts.insert(
         "covers".to_string(),
         files
@@ -2005,6 +2239,13 @@ fn record_counts(data: &PortableBackupData, files: &[FilePayload]) -> BTreeMap<S
         files
             .iter()
             .filter(|payload| payload.archive_path.starts_with("books/"))
+            .count() as u64,
+    );
+    counts.insert(
+        "fontFiles".to_string(),
+        files
+            .iter()
+            .filter(|payload| payload.archive_path.starts_with("fonts/"))
             .count() as u64,
     );
     counts
@@ -2292,6 +2533,101 @@ mod tests {
     }
 
     #[test]
+    fn backup_v2_includes_and_restores_app_local_fonts_by_hash() {
+        let directory = tempdir().expect("tempdir");
+        let source_db = directory.path().join("source.sqlite3");
+        let source_library = directory.path().join("source-data").join("library");
+        let source_fonts = source_library.parent().expect("source data").join("fonts");
+        fs::create_dir_all(&source_library).expect("source library");
+        fs::create_dir_all(&source_fonts).expect("source fonts");
+        init_database_at(&source_db).expect("source database");
+        let font_bytes = b"portable app-local font fixture";
+        let font_hash = hex::encode(Sha256::digest(font_bytes));
+        let source_font = source_fonts.join(format!("{font_hash}.ttf"));
+        fs::write(&source_font, font_bytes).expect("font file");
+        let font_id = format!("font-{}", &font_hash[..32]);
+        let source_conn = Connection::open(&source_db).expect("source connection");
+        source_conn
+            .execute(
+                "INSERT INTO custom_fonts (
+                    id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                    family_alias, enabled, imported_at, updated_at
+                 ) VALUES (?1, 'Portable Serif', 'Regular', 'Portable.ttf', ?2, ?3, ?4,
+                           ?5, 1, '2026-07-22T00:00:00Z', '2026-07-22T00:00:00Z')",
+                params![
+                    &font_id,
+                    source_font.display().to_string(),
+                    &font_hash,
+                    font_bytes.len() as i64,
+                    format!("EbookReaderFont_{}", &font_hash[..16]),
+                ],
+            )
+            .expect("font registration");
+        drop(source_conn);
+        let mut theme = crate::db::get_reader_theme_at(&source_db).expect("source theme");
+        theme.font_id = Some(font_id.clone());
+        theme.font_family = format!("\"EbookReaderFont_{}\"", &font_hash[..16]);
+        crate::db::save_reader_theme_at(&source_db, &theme).expect("select font");
+
+        let source_conn = Connection::open(&source_db).expect("source connection");
+        let (data, files) =
+            collect_portable_data(&source_conn, &source_library, BackupOptions::default())
+                .expect("portable font data");
+        assert_eq!(data.custom_fonts.len(), 1);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].archive_path.starts_with("fonts/"));
+        let manifest = BackupManifest {
+            format_identifier: BACKUP_FORMAT_IDENTIFIER.to_string(),
+            format_version: BACKUP_FORMAT_VERSION,
+            app_version: "0.2.0".to_string(),
+            schema_version: 7,
+            exported_at: "2026-07-22T00:00:00Z".to_string(),
+            options: BackupOptions::default(),
+            record_counts: record_counts(&data, &files),
+            payloads: files.iter().map(|file| file.descriptor.clone()).collect(),
+        };
+        validate_portable_data(&data, &manifest).expect("validate font payload");
+
+        let target_db = directory.path().join("target.sqlite3");
+        let target_library = directory.path().join("target-data").join("library");
+        let target_font_dir = target_library.parent().expect("target data").join("fonts");
+        fs::create_dir_all(&target_library).expect("target library");
+        fs::create_dir_all(&target_font_dir).expect("target fonts");
+        init_database_at(&target_db).expect("target database");
+        let target_font = target_font_dir.join(format!("{font_hash}.ttf"));
+        fs::copy(&source_font, &target_font).expect("restore font payload");
+        let moved = HashMap::from([(
+            data.custom_fonts[0]
+                .archive_path
+                .clone()
+                .expect("archive path"),
+            target_font.display().to_string(),
+        )]);
+        let mut target_conn = Connection::open(&target_db).expect("target connection");
+        let transaction = target_conn.transaction().expect("transaction");
+        let items =
+            merge_restore_data(&transaction, &data, &moved, &target_library).expect("restore font");
+        transaction.commit().expect("commit");
+
+        assert!(items
+            .iter()
+            .any(|item| { item.category == "font" && item.status == RestoreItemStatus::Restored }));
+        let restored: (String, String) = Connection::open(&target_db)
+            .expect("restored connection")
+            .query_row("SELECT id, file_hash FROM custom_fonts", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .expect("restored font row");
+        assert_eq!(restored, (font_id.clone(), font_hash));
+        assert_eq!(
+            crate::db::get_reader_theme_at(&target_db)
+                .expect("restored theme")
+                .font_id,
+            Some(font_id)
+        );
+    }
+
+    #[test]
     fn operation_registry_exposes_cooperative_cancellation() {
         let registry = DataOperationRegistry::default();
         let canceled = registry.register("backup-1").expect("register");
@@ -2308,6 +2644,7 @@ mod tests {
             bookmarks: Vec::new(),
             annotations: Vec::new(),
             settings: Vec::new(),
+            custom_fonts: Vec::new(),
         }
     }
 

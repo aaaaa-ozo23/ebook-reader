@@ -56,6 +56,7 @@ interface EpubReaderAdapterOptions {
   cachedPublicationPageList?: string;
   sourceUrl: string;
   container: HTMLElement;
+  customFontSources?: Readonly<Record<string, string>>;
   initialLocator?: EpubLocator;
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
@@ -139,6 +140,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly cachedPublicationPageList?: string;
   private readonly sourceUrl: string;
   private readonly container: HTMLElement;
+  private customFontSources: Readonly<Record<string, string>>;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
@@ -163,6 +165,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private reflowPromise: Promise<void> | null = null;
   private selectionCleanupCallbacks: Array<() => void> = [];
   private selectionDocuments = new WeakSet<Document>();
+  private contentDocuments = new Set<Document>();
   private spreadMode: EpubSpreadMode = "single";
   private spreadState: EpubSpreadState = {
     requested: "single",
@@ -178,6 +181,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.cachedPublicationPageList = options.cachedPublicationPageList;
     this.sourceUrl = options.sourceUrl;
     this.container = options.container;
+    this.customFontSources = options.customFontSources ?? {};
     this.initialLocator = options.initialLocator;
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
@@ -201,6 +205,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await this.close();
     this.locationsReady = false;
     this.lastPosition = null;
+    this.contentDocuments.clear();
     this.reflowPromise = null;
 
     const { default: createEpub, EpubCFI } = await import("epubjs");
@@ -398,6 +403,9 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.rendition.themes.override("padding-right", `${theme.pageMargin}px`, true);
     this.rendition.themes.font(theme.fontFamily);
     this.rendition.themes.fontSize(`${theme.fontSize}px`);
+    for (const contentDocument of this.contentDocuments) {
+      this.injectCustomFont(contentDocument);
+    }
     const manager = (this.rendition as RenderedRendition).manager;
     if (manager?.settings !== undefined) {
       // epub.js owns paginated body padding and rewrites it to half of its
@@ -523,8 +531,31 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     rendition.on("rendered", (_section: unknown, view: EpubRenderedView) => {
       const contentDocument = view.document ?? view.contents?.document;
       this.labelRenderedFrame(view, contentDocument);
+      if (contentDocument !== undefined) {
+        this.contentDocuments.add(contentDocument);
+        this.injectCustomFont(contentDocument);
+      }
       this.observeSelectionDocument(contentDocument);
     });
+  }
+
+  setCustomFontSources(sources: Readonly<Record<string, string>>): void {
+    this.customFontSources = sources;
+    for (const contentDocument of this.contentDocuments) {
+      this.injectCustomFont(contentDocument);
+    }
+  }
+
+  private injectCustomFont(document: Document): void {
+    const styleId = "ebook-reader-custom-font";
+    document.getElementById(styleId)?.remove();
+    const fontId = this.theme.fontId;
+    const source = fontId === undefined ? undefined : this.customFontSources[fontId];
+    if (source === undefined) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `@font-face { font-family: ${this.theme.fontFamily}; src: url("${source.replaceAll('"', "%22")}"); font-style: normal; font-weight: 100 900; font-display: swap; }`;
+    document.head.append(style);
   }
 
   private labelRenderedFrame(

@@ -155,6 +155,7 @@ export interface TocItem {
 
 export interface ReaderTheme {
   mode: ReaderThemeMode;
+  fontId?: string;
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
@@ -162,6 +163,33 @@ export interface ReaderTheme {
   pageMargin: number;
   backgroundColor: string;
   textColor: string;
+}
+
+export interface CustomFont {
+  id: string;
+  familyName: string;
+  styleName: string;
+  fileName: string;
+  filePath: string;
+  fileHash: string;
+  fileSize: number;
+  familyAlias: string;
+  enabled: boolean;
+  importedAt: string;
+  updatedAt: string;
+}
+
+export interface ImportCustomFontResult {
+  status: "imported" | "duplicate";
+  font: CustomFont;
+}
+
+export interface CustomFontPreview {
+  familyName: string;
+  styleName: string;
+  fileName: string;
+  fileSize: number;
+  duplicateFont?: CustomFont;
 }
 
 export interface ReaderLayoutPreferences {

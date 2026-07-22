@@ -2,6 +2,7 @@ mod backup;
 mod batch_import;
 mod db;
 mod file_open;
+mod fonts;
 mod mobi;
 mod updater;
 
@@ -252,6 +253,51 @@ fn save_reader_theme(
 }
 
 #[tauri::command]
+fn list_custom_fonts(app: tauri::AppHandle) -> Result<Vec<fonts::CustomFont>, String> {
+    fonts::list_custom_fonts(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn import_custom_font(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<fonts::ImportCustomFontResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fonts::import_custom_font(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[font-import-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn inspect_custom_font(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<fonts::CustomFontPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fonts::inspect_custom_font(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[font-inspection-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn set_custom_font_enabled(
+    app: tauri::AppHandle,
+    font_id: String,
+    enabled: bool,
+) -> Result<fonts::CustomFont, String> {
+    fonts::set_custom_font_enabled(&app, &font_id, enabled).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn remove_custom_font(app: tauri::AppHandle, font_id: String) -> Result<(), String> {
+    fonts::remove_custom_font(&app, &font_id).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 fn get_reader_layout_preferences(
     app: tauri::AppHandle,
 ) -> Result<db::ReaderLayoutPreferences, String> {
@@ -440,6 +486,11 @@ pub fn run() {
             open_txt_book,
             get_reader_theme,
             save_reader_theme,
+            list_custom_fonts,
+            inspect_custom_font,
+            import_custom_font,
+            set_custom_font_enabled,
+            remove_custom_font,
             get_reader_layout_preferences,
             save_reader_layout_preferences,
             get_reader_experience_preferences,

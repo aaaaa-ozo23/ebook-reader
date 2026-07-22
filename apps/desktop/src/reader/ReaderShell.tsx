@@ -10,6 +10,7 @@ import {
 import {
   type Annotation,
   type Bookmark,
+  type CustomFont,
   defaultReaderLayoutPreferences,
   defaultReaderExperiencePreferences,
   defaultReaderTheme,
@@ -51,6 +52,7 @@ import {
   saveReaderLayoutPreferences,
   updateAnnotation,
 } from "../tauri/reader";
+import { getCustomFontAssetUrl, listCustomFonts } from "../tauri/fonts";
 import {
   findMatchingHighlightAnnotations,
   findMatchingNoteAnnotations,
@@ -153,6 +155,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [epubSpreadMode, setEpubSpreadMode] = useState<EpubSpreadMode>("single");
   const [isFormatOverlayOpen, setIsFormatOverlayOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
+  const [customFonts, setCustomFonts] = useState<CustomFont[]>([]);
+  const [customFontSources, setCustomFontSources] = useState<Record<string, string>>(
+    {},
+  );
   const [themeError, setThemeError] = useState<string | null>(null);
   const [readerExperiencePreferences, setReaderExperiencePreferences] =
     useState<ReaderExperiencePreferences>(defaultReaderExperiencePreferences);
@@ -242,13 +248,54 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   useEffect(() => {
     let isCurrent = true;
+    const faces: FontFace[] = [];
 
     async function loadTheme() {
       try {
-        const savedTheme = await getReaderTheme();
+        const [savedTheme, savedFonts] = await Promise.all([
+          getReaderTheme(),
+          listCustomFonts(),
+        ]);
+        const enabledFonts = savedFonts.filter((font) => font.enabled);
+        const sourceEntries = await Promise.all(
+          enabledFonts.map(async (font) => {
+            try {
+              const source = await getCustomFontAssetUrl(font);
+              const face = new FontFace(font.familyAlias, `url("${source}")`);
+              await face.load();
+              if (isCurrent) {
+                globalThis.document.fonts.add(face);
+                faces.push(face);
+              }
+              return [font.id, source] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
 
         if (isCurrent) {
-          setTheme(savedTheme);
+          const availableSources = Object.fromEntries(
+            sourceEntries.filter(
+              (entry): entry is readonly [string, string] => entry !== null,
+            ),
+          );
+          const selectedFontUnavailable =
+            savedTheme.fontId !== undefined &&
+            availableSources[savedTheme.fontId] === undefined;
+          const effectiveTheme = selectedFontUnavailable
+            ? {
+                ...savedTheme,
+                fontId: undefined,
+                fontFamily: defaultReaderTheme.fontFamily,
+              }
+            : savedTheme;
+          setTheme(effectiveTheme);
+          setCustomFonts(savedFonts);
+          setCustomFontSources(availableSources);
+          if (selectedFontUnavailable) {
+            void saveReaderTheme(effectiveTheme).catch(() => undefined);
+          }
         }
       } catch (themeLoadError) {
         if (isCurrent) {
@@ -261,6 +308,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
     return () => {
       isCurrent = false;
+      for (const face of faces) globalThis.document.fonts.delete(face);
     };
   }, [book.id]);
 
@@ -1610,6 +1658,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
+            customFontSources={customFontSources}
             isPageCurlBlocked={
               isFormatOverlayOpen ||
               selectionSnapshot !== null ||
@@ -1660,6 +1709,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           />
         ) : null}
         <ReaderThemePanel
+          customFonts={customFonts}
           isOpen={isThemePanelOpen}
           pageViewDisabled={
             readerFormat === "txt"
