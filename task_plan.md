@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.5 全书库检索、多语言书内搜索与 Import folder 回归修复：design revision in progress。01 桌面全库结果、03 索引操作/错误和 04 移动 sheet 已批准；02 书内搜索正确性板仅调整深墨侧栏命中高亮后复核。生产实现必须同时修复每本书原有搜索，并修复文件夹扫描进度、阶段轨与预览链路；修订板确认前不创建 `0008_library_search.sql`，不修改生产代码。
+大阶段 14.5 全书库检索、多语言书内搜索与 Import folder 回归修复：approved for implementation。四张搜索状态板均已批准；先在独立 `codex/stage14-folder-import-fix` 修复扫描/预览生命周期并合回集成分支，再实现每本书原有搜索修复、`0008_library_search.sql` 与全书库搜索。14.6 仍须先提交状态板并暂停审核。
 
 ## 分支策略
 

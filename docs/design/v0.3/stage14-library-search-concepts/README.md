@@ -1,6 +1,6 @@
 # Stage 14.5 library and in-book search concept review set
 
-Status: `partial_approval_revision_requested`
+Status: `approved_for_implementation`
 
 This review set covers both the new whole-library search experience and the user-reported correctness repair for existing TXT, EPUB, PDF, MOBI and AZW3 in-book search. It is design/specification only: no `0008_library_search.sql`, production search code, Tauri command or React/CSS is included yet.
 
@@ -11,9 +11,9 @@ This review set covers both the new whole-library search experience and the user
 | 03 | `03-index-operations-and-errors.png` | Rebuild progress/cancel, no results, missing file, damaged cache repair, partial no-text PDF result |
 | 04 | `04-mobile-search-sheet.png` | 375px full-screen result and rebuild sheets with 44px targets and local-only disclosure |
 
-Review status: boards 01, 03 and 04 are approved. Board 02 is being revised only to use a softer, lighter in-book result highlight on the deep-ink sidebar; its information architecture and correctness contract are otherwise approved.
+Review status: all four boards were approved on 2026-07-22. The revised board 02 uses a low-opacity teal mist plus a fine underline on the deep-ink sidebar while retaining bright readable text; the light content cards keep their existing highlight treatment.
 
-The revised board 02 now uses a low-opacity teal mist plus a fine underline on the deep-ink sidebar, while retaining bright readable text. The light content cards keep their existing highlight treatment. This is the only visual change awaiting final confirmation.
+These boards are now the binding production specification for Stage 14.5. Implementation must preserve the existing per-book `Ctrl+F` flow as well as add `Ctrl+Shift+F` library search.
 
 The editable static source is `index.html`; use `?board=desktop`, `accuracy`, `operations` or `mobile`. No bitmap or remote visual assets are required.
 

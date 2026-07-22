@@ -40,6 +40,7 @@
 - **新增导入缺陷：** 用户实测 Import folder 在扫描阶段把总进度直接填满，六阶段状态不更新，随后也没有显示文件预览。当前只定位到 `BatchImportDialog`、`scanImportPaths` 与 Rust `batch_import` 事件链；下一步需区分“选择根目录 1/1”和“递归发现/分类 N 项”，检查扫描期是否实际发送结构化进度，以及前端是否把 `completed/total` 错当作完整导入进度。
 - **Import folder 根因确认：** Rust `scan_import_paths` 在完整收集 candidates 后逐项 hash，却发送不在 Core `OperationProgressPhase` 中的 `phase: "reading"`；前端把任意 `progress !== null` 都视为正式导入，扫描第一条事件就切到 progress view。扫描 Promise resolve 后只保存 preview、不清除 progress，因此预览永久被遮蔽；单根目录最后一项的 `completed=total=1` 又被画成 100%。修复必须拥有独立 scan/import 状态并让 scan completion 原子切换到 preview。
 - **高亮修订：** 书内深墨侧栏不再使用与浅色内容区相同的实心 `#bfe1dd`。修订稿使用 `rgba(148, 211, 206, 0.16)` 的低饱和薄雾底色、白色正文和一条 48% 透明度的细内阴影，命中范围仍可辨认但不遮蔽中文笔画；浅色内容区的高亮保持原样。
+- **最终批准：** 用户已批准修订后的准确性板，14.5 四张状态板全部成为生产规格。后续不得用全库搜索替代书内搜索，也不得恢复更重的深墨侧栏命中底色。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 
