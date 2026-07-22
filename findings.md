@@ -29,6 +29,14 @@
 - **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
 - **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
 
+## 2026-07-22 大阶段 14.5a：文件夹导入回归修复
+
+- **根因：** `BatchImportDialog` 以任意非空 progress 推导 `isImporting`，扫描第一条事件即误进正式导入页；scan resolve 只保存 preview、不清 progress，导致预览永久被遮蔽。单根目录的最后一条扫描事件又把 1/1 画成 100%。
+- **状态边界：** scan/import 现在使用独立 operation ID、独立 progress 与显式 `scanning | preview | importing | result` 视图。进度监听先注册再启动扫描，避免极快目录丢失第一条事件；完成后以同一状态更新清 scan progress、保存 items 并进入 preview。
+- **诚实进度：** Rust 在递归发现时发 `scanning, total=0`，UI 使用 reduced-motion 安全的不确定轨；候选收集后才发 `hashing n/N`。正式导入仍使用既有六阶段，不再消费扫描生命周期。
+- **取消与空态：** 递归收集每层检查取消令牌；关闭或 Cancel scan 会取消活动 operation。空目录进入明确 `No supported books found` 预览而非停留 spinner；unsupported/duplicate 仍逐项展示。
+- **运行态边界：** 内置 Browser 可验证 Vite 书架、Import folder 菜单、无溢出和 console 0，但 Web fallback 没有 Tauri 原生文件夹选择，故真实扫描状态由仓库 Playwright bridge fixture 验证。批准稿与最终截图差异账本见 `docs/design/v0.3/stage14-folder-import-fidelity.md`。
+
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 
 - **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。

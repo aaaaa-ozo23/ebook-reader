@@ -3,7 +3,7 @@
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态
-- **当前状态：** 14.4 implementation_complete；全量门禁通过，等待阶段提交与合并
+- **当前状态：** 14.5a folder_import_fix implementation_complete；等待完整门禁、提交与合并
 - **备份编译修正：** 首轮将备份字体的 `u64 fileSize` 直接传给 rusqlite，`ToSql` 不支持该类型；数据库列受 20 MiB 上限约束，已在写入事务处安全转换为 `i64`，备份 JSON 仍保留无符号大小契约。
 - **迁移测试修正：** 全量 Rust 首轮 64/65；唯一失败是旧测试仍锁定 schema v6/10 tables。已升级为 v7/11 tables 并显式验证 `custom_fonts`，不是迁移执行失败。
 - **当前分支：** `codex/stage14-custom-fonts`
@@ -56,6 +56,19 @@
 - 内置 Browser 首轮与最终 Chromium 截图关闭桌面双标题、移动页头实心图标和小字对比度偏差。1280/900/640/375 无横向溢出，移动 back/close/import 均至少 44px，reduced-motion、焦点恢复、console 0 与 axe serious/critical 0。
 - 最终门禁：`pnpm.cmd check` 通过（Core 9/9、Desktop 184/184）；Cargo fmt 与 Rust 65/65；Playwright 31/31，含 DPR2、TXT、MOBI/AZW3 和独立 500 页 PDF 性能轨。
 - 新增 14.5 缺陷范围：现有书内搜索在 EPUB/PDF/MOBI/AZW3 有错误或漏报，必须与全库搜索一起修复多语言规范化、跨节点/跨 text item 匹配、摘录与 locator 精确回跳；中文、英文、重音组合字符及主流非拉丁文字均需 fixtures。
+
+### 14.5a 文件夹导入回归修复
+
+- 从最新集成 `86821bd` 创建并推送 `codex/stage14-folder-import-fix`；搜索生产分支只先封存四张批准状态板，未把导入修复混入搜索提交。
+- `BatchImportDialog` 已拆分扫描与导入 operation ID/progress，并以显式四态驱动页面；监听注册后才调用 scan，扫描完成原子进入 preview。关闭扫描会发送取消，空目录显示明确说明。
+- Rust 递归发现发 `scanning, total=0`，候选收集后发 `hashing n/N`；每层递归检查取消令牌，正式导入完成补发 `complete`。
+- 完整 `pnpm.cmd check` 通过：Core 9/9、Desktop 187/187、ESLint、Prettier、TypeScript 与 production build 均通过；Cargo fmt 与 Rust 66/66 通过。
+- Playwright 全矩阵 31 项均输出通过，其中新的 Import folder 流程验证 Scanning → Hashing 1/2 → Preview → Import；目标用例单独复跑 1/1 通过。Windows Vite teardown 仍在断言全部完成后保留句柄，外层超时不作为断言通过的替代证据。
+- 内置 Browser 验证 `http://127.0.0.1:4173/` 页面身份、Import folder 菜单、1280px 无横向溢出与 console warning/error 0；Web fallback 无 Tauri 原生选择器，按计划用 Playwright bridge fixture 完成目标流。
+- 过程错误：隐藏 `Start-Process` 未保持 Vite 子进程，且 CIM 进程诊断受当前权限拒绝；改用任务直接持有并可终止的 Vite server。`pnpm --filter ... exec playwright` 未解析局部 CLI，随后直接命令首次多带 `tests/` 前缀导致 no tests；改用 apps/desktop testDir 相对文件名后目标用例 1/1 通过。所有错误均未修改用户数据。
+- 文档收口首个组合补丁因集成基线中不存在预期的 `### 14.4 Git 收口` 标题而整体未应用；已拆成精确文件补丁，生产实现未受影响。
+- 首轮 `pnpm check` 的 React refs 规则拒绝在 render fallback progress 中读取 import operation ref；该字段不参与 UI，改为静态内部占位 ID，实际命令和取消仍只在事件处理器读取 ref，随后重跑完整门禁。
+- 第二轮 `pnpm check` 在测试 deferred resolver 上触发 TypeScript 的异步赋值控制流 `never` 推断；resolver 在 Promise 构造时必定赋值，改为明确 definite assignment 后继续重跑，产品代码编译已越过上一轮 lint 问题。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 

@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.4 自定义字体：implementation complete，等待 Git 收口。四张 Reading & Fonts 桌面/375px 状态板已按批准规格落地；`0007_custom_fonts.sql`、受限 TTF/OTF 校验与内容寻址存储、TXT/EPUB 字体映射、备份恢复和生产 UI 已通过全量门禁。合回集成分支后只进入 14.5 状态板审核，不改正式版本、不创建 tag/Release、不开始 Stage 15。
+大阶段 14.5a 文件夹导入回归修复：acceptance complete，等待 Git 收口。扫描、哈希、预览和正式导入已使用独立生命周期；递归发现不伪造百分比，Hashing 显示真实 n/N，扫描完成后进入可勾选预览。完整前端/Rust/Playwright 门禁通过，合回集成后继续已批准的 14.5 搜索实现。
 
 ## 分支策略
 
@@ -528,6 +528,7 @@
 | 14.2 转换原型（complete） | `codex/stage14-mobi-conversion-spike` | 在隔离临时目录将无 DRM 样本转换为 EPUB，验证元数据、目录、图片、编码和清理 | 8 项转换专项、Rust 59/59、core 8、desktop 176、许可证/sidecar/release security 通过；失败、取消、超时无残留；资源与包增量已记录 |
 | 14.3 MOBI/AZW3 导入（acceptance complete） | `codex/stage14-mobi-import` | 仅在 14.1/14.2 go 后接入导入、转换进度、去重和错误反馈，内部继续走 EPUB adapter；同步关闭书签空态和非 Focus Double fidelity 缺口 | 原文件保留；转换产物可追踪/删除；书库、文件关联、备份和许可证清单通过；Core 9、Desktop 178、Rust 61、Playwright 29/29、签名 NSIS/MSI 双构建通过 |
 | 14.4 自定义字体（implementation complete） | `codex/stage14-custom-fonts` | 导入本地字体、校验许可提示/格式、管理启停并映射到 TXT/EPUB | 四张桌面/375px状态板已复刻；损坏字体不影响启动；卸载字体有回退；PDF 不承诺替换文档字体；Core 9、Desktop 184、Rust 65、Playwright 31 全通过 |
+| 14.5a 文件夹导入回归修复（acceptance complete） | `codex/stage14-folder-import-fix` | 拆分 scan/import progress 生命周期；递归发现使用不确定进度，候选收集后显示 Hashing n/N，并在完成后原子进入可勾选预览 | Core 9、Desktop 187、Rust 66、Playwright 31 全通过；多层目录、空目录、取消、unsupported/duplicate 与扫描后预览均覆盖 |
 | 14.5 全书库全文检索 | `codex/stage14-library-search-index` | 先审计并修复现有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索，再建立共享的多语言规范化、可失效本地索引、后台队列、结果和跳转；不上传内容 | 中文无空格、英文大小写、重音/组合字符、主流非拉丁文字、跨 HTML/PDF 文本项均有正确摘录和定位断言；导入/删除/修复触发增量索引；大书库搜索可取消；索引损坏可重建 |
 | 14.6 阅读历史与统计 | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 默认本地、可关闭/删除/导出；休眠和后台时间不计入有效阅读 |
 | 14.7 阶段 14 验收 | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | 未通过 gate 的能力不进入发布；完整门禁和升级测试通过 |
@@ -538,6 +539,7 @@
 - **引擎决策：** 正式离线引擎固定为 libmobi v0.12 的 Windows x64 `mobitool` sidecar；不要求用户安装 Calibre/Python，不加入 DRM 解密，不扩展 `.azw`、`.azw4`、`.prc`。
 - **数据边界：** 原 MOBI/AZW3 保持为书籍源文件，成功转换的 EPUB 是可追踪派生物；书架展示源格式，阅读器继续走懒加载 EPUB adapter。
 - **设计审核门：** 14.3 的桌面预览、转换/取消、DRM/部分失败、375px sheet/drop overlay 四组状态板已获批准并成为生产规格；14.4–14.6 各自仍需先提交桌面/375px 状态板并等待批准，再实现生产 React/CSS。
+- **文件夹导入回归门：** 14.5 搜索生产实现前，先从最新集成分支完成独立 `codex/stage14-folder-import-fix` 并 `--no-ff` 合回集成；扫描 progress 不得继续遮蔽预览，也不得把递归发现伪装成已知百分比。
 - **阅读器 UI：** 14.3 同步统一 TXT/EPUB/PDF/MOBI/AZW3 的 SVG Previous/Next；Line height/Spacing/Margin 使用三套语义图标；Margin 对 EPUB/TXT/PDF 三格式均须产生可测量差异并持久化。
 - **后续能力：** 14.4 仅导入本地 TTF/OTF 并映射 TXT/EPUB；14.5 建立可重建本地全文索引；14.6 记录可关闭、可清空、可导出的本地有效阅读会话；14.7 做完整兼容、隐私、性能、许可证与双安装包验收。
 - **停止边界：** 完成 14.7 后停止；不修改正式应用版本，不创建 tag 或 Release，不启动 Stage 15。
