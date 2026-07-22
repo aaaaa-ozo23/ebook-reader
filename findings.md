@@ -29,6 +29,27 @@
 - **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
 - **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
 
+## 2026-07-22 大阶段 14.5：全库检索与搜索正确性状态板
+
+- **现有算法根因：** TXT/PDF 对 lowercased 文本执行 `indexOf` 后继续使用原 query 长度切片，大小写折叠或 Unicode 规范化改变 code unit 数时 selectedText、context 和 locator 会漂移；结果高亮又在侧栏独立重复简单 lowercase 算法。
+- **PDF 根因：** 当前把每个 PDF.js text item 用固定空格拼接，既会把一个词拆成两段导致漏报，也会在原本相邻文字间制造错误词边界；后续必须基于 item 几何/换行与原始 span 建立可逆文本映射。无文本层必须明确 `No searchable text`，v0.3 不承诺 OCR。
+- **EPUB 派生格式根因：** EPUB/MOBI/AZW3 直接依赖 epub.js `section.find()`，没有共享规范化或跨 inline DOM 节点的可验证 offset map；后续以 spine 文本视图匹配并映射到 CFI range，摘录、选中文字与回跳必须来自同一原始范围。
+- **设计结构：** 桌面 rail 增加 Search；结果按书分组并保留真实源格式标签。准确性板把 EPUB 派生、PDF、TXT 和无文本 PDF 的不同定位契约并列；维护板覆盖 rebuild/cancel、损坏缓存、missing file 和单书失败；移动板使用现有 375px 全屏 sheet。
+- **审核边界：** 四张板只定义生产规格，不含 schema、Tauri 命令或 React/CSS。内置 Browser 按安全策略拒绝本地 `file://` 预览，未绕过；仓库锁定 Chromium 以 1440×900 逐页渲染、断言单一 active board 与零溢出并人工目检。
+- **审核反馈：** 桌面全库结果、索引操作/错误和 375px sheet 三张已批准；多语言书内搜索板需把深墨侧栏中的命中底色调得更浅、更柔和，确保白色正文仍清晰。全库搜索与每一本书的既有 `Ctrl+F` 搜索必须共同完成、共同回归，不能用新入口替代旧能力。
+- **新增导入缺陷：** 用户实测 Import folder 在扫描阶段把总进度直接填满，六阶段状态不更新，随后也没有显示文件预览。当前只定位到 `BatchImportDialog`、`scanImportPaths` 与 Rust `batch_import` 事件链；下一步需区分“选择根目录 1/1”和“递归发现/分类 N 项”，检查扫描期是否实际发送结构化进度，以及前端是否把 `completed/total` 错当作完整导入进度。
+- **Import folder 根因确认：** Rust `scan_import_paths` 在完整收集 candidates 后逐项 hash，却发送不在 Core `OperationProgressPhase` 中的 `phase: "reading"`；前端把任意 `progress !== null` 都视为正式导入，扫描第一条事件就切到 progress view。扫描 Promise resolve 后只保存 preview、不清除 progress，因此预览永久被遮蔽；单根目录最后一项的 `completed=total=1` 又被画成 100%。修复必须拥有独立 scan/import 状态并让 scan completion 原子切换到 preview。
+- **高亮修订：** 书内深墨侧栏不再使用与浅色内容区相同的实心 `#bfe1dd`。修订稿使用 `rgba(148, 211, 206, 0.16)` 的低饱和薄雾底色、白色正文和一条 48% 透明度的细内阴影，命中范围仍可辨认但不遮蔽中文笔画；浅色内容区的高亮保持原样。
+- **最终批准：** 用户已批准修订后的准确性板，14.5 四张状态板全部成为生产规格。后续不得用全库搜索替代书内搜索，也不得恢复更重的深墨侧栏命中底色。
+
+### 14.5 生产搜索结论
+
+- **共享匹配模型：** 前端 `searchText` 以 NFKC、Unicode fold、组合标记与折叠空白构建原文 offset map；TXT、EPUB、PDF 书内搜索和侧栏高亮复用该映射。EPUB 通过 DOM Range 生成 CFI，PDF 按 text item 几何重建文字，不再在每个 glyph 之间伪造空格。
+- **精确回跳：** 索引结果保存 EPUB href/PDF page、原始 offset 和同一章节/页内 occurrence；重复词不再一律跳到首个命中。MOBI/AZW3 继续通过派生 EPUB 和现有 CFI 能力打开。
+- **索引边界：** schema v8 使用 SQLite FTS5 trigram、chunk overlap 与 `readerHash` 失效；短于三个字符的 CJK 查询走本地精确扫描。索引是可删除 cache、不进入备份；无文本层 PDF 明确报告 no searchable text，不暗示 OCR。
+- **运行态纠偏：** 375px 筛选 chip 从 36px 收口到 44px；搜索关闭时不再聚焦已卸载的旧 DOM 节点，而是解析重新挂载的 Search 触发器或书架主区。内置 Browser 最终 warning/error 0、375/375 无溢出。
+- **依赖结论：** `pdf-extract 0.12.0` 为 MIT，`unicode-normalization 0.1.25` 为 MIT OR Apache-2.0，已进入第三方声明与锁文件；没有新增网络或 OCR 依赖。
+
 ## 2026-07-22 大阶段 14.5a：文件夹导入回归修复
 
 - **根因：** `BatchImportDialog` 以任意非空 progress 推导 `isImporting`，扫描第一条事件即误进正式导入页；scan resolve 只保存 preview、不清 progress，导致预览永久被遮蔽。单根目录的最后一条扫描事件又把 1/1 画成 100%。

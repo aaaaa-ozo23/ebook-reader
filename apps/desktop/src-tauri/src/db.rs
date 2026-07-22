@@ -71,6 +71,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "custom_fonts",
         sql: include_str!("../migrations/0007_custom_fonts.sql"),
     },
+    Migration {
+        version: 8,
+        name: "library_search",
+        sql: include_str!("../migrations/0008_library_search.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -1868,6 +1873,12 @@ fn decode_txt_bytes(bytes: &[u8]) -> anyhow::Result<DecodedText> {
     bail!("failed to decode TXT file; supported encodings are UTF-8, GBK, GB18030, and Big5")
 }
 
+pub(crate) fn read_txt_text_at(path: &Path) -> anyhow::Result<String> {
+    let bytes = fs::read(path)
+        .with_context(|| format!("failed to read TXT content at {}", path.display()))?;
+    Ok(decode_txt_bytes(&bytes)?.text)
+}
+
 fn push_encoding_candidate(candidates: &mut Vec<&'static Encoding>, encoding: &'static Encoding) {
     if supported_txt_encoding(encoding).is_none() {
         return;
@@ -2874,7 +2885,7 @@ mod tests {
     };
 
     #[test]
-    fn migration_v7_creates_expected_tables_and_is_idempotent() {
+    fn migration_v8_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2895,7 +2906,9 @@ mod tests {
                     'reader_cache',
                     'book_user_metadata',
                     'book_derivatives',
-                    'custom_fonts'
+                    'custom_fonts',
+                    'library_search_books',
+                    'library_search_chunks'
                 )",
                 [],
                 |row| row.get(0),
@@ -2907,7 +2920,7 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 11);
+        assert_eq!(table_count, 13);
         let bookmark_updated_at_columns: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
@@ -2916,9 +2929,57 @@ mod tests {
             )
             .expect("count bookmark updated_at columns");
 
-        assert_eq!(migration_count, 7);
-        assert_eq!(schema_version(&conn).expect("schema version"), 7);
+        assert_eq!(migration_count, 8);
+        assert_eq!(schema_version(&conn).expect("schema version"), 8);
         assert_eq!(bookmark_updated_at_columns, 1);
+    }
+
+    #[test]
+    fn repaired_library_path_invalidates_the_local_search_cache() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let library_dir = temp_dir.path().join("library");
+        let source_path = temp_dir.path().join("search-repair.txt");
+        fs::write(&source_path, "searchable text").expect("write txt");
+        let imported =
+            import_book_at(&database_path, &library_dir, &source_path).expect("import book");
+        let conn = Connection::open(&database_path).expect("open database");
+        conn.execute(
+            "INSERT INTO library_search_chunks(book_id, reader_hash, chunk_index, location_json, location_label, text, normalized_text)
+             VALUES (?1, ?2, 0, '{\"kind\":\"txt\",\"charOffset\":0}', 'Text', 'searchable text', 'searchable text')",
+            params![imported.book.id, imported.book.reader_hash],
+        )
+        .expect("seed search chunk");
+        conn.execute(
+            "UPDATE library_search_books SET state='ready', chunk_count=1 WHERE book_id=?1",
+            [&imported.book.id],
+        )
+        .expect("mark search ready");
+        conn.execute(
+            "UPDATE books SET library_path=?1 WHERE id=?2",
+            params![
+                library_dir.join("repaired.txt").to_string_lossy(),
+                imported.book.id
+            ],
+        )
+        .expect("repair path");
+
+        let state: (String, i64) = conn
+            .query_row(
+                "SELECT state, chunk_count FROM library_search_books WHERE book_id=?1",
+                [&imported.book.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("search state");
+        let chunks: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM library_search_chunks WHERE book_id=?1",
+                [&imported.book.id],
+                |row| row.get(0),
+            )
+            .expect("chunk count");
+        assert_eq!(state, ("pending".to_string(), 0));
+        assert_eq!(chunks, 0);
     }
 
     #[test]

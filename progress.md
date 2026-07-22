@@ -3,11 +3,11 @@
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态
-- **当前状态：** 14.5a folder_import_fix implementation_complete；等待完整门禁、提交与合并
+- **当前状态：** 14.5 search implementation_in_progress；14.5a folder_import_fix 已完成、合入并带入当前分支
 - **备份编译修正：** 首轮将备份字体的 `u64 fileSize` 直接传给 rusqlite，`ToSql` 不支持该类型；数据库列受 20 MiB 上限约束，已在写入事务处安全转换为 `i64`，备份 JSON 仍保留无符号大小契约。
 - **迁移测试修正：** 全量 Rust 首轮 64/65；唯一失败是旧测试仍锁定 schema v6/10 tables。已升级为 v7/11 tables 并显式验证 `custom_fonts`，不是迁移执行失败。
-- **当前分支：** `codex/stage14-custom-fonts`
-- **基线：** v0.3 integration merge `1bdd2a7`
+- **当前分支：** `codex/stage14-library-search-index`
+- **基线：** v0.3 integration merge `5d261a4`
 
 ### 已执行
 - 用户批准 14.3 四张状态板，并把范围扩展为依次完成 14.3、14.4、14.5、14.6、14.7。
@@ -57,6 +57,40 @@
 - 最终门禁：`pnpm.cmd check` 通过（Core 9/9、Desktop 184/184）；Cargo fmt 与 Rust 65/65；Playwright 31/31，含 DPR2、TXT、MOBI/AZW3 和独立 500 页 PDF 性能轨。
 - 新增 14.5 缺陷范围：现有书内搜索在 EPUB/PDF/MOBI/AZW3 有错误或漏报，必须与全库搜索一起修复多语言规范化、跨节点/跨 text item 匹配、摘录与 locator 精确回跳；中文、英文、重音组合字符及主流非拉丁文字均需 fixtures。
 
+### 14.4 Git 收口
+
+- 实现提交 `9e37dcc`、测试提交 `1a1616f`、文档提交 `8bb4576` 已推送至 `codex/stage14-custom-fonts`。
+- 14.4 已通过 `--no-ff` 合入并推送 `codex/v0.3.0-integration`，合并提交 `86821bd`。
+- `.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+
+### 14.5 全库检索与多语言搜索设计审核
+
+- 从最新集成提交 `86821bd` 创建并推送 `codex/stage14-library-search-index`；当前只包含设计资产、算法审计和审核契约。
+- 四张状态板覆盖桌面按书分组的全库结果、多语言/跨节点书内搜索正确性、索引 rebuild/cancel/损坏/missing/no-text PDF 状态，以及两个 375px 全屏 sheet。
+- 状态板明确 `Ctrl+Shift+F` 与现有 `Ctrl+F` 分工，源格式标签、正确摘录与 locator 同源、索引可删除/不备份、取消后已完成书籍继续可用、单书失败不阻塞其他书。
+- 现有实现审计确认三类缺陷：Unicode 大小写/规范化后的 offset 漂移；PDF text item 固定插空格；EPUB `section.find()` 与侧栏高亮各自使用不一致的简化匹配。14.5 生产实现必须先解决这些问题，再接 FTS 与 UI。
+- 四张 PNG 均由仓库 Chromium 真实渲染为 1440×900，页面断言 `scrollWidth/clientWidth=1440`、`scrollHeight/clientHeight=900` 且只存在一个 active board；逐图目检无裁切或重叠。内置 Browser 拒绝 `file://` URL，已按安全策略停止，未尝试规避。
+- 用户批准 01 桌面全库结果、03 索引维护/错误和 04 移动 sheet；02 多语言书内搜索板仅需降低深墨侧栏命中高亮的饱和度/明度对比，正文必须清楚可读。生产门禁明确同时覆盖全库搜索和每本书原有书内搜索。
+- 新增 Import folder 回归修复：扫描进度不得以“根目录 1/1”冒充全部完成，阶段轨必须随递归扫描/分类变化，扫描成功后必须进入可选择的文件预览；取消、空目录、超限、unsupported 和单项错误均需测试。
+- 根因已落到代码：Rust scan 发出非法 `reading` 阶段，前端 `isImporting = progress !== null && result === null` 把扫描事件误判为正式导入，且 scan resolve 不清 progress。计划新增独立 `codex/stage14-folder-import-fix`，先完成该回归并合入集成，再进入 14.5 生产搜索实现。
+- 第二次计划补丁也因 Markdown 表格中的 `375px状态板` 与预期空格不一致而未修改文件；已改为精确上下文应用，产品代码和状态板均未受影响。
+- 02 修订板已重新以 Chromium 1440×900 渲染；侧栏 computed style 为 `rgba(148, 211, 206, 0.16)` / `rgb(247, 251, 250)`，逐图目检确认中文正文不再落在高亮色块中丢失笔画，右侧浅色卡片高亮未变。
+- 修订渲染命令先在 `apps/desktop` 工作目录误用根目录 Prettier 路径，格式化子命令未执行但 Chromium 截图成功；不将该次格式结果计为通过，最终从仓库根重新执行 Prettier 与 diff check。
+- 记录一次无产品影响的文档补丁失败：首个 `apply_patch` 上下文少了 `Chromium` 与 `以` 之间的空格，未修改任何文件；已用精确行重新应用，不重复原命令。
+- 用户于 2026-07-22 批准修订后的 02，并确认四张 14.5 状态板全部进入生产规格；设计门已关闭。实施顺序固定为先完成独立文件夹导入修复并合入集成，再把最新集成基线带入搜索分支。
+- 本轮首次审批同步补丁因 `computed style 为` 的空格上下文不一致而整体未应用；已拆分为精确小补丁后成功，不重复失败命令，生产代码未受影响。
+- 首次使用 `pnpm.cmd exec prettier` 时命令解析未找到二进制；确认锁定依赖存在后改用仓库本地 `node_modules\\.bin\\prettier.cmd`，四份审批文档格式化成功。
+
+### 14.5 生产实现与验收
+
+- 新增 `0008_library_search.sql`、FTS5 trigram index/status/chunk、Rust 增量提取和 `get/rebuild/search_library` 命令；导入、repair、恢复、元数据/派生变化和删除会使本地索引失效或清理。
+- 修复原有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索：共享多语言原文 offset map、跨 inline DOM Range/CFI、PDF text-item 几何重建、无文本层明确失败、柔和侧栏高亮。
+- 全库 Search rail、`Ctrl+Shift+F`、结果分组/过滤、missing file、可取消 rebuild、375px full-screen UI 与精确重复命中回跳完成；搜索页继续为独立 lazy chunk，ReaderShell lazy boundary 保持。
+- 内置 Browser：1280/375 实页、console warning/error 0、无横向溢出、375px filters 44px、初始输入焦点和 Escape 返回焦点通过。
+- `pnpm.cmd check` 通过：Core 9/9、Desktop 206/206、ESLint、Prettier、TypeScript、production build；LibrarySearch gzip 2.76 kB，ReaderShell gzip 58.18 kB。
+- Cargo fmt、Rust 74/74、`git diff --check` 通过；Playwright 全矩阵 33/33，含 DPR2、reduced-motion、axe、MOBI/AZW3、500 页 PDF 和新增桌面/375px 全库搜索。
+- 过程修正：首次 Playwright 参数错误包含 `tests/` 前缀而未匹配用例；定向用例随后暴露了真实的卸载节点焦点恢复缺陷与测试的歧义 Search locator，分别修复产品焦点策略与 scope。首次 `pnpm check` 还发现 effect 状态更新规则和 Prettier 差异，已按 React 边界拆分后全量重跑。
+
 ### 14.5a 文件夹导入回归修复
 
 - 从最新集成 `86821bd` 创建并推送 `codex/stage14-folder-import-fix`；搜索生产分支只先封存四张批准状态板，未把导入修复混入搜索提交。
@@ -69,6 +103,7 @@
 - 文档收口首个组合补丁因集成基线中不存在预期的 `### 14.4 Git 收口` 标题而整体未应用；已拆成精确文件补丁，生产实现未受影响。
 - 首轮 `pnpm check` 的 React refs 规则拒绝在 render fallback progress 中读取 import operation ref；该字段不参与 UI，改为静态内部占位 ID，实际命令和取消仍只在事件处理器读取 ref，随后重跑完整门禁。
 - 第二轮 `pnpm check` 在测试 deferred resolver 上触发 TypeScript 的异步赋值控制流 `never` 推断；resolver 在 Promise 构造时必定赋值，改为明确 definite assignment 后继续重跑，产品代码编译已越过上一轮 lint 问题。
+- 14.5a 三类提交 `fcc93a7` / `3e5244a` / `eb2747f` 已推送，并以 `--no-ff` 合入/推送集成提交 `5d261a4`；当前搜索分支已带入该基线。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 

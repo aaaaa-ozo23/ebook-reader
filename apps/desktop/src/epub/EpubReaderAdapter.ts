@@ -19,6 +19,7 @@ import {
   type EpubCfiComparator,
   type PublicationPageBoundary,
 } from "./EpubPageList";
+import { findDomSearchTextMatches } from "../reader/searchText";
 
 export type EpubSpreadMode = "single" | "double";
 
@@ -96,6 +97,8 @@ interface EpubLocationLike {
 }
 
 interface EpubSearchSection {
+  cfiFromRange?: (range: Range) => string;
+  document?: Document;
   href?: string;
   load?: (loader?: unknown) => Promise<unknown> | unknown;
   find?: (query: string) => Array<{ cfi?: string; excerpt?: string }>;
@@ -436,6 +439,35 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
       try {
         await Promise.resolve(section.load?.((book as EpubSearchableBook).load));
+        const href = section.href ?? "";
+        const document = section.document;
+        const cfiFromRange = section.cfiFromRange;
+
+        if (document !== undefined && cfiFromRange !== undefined) {
+          const sectionHits = findDomSearchTextMatches(
+            document,
+            normalizedQuery,
+            100 - hits.length,
+          );
+
+          for (const [index, sectionHit] of sectionHits.entries()) {
+            const cfi = cfiFromRange.call(section, sectionHit.range);
+            hits.push({
+              id: `epub-search-${href}-${index}`,
+              locator: {
+                kind: "epub",
+                href,
+                cfi,
+                selectedText: sectionHit.selectedText,
+              },
+              excerpt: sectionHit.excerpt.text,
+              excerptMatchStart: sectionHit.excerpt.matchStart,
+              excerptMatchEnd: sectionHit.excerpt.matchEnd,
+            });
+          }
+          continue;
+        }
+
         const sectionHits = section.find?.(normalizedQuery) ?? [];
 
         for (const [index, sectionHit] of sectionHits.entries()) {
@@ -443,7 +475,6 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
             break;
           }
 
-          const href = section.href ?? "";
           const excerpt = sectionHit.excerpt?.trim() ?? normalizedQuery;
 
           hits.push({

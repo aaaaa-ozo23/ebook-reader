@@ -16,6 +16,8 @@ import type {
 
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
+import { buildMappedSearchExcerpt, findSearchTextMatches } from "../reader/searchText";
+
 export type { PdfViewMode } from "@reader/core";
 
 export interface PdfPosition {
@@ -232,51 +234,49 @@ export class PdfReaderAdapter implements ReaderAdapter<PdfLocator> {
   }
 
   async search(query: string): Promise<SearchHit<PdfLocator>[]> {
-    const normalizedQuery = query.trim().toLocaleLowerCase();
-
-    if (normalizedQuery.length === 0) {
+    if (query.trim().length === 0) {
       return [];
     }
 
     const document = this.requireDocument();
     const hits: SearchHit<PdfLocator>[] = [];
+    let searchableCharacters = 0;
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
       const page = await document.getPage(pageNumber);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item) => (isPdfTextItem(item) ? item.str : ""))
-        .join(" ");
-      const normalizedPageText = pageText.toLocaleLowerCase();
-      let matchIndex = normalizedPageText.indexOf(normalizedQuery);
+      const pageText = buildPdfSearchText(textContent.items);
+      searchableCharacters += pageText.trim().length;
+      const matches = findSearchTextMatches(pageText, query, 100 - hits.length);
 
-      while (matchIndex !== -1 && hits.length < 100) {
-        const selectedText = pageText.slice(matchIndex, matchIndex + query.length);
+      for (const match of matches) {
+        const selectedText = pageText.slice(match.start, match.end);
+        const excerpt = buildMappedSearchExcerpt(pageText, match);
 
         hits.push({
-          id: `pdf-search-${pageNumber}-${matchIndex}`,
+          id: `pdf-search-${pageNumber}-${match.start}`,
           locator: {
             kind: "pdf",
             page: pageNumber,
             selectedText,
-            contextBefore: pageText.slice(Math.max(0, matchIndex - 80), matchIndex),
-            contextAfter: pageText.slice(
-              matchIndex + query.length,
-              matchIndex + query.length + 80,
-            ),
+            contextBefore: pageText.slice(Math.max(0, match.start - 80), match.start),
+            contextAfter: pageText.slice(match.end, match.end + 80),
           },
-          excerpt: buildSearchExcerpt(pageText, matchIndex, query.length),
+          excerpt: excerpt.text,
+          excerptMatchStart: excerpt.matchStart,
+          excerptMatchEnd: excerpt.matchEnd,
         });
-
-        matchIndex = normalizedPageText.indexOf(
-          normalizedQuery,
-          matchIndex + Math.max(1, normalizedQuery.length),
-        );
       }
 
       if (hits.length >= 100) {
         break;
       }
+    }
+
+    if (searchableCharacters === 0) {
+      throw new Error(
+        "pdf-no-searchable-text: This PDF has no searchable text layer. OCR is not available.",
+      );
     }
 
     return hits;
@@ -1067,7 +1067,15 @@ function pdfPageToTocItem(page: number, totalPages: number): TocItem {
   };
 }
 
-function isPdfTextItem(item: unknown): item is { str: string } {
+interface PdfSearchTextItem {
+  str: string;
+  hasEOL?: boolean;
+  height?: number;
+  transform?: number[];
+  width?: number;
+}
+
+function isPdfTextItem(item: unknown): item is PdfSearchTextItem {
   return (
     typeof item === "object" &&
     item !== null &&
@@ -1076,17 +1084,53 @@ function isPdfTextItem(item: unknown): item is { str: string } {
   );
 }
 
-function buildSearchExcerpt(
-  text: string,
-  matchIndex: number,
-  queryLength: number,
-): string {
-  const excerptStart = Math.max(0, matchIndex - 48);
-  const excerptEnd = Math.min(text.length, matchIndex + queryLength + 72);
-  const prefix = excerptStart > 0 ? "..." : "";
-  const suffix = excerptEnd < text.length ? "..." : "";
+export function buildPdfSearchText(items: unknown[]): string {
+  const textItems = items.filter(isPdfTextItem).filter((item) => item.str.length > 0);
+  let output = "";
+  let previous: PdfSearchTextItem | undefined;
 
-  return `${prefix}${text.slice(excerptStart, excerptEnd).trim()}${suffix}`;
+  for (const item of textItems) {
+    if (previous !== undefined) {
+      output += getPdfTextSeparator(previous, item);
+    }
+    output += item.str;
+    previous = item;
+  }
+
+  return output;
+}
+
+function getPdfTextSeparator(
+  previous: PdfSearchTextItem,
+  current: PdfSearchTextItem,
+): string {
+  if (previous.hasEOL === true) return "\n";
+
+  const previousX = previous.transform?.[4];
+  const previousY = previous.transform?.[5];
+  const currentX = current.transform?.[4];
+  const currentY = current.transform?.[5];
+
+  if (
+    previousX === undefined ||
+    previousY === undefined ||
+    currentX === undefined ||
+    currentY === undefined
+  ) {
+    return shouldJoinPdfFragments(previous.str, current.str) ? "" : " ";
+  }
+
+  const lineHeight = Math.max(1, previous.height ?? 0, current.height ?? 0);
+  if (Math.abs(previousY - currentY) > lineHeight * 0.55) return "\n";
+
+  const previousEnd = previousX + (previous.width ?? 0);
+  const gap = currentX - previousEnd;
+  if (gap <= lineHeight * 0.12) return "";
+  return " ";
+}
+
+function shouldJoinPdfFragments(previous: string, current: string): boolean {
+  return !/\s$/u.test(previous) && !/^\s/u.test(current);
 }
 
 function getOutputScale(): number {

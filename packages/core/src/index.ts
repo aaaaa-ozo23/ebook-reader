@@ -258,7 +258,11 @@ export interface BackupOptions {
   includeBooks: boolean;
 }
 
-export type DataOperationKind = "backup-export" | "backup-restore" | "batch-import";
+export type DataOperationKind =
+  | "backup-export"
+  | "backup-restore"
+  | "batch-import"
+  | "library-search-index";
 export type OperationProgressPhase =
   | "preparing"
   | "scanning"
@@ -363,6 +367,59 @@ export interface SearchHit<TLocator extends Locator = Locator> {
   id: string;
   locator: TLocator;
   excerpt: string;
+  excerptMatchStart?: number;
+  excerptMatchEnd?: number;
+}
+
+export type LibrarySearchIndexState =
+  | "empty"
+  | "ready"
+  | "needs-index"
+  | "indexing"
+  | "partial";
+
+export interface LibrarySearchStatus {
+  state: LibrarySearchIndexState;
+  totalBooks: number;
+  indexedBooks: number;
+  pendingBooks: number;
+  failedBooks: number;
+  noTextBooks: number;
+}
+
+export type LibrarySearchTarget =
+  | { kind: "metadata" }
+  | { kind: "txt"; charOffset: number }
+  | { kind: "epub"; href: string; charOffset?: number; matchIndex?: number }
+  | { kind: "pdf"; page: number; charOffset?: number; matchIndex?: number };
+
+export interface LibrarySearchHit {
+  id: string;
+  bookId: string;
+  title: string;
+  author?: string;
+  format: BookFormat;
+  readerFormat: ReaderFormat;
+  availability: BookAvailability;
+  excerpt: string;
+  excerptMatchStart: number;
+  excerptMatchEnd: number;
+  locationLabel: string;
+  target: LibrarySearchTarget;
+}
+
+export interface LibrarySearchResult {
+  query: string;
+  hits: LibrarySearchHit[];
+  truncated: boolean;
+}
+
+export interface LibrarySearchRebuildResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  indexedBooks: number;
+  failedBooks: number;
+  noTextBooks: number;
 }
 
 export interface ReaderAdapter<TLocator extends Locator = Locator> {

@@ -25,6 +25,7 @@ import {
   getLocatorLabel,
 } from "./readerAnnotationPresentation";
 import { ReaderIcon, type ReaderIconName } from "./ReaderIcons";
+import { findSearchTextMatches } from "./searchText";
 
 export type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
 
@@ -496,7 +497,7 @@ function ReaderSidebar({
                   onClick={() => onJumpToSearchResult(hit)}
                 >
                   <small>{getLocatorLabel(hit.locator)}</small>
-                  <span>{highlightSearchExcerpt(hit.excerpt, searchQuery)}</span>
+                  <span>{highlightSearchExcerpt(hit, searchQuery)}</span>
                   <ReaderIcon name="external" />
                 </button>
               ))}
@@ -515,18 +516,19 @@ function getSidebarIcon(tab: ReaderSidebarTab): ReaderIconName {
   return "search";
 }
 
-function highlightSearchExcerpt(excerpt: string, query: string): ReactNode {
-  const normalizedQuery = query.trim();
-  if (normalizedQuery === "") return excerpt;
-  const index = excerpt
-    .toLocaleLowerCase()
-    .indexOf(normalizedQuery.toLocaleLowerCase());
-  if (index < 0) return excerpt;
+function highlightSearchExcerpt(hit: SearchHit<Locator>, query: string): ReactNode {
+  const explicitStart = hit.excerptMatchStart;
+  const explicitEnd = hit.excerptMatchEnd;
+  const fallback = findSearchTextMatches(hit.excerpt, query, 1)[0];
+  const start = explicitStart ?? fallback?.start;
+  const end = explicitEnd ?? fallback?.end;
+
+  if (start === undefined || end === undefined || end <= start) return hit.excerpt;
   return (
     <>
-      {excerpt.slice(0, index)}
-      <mark>{excerpt.slice(index, index + normalizedQuery.length)}</mark>
-      {excerpt.slice(index + normalizedQuery.length)}
+      {hit.excerpt.slice(0, start)}
+      <mark>{hit.excerpt.slice(start, end)}</mark>
+      {hit.excerpt.slice(end)}
     </>
   );
 }

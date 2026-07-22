@@ -12,8 +12,8 @@ depending on machine-specific paths.
   core reading data by default.
 - Original EPUB, TXT, PDF, MOBI, and AZW3 library copies: excluded by default and available as
   an explicit option. MOBI/AZW3 exports also include their verified reader EPUB derivative.
-- Reader caches, absolute source/library paths, update-check timestamps, logs, and other
-  machine-only state: always excluded.
+- Reader caches, the rebuildable full-text search index, absolute source/library paths,
+  update-check timestamps, logs, and other machine-only state: always excluded.
 
 The suggested file name is `ebook-reader-backup-YYYY-MM-DD.erbackup`.
 
