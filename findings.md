@@ -29,6 +29,14 @@
 - **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
 - **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
 
+## 2026-07-22 大阶段 14.5：全库检索与搜索正确性状态板
+
+- **现有算法根因：** TXT/PDF 对 lowercased 文本执行 `indexOf` 后继续使用原 query 长度切片，大小写折叠或 Unicode 规范化改变 code unit 数时 selectedText、context 和 locator 会漂移；结果高亮又在侧栏独立重复简单 lowercase 算法。
+- **PDF 根因：** 当前把每个 PDF.js text item 用固定空格拼接，既会把一个词拆成两段导致漏报，也会在原本相邻文字间制造错误词边界；后续必须基于 item 几何/换行与原始 span 建立可逆文本映射。无文本层必须明确 `No searchable text`，v0.3 不承诺 OCR。
+- **EPUB 派生格式根因：** EPUB/MOBI/AZW3 直接依赖 epub.js `section.find()`，没有共享规范化或跨 inline DOM 节点的可验证 offset map；后续以 spine 文本视图匹配并映射到 CFI range，摘录、选中文字与回跳必须来自同一原始范围。
+- **设计结构：** 桌面 rail 增加 Search；结果按书分组并保留真实源格式标签。准确性板把 EPUB 派生、PDF、TXT 和无文本 PDF 的不同定位契约并列；维护板覆盖 rebuild/cancel、损坏缓存、missing file 和单书失败；移动板使用现有 375px 全屏 sheet。
+- **审核边界：** 四张板只定义生产规格，不含 schema、Tauri 命令或 React/CSS。内置 Browser 按安全策略拒绝本地 `file://` 预览，未绕过；仓库锁定 Chromium 以 1440×900 逐页渲染、断言单一 active board 与零溢出并人工目检。
+
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 
 - **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。

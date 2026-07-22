@@ -3,7 +3,7 @@
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态
-- **当前状态：** 14.4 implementation_complete；全量门禁通过，等待阶段提交与合并
+- **当前状态：** 14.5 design_awaiting_review；四张全库/多语言搜索状态板已生成，未改生产代码
 - **备份编译修正：** 首轮将备份字体的 `u64 fileSize` 直接传给 rusqlite，`ToSql` 不支持该类型；数据库列受 20 MiB 上限约束，已在写入事务处安全转换为 `i64`，备份 JSON 仍保留无符号大小契约。
 - **迁移测试修正：** 全量 Rust 首轮 64/65；唯一失败是旧测试仍锁定 schema v6/10 tables。已升级为 v7/11 tables 并显式验证 `custom_fonts`，不是迁移执行失败。
 - **当前分支：** `codex/stage14-custom-fonts`
@@ -56,6 +56,20 @@
 - 内置 Browser 首轮与最终 Chromium 截图关闭桌面双标题、移动页头实心图标和小字对比度偏差。1280/900/640/375 无横向溢出，移动 back/close/import 均至少 44px，reduced-motion、焦点恢复、console 0 与 axe serious/critical 0。
 - 最终门禁：`pnpm.cmd check` 通过（Core 9/9、Desktop 184/184）；Cargo fmt 与 Rust 65/65；Playwright 31/31，含 DPR2、TXT、MOBI/AZW3 和独立 500 页 PDF 性能轨。
 - 新增 14.5 缺陷范围：现有书内搜索在 EPUB/PDF/MOBI/AZW3 有错误或漏报，必须与全库搜索一起修复多语言规范化、跨节点/跨 text item 匹配、摘录与 locator 精确回跳；中文、英文、重音组合字符及主流非拉丁文字均需 fixtures。
+
+### 14.4 Git 收口
+
+- 实现提交 `9e37dcc`、测试提交 `1a1616f`、文档提交 `8bb4576` 已推送至 `codex/stage14-custom-fonts`。
+- 14.4 已通过 `--no-ff` 合入并推送 `codex/v0.3.0-integration`，合并提交 `86821bd`。
+- `.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+
+### 14.5 全库检索与多语言搜索设计审核
+
+- 从最新集成提交 `86821bd` 创建并推送 `codex/stage14-library-search-index`；当前只包含设计资产、算法审计和审核契约。
+- 四张状态板覆盖桌面按书分组的全库结果、多语言/跨节点书内搜索正确性、索引 rebuild/cancel/损坏/missing/no-text PDF 状态，以及两个 375px 全屏 sheet。
+- 状态板明确 `Ctrl+Shift+F` 与现有 `Ctrl+F` 分工，源格式标签、正确摘录与 locator 同源、索引可删除/不备份、取消后已完成书籍继续可用、单书失败不阻塞其他书。
+- 现有实现审计确认三类缺陷：Unicode 大小写/规范化后的 offset 漂移；PDF text item 固定插空格；EPUB `section.find()` 与侧栏高亮各自使用不一致的简化匹配。14.5 生产实现必须先解决这些问题，再接 FTS 与 UI。
+- 四张 PNG 均由仓库 Chromium 真实渲染为 1440×900，页面断言 `scrollWidth/clientWidth=1440`、`scrollHeight/clientHeight=900` 且只存在一个 active board；逐图目检无裁切或重叠。内置 Browser 拒绝 `file://` URL，已按安全策略停止，未尝试规避。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 

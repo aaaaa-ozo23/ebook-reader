@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.4 自定义字体：implementation complete，等待 Git 收口。四张 Reading & Fonts 桌面/375px 状态板已按批准规格落地；`0007_custom_fonts.sql`、受限 TTF/OTF 校验与内容寻址存储、TXT/EPUB 字体映射、备份恢复和生产 UI 已通过全量门禁。合回集成分支后只进入 14.5 状态板审核，不改正式版本、不创建 tag/Release、不开始 Stage 15。
+大阶段 14.5 全书库检索与多语言搜索修复：design awaiting review。14.4 已以 `--no-ff` 合入并推送 v0.3 集成分支；当前分支只提交桌面全库结果、多语言书内搜索正确性、索引操作/错误和 375px sheet 四张状态板。用户批准前不创建 `0008_library_search.sql`，不修改生产搜索代码；不改正式版本、不创建 tag/Release、不开始 Stage 15。
 
 ## 分支策略
 
