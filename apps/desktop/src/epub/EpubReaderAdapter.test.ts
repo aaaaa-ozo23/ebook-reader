@@ -68,6 +68,55 @@ describe("buildEpubThemeRules", () => {
   });
 });
 
+describe("EPUB multilingual search", () => {
+  it("returns an exact CFI range across inline nodes after Unicode folding", async () => {
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-search",
+      container: document.createElement("div"),
+      sourceUrl: "blob:epub-search",
+      theme: defaultReaderTheme,
+    });
+    const sectionDocument = document.implementation.createHTMLDocument("Chapter");
+    sectionDocument.body.innerHTML =
+      "<p>Un <em>café</em> déjà <strong>vu</strong> dans l’histoire.</p>";
+    const cfiFromRange = vi.fn((range: Range) => {
+      expect(range.toString()).toBe("café déjà vu");
+      return "epubcfi(/6/2!/4/2,/1:3,/3:2)";
+    });
+    const unload = vi.fn();
+    const section = {
+      cfiFromRange,
+      document: sectionDocument,
+      href: "chapter.xhtml",
+      load: vi.fn(),
+      unload,
+    };
+    const internals = adapter as unknown as {
+      book: {
+        load: unknown;
+        spine: { each: (callback: (value: typeof section) => void) => void };
+      };
+    };
+    internals.book = {
+      load: vi.fn(),
+      spine: { each: (callback) => callback(section) },
+    };
+
+    const hits = await adapter.search("CAFE\u0301 DE\u0301JA\u0300 VU");
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.locator).toMatchObject({
+      cfi: "epubcfi(/6/2!/4/2,/1:3,/3:2)",
+      href: "chapter.xhtml",
+      selectedText: "café déjà vu",
+    });
+    expect(
+      hits[0]?.excerpt.slice(hits[0].excerptMatchStart, hits[0].excerptMatchEnd),
+    ).toBe("café déjà vu");
+    expect(unload).toHaveBeenCalledOnce();
+  });
+});
+
 describe("EPUB selection annotations", () => {
   function createAdapter(onSelected = vi.fn()) {
     return new EpubReaderAdapter({
