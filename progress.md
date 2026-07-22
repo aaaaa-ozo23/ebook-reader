@@ -70,6 +70,13 @@
 - 状态板明确 `Ctrl+Shift+F` 与现有 `Ctrl+F` 分工，源格式标签、正确摘录与 locator 同源、索引可删除/不备份、取消后已完成书籍继续可用、单书失败不阻塞其他书。
 - 现有实现审计确认三类缺陷：Unicode 大小写/规范化后的 offset 漂移；PDF text item 固定插空格；EPUB `section.find()` 与侧栏高亮各自使用不一致的简化匹配。14.5 生产实现必须先解决这些问题，再接 FTS 与 UI。
 - 四张 PNG 均由仓库 Chromium 真实渲染为 1440×900，页面断言 `scrollWidth/clientWidth=1440`、`scrollHeight/clientHeight=900` 且只存在一个 active board；逐图目检无裁切或重叠。内置 Browser 拒绝 `file://` URL，已按安全策略停止，未尝试规避。
+- 用户批准 01 桌面全库结果、03 索引维护/错误和 04 移动 sheet；02 多语言书内搜索板仅需降低深墨侧栏命中高亮的饱和度/明度对比，正文必须清楚可读。生产门禁明确同时覆盖全库搜索和每本书原有书内搜索。
+- 新增 Import folder 回归修复：扫描进度不得以“根目录 1/1”冒充全部完成，阶段轨必须随递归扫描/分类变化，扫描成功后必须进入可选择的文件预览；取消、空目录、超限、unsupported 和单项错误均需测试。
+- 根因已落到代码：Rust scan 发出非法 `reading` 阶段，前端 `isImporting = progress !== null && result === null` 把扫描事件误判为正式导入，且 scan resolve 不清 progress。计划新增独立 `codex/stage14-folder-import-fix`，先完成该回归并合入集成，再进入 14.5 生产搜索实现。
+- 第二次计划补丁也因 Markdown 表格中的 `375px状态板` 与预期空格不一致而未修改文件；已改为精确上下文应用，产品代码和状态板均未受影响。
+- 02 修订板已重新以 Chromium 1440×900 渲染；侧栏 computed style 为 `rgba(148, 211, 206, 0.16)` / `rgb(247, 251, 250)`，逐图目检确认中文正文不再落在高亮色块中丢失笔画，右侧浅色卡片高亮未变。
+- 修订渲染命令先在 `apps/desktop` 工作目录误用根目录 Prettier 路径，格式化子命令未执行但 Chromium 截图成功；不将该次格式结果计为通过，最终从仓库根重新执行 Prettier 与 diff check。
+- 记录一次无产品影响的文档补丁失败：首个 `apply_patch` 上下文少了 `Chromium` 与 `以` 之间的空格，未修改任何文件；已用精确行重新应用，不重复原命令。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 

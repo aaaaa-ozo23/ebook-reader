@@ -36,6 +36,10 @@
 - **EPUB 派生格式根因：** EPUB/MOBI/AZW3 直接依赖 epub.js `section.find()`，没有共享规范化或跨 inline DOM 节点的可验证 offset map；后续以 spine 文本视图匹配并映射到 CFI range，摘录、选中文字与回跳必须来自同一原始范围。
 - **设计结构：** 桌面 rail 增加 Search；结果按书分组并保留真实源格式标签。准确性板把 EPUB 派生、PDF、TXT 和无文本 PDF 的不同定位契约并列；维护板覆盖 rebuild/cancel、损坏缓存、missing file 和单书失败；移动板使用现有 375px 全屏 sheet。
 - **审核边界：** 四张板只定义生产规格，不含 schema、Tauri 命令或 React/CSS。内置 Browser 按安全策略拒绝本地 `file://` 预览，未绕过；仓库锁定 Chromium 以 1440×900 逐页渲染、断言单一 active board 与零溢出并人工目检。
+- **审核反馈：** 桌面全库结果、索引操作/错误和 375px sheet 三张已批准；多语言书内搜索板需把深墨侧栏中的命中底色调得更浅、更柔和，确保白色正文仍清晰。全库搜索与每一本书的既有 `Ctrl+F` 搜索必须共同完成、共同回归，不能用新入口替代旧能力。
+- **新增导入缺陷：** 用户实测 Import folder 在扫描阶段把总进度直接填满，六阶段状态不更新，随后也没有显示文件预览。当前只定位到 `BatchImportDialog`、`scanImportPaths` 与 Rust `batch_import` 事件链；下一步需区分“选择根目录 1/1”和“递归发现/分类 N 项”，检查扫描期是否实际发送结构化进度，以及前端是否把 `completed/total` 错当作完整导入进度。
+- **Import folder 根因确认：** Rust `scan_import_paths` 在完整收集 candidates 后逐项 hash，却发送不在 Core `OperationProgressPhase` 中的 `phase: "reading"`；前端把任意 `progress !== null` 都视为正式导入，扫描第一条事件就切到 progress view。扫描 Promise resolve 后只保存 preview、不清除 progress，因此预览永久被遮蔽；单根目录最后一项的 `completed=total=1` 又被画成 100%。修复必须拥有独立 scan/import 状态并让 scan completion 原子切换到 preview。
+- **高亮修订：** 书内深墨侧栏不再使用与浅色内容区相同的实心 `#bfe1dd`。修订稿使用 `rgba(148, 211, 206, 0.16)` 的低饱和薄雾底色、白色正文和一条 48% 透明度的细内阴影，命中范围仍可辨认但不遮蔽中文笔画；浅色内容区的高亮保持原样。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 
