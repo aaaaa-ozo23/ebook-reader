@@ -8,6 +8,8 @@ depending on machine-specific paths.
 
 - Core reading data: included and required.
 - Managed covers: included by default.
+- App-local custom font registrations and their content-addressed TTF/OTF files: included with
+  core reading data by default.
 - Original EPUB, TXT, PDF, MOBI, and AZW3 library copies: excluded by default and available as
   an explicit option. MOBI/AZW3 exports also include their verified reader EPUB derivative.
 - Reader caches, absolute source/library paths, update-check timestamps, logs, and other
@@ -29,6 +31,8 @@ Every archive contains:
 - `data.json`: portable book identity and metadata, reader settings/layout/theme, progress,
   bookmarks, annotations, and annotation deletion tombstones.
 - `covers/`: optional managed cover payloads, addressed by the book file hash.
+- `fonts/`: app-local static TTF/OTF payloads, addressed by SHA-256. Restore deduplicates them by
+  hash and remaps the selected `fontId` to the local registration.
 - `books/`: optional managed original book payloads, addressed by the source file hash. For
   MOBI/AZW3 this also includes the verified EPUB derivative used by the reader.
 
@@ -57,8 +61,8 @@ unsupported major versions, undeclared or missing payloads, checksum/declared-si
 excessive entry counts or sizes, and unsafe compression ratios. Unknown optional fields are
 ignored; older supported formats must pass an explicit migrator before merge.
 
-Files are first extracted beneath app-data staging. Verified books and covers are moved into the
-managed library by content address without overwriting different content. If the database merge
+Files are first extracted beneath app-data staging. Verified books, covers, and fonts are moved
+into their managed directories by content address without overwriting different content. If the database merge
 fails, the transaction rolls back and files newly introduced by that restore are removed.
 Cancellation stops new work and performs the same cleanup.
 
@@ -70,6 +74,9 @@ Cancellation stops new work and performs the same cleanup.
 - Annotation `deletedAt` tombstones participate in that comparison so deleted notes do not
   reappear.
 - Settings match by key with the same timestamp rule; `lastOpenedAt` keeps the newer value.
+- Custom fonts match by file hash. The newer enabled/disabled state wins, and a selected font ID is
+  mapped to the local registration; an unavailable font payload is skipped rather than leaving a
+  broken selection.
 - User title, author, and cover overrides merge independently by field timestamp; resetting one
   field does not clear the others or replace the extracted automatic metadata.
 - If an original file is absent and no matching local file exists, the book remains visible as

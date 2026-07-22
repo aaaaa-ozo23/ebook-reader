@@ -3,7 +3,9 @@
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态
-- **当前状态：** 14.4 design_review_pending；14.3 已提交、推送并 `--no-ff` 合回集成分支
+- **当前状态：** 14.4 implementation_complete；全量门禁通过，等待阶段提交与合并
+- **备份编译修正：** 首轮将备份字体的 `u64 fileSize` 直接传给 rusqlite，`ToSql` 不支持该类型；数据库列受 20 MiB 上限约束，已在写入事务处安全转换为 `i64`，备份 JSON 仍保留无符号大小契约。
+- **迁移测试修正：** 全量 Rust 首轮 64/65；唯一失败是旧测试仍锁定 schema v6/10 tables。已升级为 v7/11 tables 并显式验证 `custom_fonts`，不是迁移执行失败。
 - **当前分支：** `codex/stage14-custom-fonts`
 - **基线：** v0.3 integration merge `1bdd2a7`
 
@@ -44,6 +46,16 @@
 - 四张状态板覆盖桌面 Reading & Fonts 字体库、TTF/OTF 导入确认、重复/不支持/删除当前字体回退，以及 375px 全屏 sheet。
 - 设计明确 app-local、不安装到 Windows、20 MiB 上限、许可责任前置、hash 去重、删除当前字体立即回退 Lora，以及 PDF 保留文档嵌入字体。
 - 静态源在 1440×900 与 375×812 真实渲染后逐图检查；移动端手势把手避开所有字体开关，主操作保持 44px 以上。
+- 用户于 2026-07-22 批准全部四张状态板；从本条起它们是生产实现规格，允许开始 migration、Rust/Tauri、React/CSS、备份与测试。
+- 实现边界继续锁定：静态 TTF/OTF、20 MiB、内容 hash 去重、应用私有目录、TXT/EPUB 使用、PDF 保持嵌入字体；不顺带开放 TTC/OTC/WOFF/WOFF2。
+- 后端首轮 `cargo check` 仅发现 `list_custom_fonts_at` 尾表达式的 rusqlite `MappedRows` 临时生命周期过长；不是 schema/解析逻辑错误，改为先收集到局部 `Vec` 再返回，避免重复同一失败命令。
+- 首次单独运行 desktop build 时共享 core 尚未先重建，因此新 `CustomFont/fontId` 导出仍是旧产物；同时 ReaderShell 的 `document` 状态名遮蔽了全局 DOM document。后续改为 `globalThis.document.fonts` 并先构建 `@reader/core`，不把旧 core 产物误判成接口缺失。
+- `0007_custom_fonts.sql`、静态 TTF/OTF 容器/name/cmap/head/outline 校验、20 MiB 上限、内容 hash 去重和 app-data 原子写入已完成；没有向 core 引入 DOM/Tauri 依赖，也没有安装字体到 Windows。
+- Reading & Fonts 已按四张批准稿接入设置中心；导入先 inspect/review，再确认复制；启停或删除选中字体会立即保存 Lora 回退。TXT/EPUB 使用稳定内部 family alias，EPUB 只向 rendition iframe 注入；PDF 明确保持文档嵌入字体。
+- 备份 v2 默认携带字体注册和文件，恢复按 hash 去重并重映射 `fontId`；v1 通过 serde 默认字段继续兼容。缺失或损坏字体不会阻止应用启动。
+- 内置 Browser 首轮与最终 Chromium 截图关闭桌面双标题、移动页头实心图标和小字对比度偏差。1280/900/640/375 无横向溢出，移动 back/close/import 均至少 44px，reduced-motion、焦点恢复、console 0 与 axe serious/critical 0。
+- 最终门禁：`pnpm.cmd check` 通过（Core 9/9、Desktop 184/184）；Cargo fmt 与 Rust 65/65；Playwright 31/31，含 DPR2、TXT、MOBI/AZW3 和独立 500 页 PDF 性能轨。
+- 新增 14.5 缺陷范围：现有书内搜索在 EPUB/PDF/MOBI/AZW3 有错误或漏报，必须与全库搜索一起修复多语言规范化、跨节点/跨 text item 匹配、摘录与 locator 精确回跳；中文、英文、重音组合字符及主流非拉丁文字均需 fixtures。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
 

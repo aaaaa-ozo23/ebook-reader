@@ -25,6 +25,9 @@
 - **失败与回退：** duplicate 指向既有条目，TTC 示例用明确的静态 TTF/OTF 范围解释；删除当前字体必须在确认框中预告 `Literata → Lora`，确认后立即保存回退。
 - **移动端：** 375px 使用现有全屏 sheet、顶部 back/close、底部 sticky Import font 与右缘可中断手势把手；把手位于空白区，不覆盖字体开关或许可提示。
 - **设计边界：** 当前分支只提交四张状态板与可编辑 HTML，等待用户批准；不提前创建 schema、后端命令或生产 UI。
+- **批准状态：** 用户已批准全部四张状态板；实现必须忠实保留入口层级、导入确认、许可提示、duplicate/unsupported 结果、当前字体删除回退和 375px sticky action，不再重新解释设计。
+- **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
+- **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
 
 ## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
 

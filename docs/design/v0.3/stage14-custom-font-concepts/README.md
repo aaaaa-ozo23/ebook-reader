@@ -1,8 +1,8 @@
 # Stage 14.4 custom font UI concept review set
 
-Status: `awaiting_review`
+Status: `approved_and_implemented`
 
-These four boards extend the approved Stage 13 settings system. They are design assets only; no custom-font migration, Tauri command, React component or production CSS is included in this branch yet.
+These four boards extend the approved Stage 13 settings system. The user approved all four on 2026-07-22; the production implementation and its fidelity evidence are recorded in `../stage14-custom-font-fidelity.md`.
 
 | Board | File | Review scope |
 | --- | --- | --- |
