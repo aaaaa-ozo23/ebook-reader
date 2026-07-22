@@ -42,6 +42,14 @@
 - **高亮修订：** 书内深墨侧栏不再使用与浅色内容区相同的实心 `#bfe1dd`。修订稿使用 `rgba(148, 211, 206, 0.16)` 的低饱和薄雾底色、白色正文和一条 48% 透明度的细内阴影，命中范围仍可辨认但不遮蔽中文笔画；浅色内容区的高亮保持原样。
 - **最终批准：** 用户已批准修订后的准确性板，14.5 四张状态板全部成为生产规格。后续不得用全库搜索替代书内搜索，也不得恢复更重的深墨侧栏命中底色。
 
+### 14.5 生产搜索结论
+
+- **共享匹配模型：** 前端 `searchText` 以 NFKC、Unicode fold、组合标记与折叠空白构建原文 offset map；TXT、EPUB、PDF 书内搜索和侧栏高亮复用该映射。EPUB 通过 DOM Range 生成 CFI，PDF 按 text item 几何重建文字，不再在每个 glyph 之间伪造空格。
+- **精确回跳：** 索引结果保存 EPUB href/PDF page、原始 offset 和同一章节/页内 occurrence；重复词不再一律跳到首个命中。MOBI/AZW3 继续通过派生 EPUB 和现有 CFI 能力打开。
+- **索引边界：** schema v8 使用 SQLite FTS5 trigram、chunk overlap 与 `readerHash` 失效；短于三个字符的 CJK 查询走本地精确扫描。索引是可删除 cache、不进入备份；无文本层 PDF 明确报告 no searchable text，不暗示 OCR。
+- **运行态纠偏：** 375px 筛选 chip 从 36px 收口到 44px；搜索关闭时不再聚焦已卸载的旧 DOM 节点，而是解析重新挂载的 Search 触发器或书架主区。内置 Browser 最终 warning/error 0、375/375 无溢出。
+- **依赖结论：** `pdf-extract 0.12.0` 为 MIT，`unicode-normalization 0.1.25` 为 MIT OR Apache-2.0，已进入第三方声明与锁文件；没有新增网络或 OCR 依赖。
+
 ## 2026-07-22 大阶段 14.5a：文件夹导入回归修复
 
 - **根因：** `BatchImportDialog` 以任意非空 progress 推导 `isImporting`，扫描第一条事件即误进正式导入页；scan resolve 只保存 preview、不清 progress，导致预览永久被遮蔽。单根目录的最后一条扫描事件又把 1/1 画成 100%。

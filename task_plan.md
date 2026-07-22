@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.5 全书库检索与多语言书内搜索：implementation in progress。四张搜索状态板均已批准；14.5a 文件夹导入回归已通过完整门禁并合入集成基线。当前同时修复每本书原有搜索并实现 `0008_library_search.sql` 与全书库搜索；14.6 仍须先提交状态板并暂停审核。
+大阶段 14.5 全书库检索与多语言书内搜索：acceptance complete，等待 Git 收口。共享 Unicode 范围映射、`0008_library_search.sql`、可取消本地索引、精确回跳和批准 UI 均已完成并通过全量门禁；14.6 仍须先提交状态板并暂停审核。
 
 ## 分支策略
 
@@ -529,7 +529,7 @@
 | 14.3 MOBI/AZW3 导入（acceptance complete） | `codex/stage14-mobi-import` | 仅在 14.1/14.2 go 后接入导入、转换进度、去重和错误反馈，内部继续走 EPUB adapter；同步关闭书签空态和非 Focus Double fidelity 缺口 | 原文件保留；转换产物可追踪/删除；书库、文件关联、备份和许可证清单通过；Core 9、Desktop 178、Rust 61、Playwright 29/29、签名 NSIS/MSI 双构建通过 |
 | 14.4 自定义字体（implementation complete） | `codex/stage14-custom-fonts` | 导入本地字体、校验许可提示/格式、管理启停并映射到 TXT/EPUB | 四张桌面/375px状态板已复刻；损坏字体不影响启动；卸载字体有回退；PDF 不承诺替换文档字体；Core 9、Desktop 184、Rust 65、Playwright 31 全通过 |
 | 14.5a 文件夹导入回归修复（acceptance complete） | `codex/stage14-folder-import-fix` | 拆分 scan/import progress 生命周期；递归发现使用不确定进度，候选收集后显示 Hashing n/N，并在完成后原子进入可勾选预览 | Core 9、Desktop 187、Rust 66、Playwright 31 全通过；多层目录、空目录、取消、unsupported/duplicate 与扫描后预览均覆盖 |
-| 14.5 全书库全文检索 | `codex/stage14-library-search-index` | 先审计并修复现有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索，再建立共享的多语言规范化、可失效本地索引、后台队列、结果和跳转；不上传内容 | 中文无空格、英文大小写、重音/组合字符、主流非拉丁文字、跨 HTML/PDF 文本项均有正确摘录和定位断言；导入/删除/修复触发增量索引；大书库搜索可取消；索引损坏可重建 |
+| 14.5 全书库全文检索（acceptance complete） | `codex/stage14-library-search-index` | 先审计并修复现有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索，再建立共享的多语言规范化、可失效本地索引、后台队列、结果和跳转；不上传内容 | 共享原文 offset map、跨 HTML/PDF item、精确重复命中回跳、可取消/重建索引与批准 UI 完成；Core 9、Desktop 206、Rust 74、Playwright 33 全通过 |
 | 14.6 阅读历史与统计 | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 默认本地、可关闭/删除/导出；休眠和后台时间不计入有效阅读 |
 | 14.7 阶段 14 验收 | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | 未通过 gate 的能力不进入发布；完整门禁和升级测试通过 |
 

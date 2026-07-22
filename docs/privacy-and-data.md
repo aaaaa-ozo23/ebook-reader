@@ -19,13 +19,17 @@ the app stores:
 
 | Path | Contents |
 |------|----------|
-| `ebook-reader.sqlite3` | Automatic and user-overridden book metadata, reading progress, bookmarks, annotations, preferences, cover state, and versioned reader caches |
+| `ebook-reader.sqlite3` | Automatic and user-overridden book metadata, reading progress, bookmarks, annotations, preferences, cover state, versioned reader caches, and the rebuildable local full-text search index |
 | `library/` | Private app-managed copies of imported EPUB, TXT, and PDF files |
 | `library/covers/` | Locally extracted EPUB covers and locally rendered PDF first-page thumbnails |
 
 Reader caches contain generated EPUB locations and EPUB/PDF table-of-contents JSON. They do not
 contain a cached copy of the full book text. The shared fallback-cover image is bundled with the
 application and is not downloaded at runtime.
+
+Whole-library search stores extracted text chunks and FTS5 terms inside the local database. This
+derived index never leaves the device, is excluded from portable backups, and can be rebuilt from
+the managed reader files. See [Local library and in-book search](library-search.md).
 
 ## Browser development fallback
 
@@ -54,8 +58,9 @@ Back up the app data directory before a manual reset if progress or annotations 
 ## Portable backups
 
 **Settings → Data & Backup** exports a versioned `.erbackup` archive. Core reading data and
-managed covers are included by default; original book files are opt-in. Absolute paths and reader
-caches are never exported. App-local custom font registrations and their content-addressed files
+managed covers are included by default; original book files are opt-in. Absolute paths, reader
+caches, and the rebuildable full-text search index are never exported. App-local custom font
+registrations and their content-addressed files
 are included with core data by default. Export writes a temporary file and only publishes the final archive
 after all payloads have been written successfully.
 

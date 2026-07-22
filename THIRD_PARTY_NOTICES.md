@@ -14,6 +14,8 @@ files and notices supplied by each upstream project.
 | Tauri updater and minisign-verify | Signed update retrieval and verification | MIT OR Apache-2.0 |
 | epub.js | EPUB parsing and rendering | BSD-2-Clause |
 | PDF.js (`pdfjs-dist`) | PDF parsing and rendering | Apache-2.0 |
+| pdf-extract 0.12.0 | Local PDF text extraction for the rebuildable library index | MIT |
+| unicode-normalization 0.1.25 | Unicode normalization for multilingual local search | MIT OR Apache-2.0 |
 | libmobi `mobitool` 0.12 | Offline MOBI/AZW3 to EPUB conversion sidecar | LGPL-3.0-or-later |
 | JSZip | EPUB ZIP container support; used under its MIT option | MIT OR GPL-3.0-or-later |
 | pako | Compression support used by EPUB dependencies | MIT AND Zlib |
@@ -54,6 +56,11 @@ static libmobi, the upstream bundled miniz, and the upstream internal XML writer
 archive, detached signature, build instructions, SHA-256, maintainer key fingerprints, and LGPL
 text are recorded under `third_party/libmobi/`. Public distributions that include the sidecar must
 also distribute the corresponding source archive or a durable written source offer.
+
+The Stage 14.5 development audit includes the locked `pdf-extract` and Unicode-normalization
+dependency trees: 291 JavaScript packages and 556 Cargo packages, with no missing license or
+license-file metadata. Final v0.3 release artifacts and SBOMs remain subject to the Stage 14.7
+release audit.
 
 Upstream source, copyright, and exact license texts are available through the package metadata
 in `pnpm-lock.yaml`, `apps/desktop/src-tauri/Cargo.lock`, and the projects linked from their

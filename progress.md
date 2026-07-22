@@ -81,6 +81,16 @@
 - 本轮首次审批同步补丁因 `computed style 为` 的空格上下文不一致而整体未应用；已拆分为精确小补丁后成功，不重复失败命令，生产代码未受影响。
 - 首次使用 `pnpm.cmd exec prettier` 时命令解析未找到二进制；确认锁定依赖存在后改用仓库本地 `node_modules\\.bin\\prettier.cmd`，四份审批文档格式化成功。
 
+### 14.5 生产实现与验收
+
+- 新增 `0008_library_search.sql`、FTS5 trigram index/status/chunk、Rust 增量提取和 `get/rebuild/search_library` 命令；导入、repair、恢复、元数据/派生变化和删除会使本地索引失效或清理。
+- 修复原有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索：共享多语言原文 offset map、跨 inline DOM Range/CFI、PDF text-item 几何重建、无文本层明确失败、柔和侧栏高亮。
+- 全库 Search rail、`Ctrl+Shift+F`、结果分组/过滤、missing file、可取消 rebuild、375px full-screen UI 与精确重复命中回跳完成；搜索页继续为独立 lazy chunk，ReaderShell lazy boundary 保持。
+- 内置 Browser：1280/375 实页、console warning/error 0、无横向溢出、375px filters 44px、初始输入焦点和 Escape 返回焦点通过。
+- `pnpm.cmd check` 通过：Core 9/9、Desktop 206/206、ESLint、Prettier、TypeScript、production build；LibrarySearch gzip 2.76 kB，ReaderShell gzip 58.18 kB。
+- Cargo fmt、Rust 74/74、`git diff --check` 通过；Playwright 全矩阵 33/33，含 DPR2、reduced-motion、axe、MOBI/AZW3、500 页 PDF 和新增桌面/375px 全库搜索。
+- 过程修正：首次 Playwright 参数错误包含 `tests/` 前缀而未匹配用例；定向用例随后暴露了真实的卸载节点焦点恢复缺陷与测试的歧义 Search locator，分别修复产品焦点策略与 scope。首次 `pnpm check` 还发现 effect 状态更新规则和 Prettier 差异，已按 React 边界拆分后全量重跑。
+
 ### 14.5a 文件夹导入回归修复
 
 - 从最新集成 `86821bd` 创建并推送 `codex/stage14-folder-import-fix`；搜索生产分支只先封存四张批准状态板，未把导入修复混入搜索提交。
