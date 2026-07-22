@@ -101,11 +101,26 @@ pub fn scan_import_paths(
             .collect();
         let mut candidates = Vec::new();
         let mut truncated = false;
+        emit_progress(
+            app,
+            operation_id,
+            "scanning",
+            0,
+            0,
+            "Discovering books in selected folders",
+        );
         for path in paths {
             if canceled.load(Ordering::Acquire) {
                 break;
             }
-            collect_path(Path::new(&path), 0, None, &mut candidates, &mut truncated)?;
+            collect_path(
+                Path::new(&path),
+                0,
+                None,
+                &mut candidates,
+                &mut truncated,
+                &canceled,
+            )?;
             if truncated {
                 break;
             }
@@ -140,10 +155,10 @@ pub fn scan_import_paths(
             emit_progress(
                 app,
                 operation_id,
-                "reading",
+                "hashing",
                 index + 1,
                 total,
-                "Scanning import paths",
+                &format!("Checking {}", item.name),
             );
         }
         Ok(BatchPreview {
@@ -226,6 +241,14 @@ pub fn import_batch(
                 "Importing selected books",
             );
         }
+        emit_progress(
+            app,
+            operation_id,
+            "complete",
+            total,
+            total,
+            "Import complete",
+        );
         Ok(BatchResult {
             operation_id: operation_id.to_string(),
             status: if canceled.load(Ordering::Acquire) {
@@ -369,7 +392,11 @@ fn collect_path(
     root: Option<&Path>,
     items: &mut Vec<BatchPreviewItem>,
     truncated: &mut bool,
+    canceled: &AtomicBool,
 ) -> anyhow::Result<()> {
+    if canceled.load(Ordering::Acquire) {
+        return Ok(());
+    }
     if items.len() >= MAX_ITEMS {
         *truncated = true;
         return Ok(());
@@ -416,8 +443,9 @@ fn collect_path(
                 Some(effective_root),
                 items,
                 truncated,
+                canceled,
             )?;
-            if *truncated {
+            if *truncated || canceled.load(Ordering::Acquire) {
                 break;
             }
         }
@@ -542,7 +570,8 @@ mod tests {
         fs::write(dir.path().join("notes.md"), b"notes").expect("unsupported");
         let mut items = Vec::new();
         let mut truncated = false;
-        collect_path(dir.path(), 0, None, &mut items, &mut truncated).expect("scan");
+        let canceled = AtomicBool::new(false);
+        collect_path(dir.path(), 0, None, &mut items, &mut truncated, &canceled).expect("scan");
         assert_eq!(items.len(), 2);
         assert!(items
             .iter()
@@ -557,14 +586,28 @@ mod tests {
     fn missing_paths_are_reported_without_aborting_preview() {
         let mut items = Vec::new();
         let mut truncated = false;
+        let canceled = AtomicBool::new(false);
         collect_path(
             Path::new("definitely-missing.epub"),
             0,
             None,
             &mut items,
             &mut truncated,
+            &canceled,
         )
         .expect("scan");
         assert_eq!(items[0].status, BatchItemStatus::Missing);
+    }
+
+    #[test]
+    fn canceled_scan_stops_before_collecting_items() {
+        let dir = tempdir().expect("dir");
+        fs::write(dir.path().join("book.epub"), b"epub").expect("book");
+        let mut items = Vec::new();
+        let mut truncated = false;
+        let canceled = AtomicBool::new(true);
+        collect_path(dir.path(), 0, None, &mut items, &mut truncated, &canceled).expect("scan");
+        assert!(items.is_empty());
+        assert!(!truncated);
     }
 }

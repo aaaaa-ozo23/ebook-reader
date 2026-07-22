@@ -512,6 +512,22 @@ button:disabled {
   overflow: auto;
   border-top: 1px solid #e4e7e4;
 }
+
+.batch-empty-preview {
+  display: grid;
+  gap: 6px;
+  margin: 8px 24px 20px;
+  border: 1px solid #dfe5e2;
+  border-radius: 10px;
+  background: #f5f8f7;
+  padding: 20px;
+  color: #59666a;
+  text-align: center;
+}
+
+.batch-empty-preview strong {
+  color: #1f3035;
+}
 .batch-item {
   display: grid;
   min-height: 64px;
@@ -567,7 +583,8 @@ button:disabled {
   color: #235f62;
   font-size: 0.76rem;
 }
-.batch-progress {
+.batch-progress,
+.batch-scan-progress {
   display: grid;
   gap: 22px;
   margin: 28px 30px;
@@ -613,6 +630,11 @@ button:disabled {
   transition: width 180ms ease-out;
 }
 
+.batch-progress__meter[data-indeterminate="true"] span {
+  width: 32%;
+  animation: batch-scan-meter 1.1s ease-in-out infinite;
+}
+
 .batch-progress__stages {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -643,14 +665,77 @@ button:disabled {
   transform: translateX(-50%);
 }
 
-.batch-progress__stages li[data-active="true"] {
+.batch-progress__stages li[data-state="active"] {
   color: #235f62;
   font-weight: 800;
 }
 
-.batch-progress__stages li[data-active="true"]::before {
+.batch-progress__stages li[data-state="active"]::before {
   border-color: #e2ad45;
   box-shadow: 0 0 0 4px rgba(226, 173, 69, 0.14);
+}
+
+.batch-progress__stages li[data-state="complete"]::before {
+  border-color: var(--ds-color-action);
+  background: var(--ds-color-action);
+  box-shadow: inset 0 0 0 3px #fcfbf8;
+}
+
+.batch-scan-progress__stages {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0;
+  padding: 0;
+  color: #7c898c;
+  font-size: 0.7rem;
+  list-style: none;
+  text-align: center;
+}
+
+.batch-scan-progress__stages li {
+  position: relative;
+  padding-top: 22px;
+}
+
+.batch-scan-progress__stages li::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #c4ceca;
+  border-radius: 50%;
+  background: #fcfbf8;
+  content: "";
+  transform: translateX(-50%);
+}
+
+.batch-scan-progress__stages li[data-state="active"] {
+  color: #235f62;
+  font-weight: 800;
+}
+
+.batch-scan-progress__stages li[data-state="active"]::before {
+  border-color: #e2ad45;
+  box-shadow: 0 0 0 4px rgba(226, 173, 69, 0.14);
+}
+
+.batch-scan-progress__stages li[data-state="complete"]::before {
+  border-color: var(--ds-color-action);
+  background: var(--ds-color-action);
+  box-shadow: inset 0 0 0 3px #fcfbf8;
+}
+
+@keyframes batch-scan-meter {
+  0% {
+    transform: translateX(-115%);
+  }
+  55% {
+    transform: translateX(115%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
 }
 
 .batch-progress__privacy {
@@ -879,6 +964,13 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .batch-progress__meter span {
     transition: none;
+  }
+
+  .batch-progress__meter[data-indeterminate="true"] span {
+    width: 100%;
+    animation: none;
+    opacity: 0.5;
+    transform: none;
   }
 }
 

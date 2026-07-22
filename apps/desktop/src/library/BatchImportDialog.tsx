@@ -18,10 +18,15 @@ export function BatchImportDialog({
   onClose: () => void;
   onImported: (books: Book[]) => void;
 }) {
-  const operationIdRef = useRef(createOperationId());
+  const scanOperationIdRef = useRef(createOperationId());
+  const importOperationIdRef = useRef<string | null>(null);
   const [preview, setPreview] = useState<BatchImportPreview | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [progress, setProgress] = useState<OperationProgress | null>(null);
+  const [scanProgress, setScanProgress] = useState<OperationProgress | null>(null);
+  const [importProgress, setImportProgress] = useState<OperationProgress | null>(null);
+  const [view, setView] = useState<"scanning" | "preview" | "importing" | "result">(
+    "scanning",
+  );
   const [result, setResult] = useState<BatchImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const titleId = useId();
@@ -29,31 +34,47 @@ export function BatchImportDialog({
   useEffect(() => {
     if (paths === null) return;
     let active = true;
-    const operationId = operationIdRef.current;
-    void scanImportPaths(operationId, paths).then(
-      (next) => {
-        if (!active) return;
-        setPreview(next);
-        setSelected(
-          new Set(next.items.filter((item) => item.selected).map((item) => item.path)),
-        );
-      },
-      (nextError) => active && setError(errorMessage(nextError)),
-    );
+    const operationId = createOperationId();
+    scanOperationIdRef.current = operationId;
+    let unlisten: (() => void) | undefined;
+    const startScan = () => {
+      if (!active) return;
+      void scanImportPaths(operationId, paths).then(
+        (next) => {
+          if (!active) return;
+          setScanProgress(null);
+          setPreview(next);
+          setSelected(
+            new Set(
+              next.items.filter((item) => item.selected).map((item) => item.path),
+            ),
+          );
+          setView("preview");
+        },
+        (nextError) => {
+          if (!active) return;
+          setScanProgress(null);
+          setError(errorMessage(nextError));
+          setView("preview");
+        },
+      );
+    };
+    void listenForDataOperationProgress((next) => {
+      if (next.operationId === scanOperationIdRef.current) setScanProgress(next);
+      if (next.operationId === importOperationIdRef.current) setImportProgress(next);
+    }).then((stop) => {
+      if (!active) {
+        stop();
+        return;
+      }
+      unlisten = stop;
+      startScan();
+    }, startScan);
     return () => {
       active = false;
+      unlisten?.();
     };
   }, [paths]);
-
-  useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void listenForDataOperationProgress((next) => {
-      if (next.operationId === operationIdRef.current) setProgress(next);
-    }).then((stop) => {
-      unlisten = stop;
-    });
-    return () => unlisten?.();
-  }, []);
 
   const counts = useMemo(() => {
     const next = new Map<string, number>();
@@ -61,7 +82,6 @@ export function BatchImportDialog({
       next.set(item.status, (next.get(item.status) ?? 0) + 1);
     return [...next.entries()];
   }, [preview]);
-  const isImporting = progress !== null && result === null;
   const resultCounts = useMemo(() => {
     const imported =
       result?.items.filter((item) => item.book !== undefined).length ?? 0;
@@ -74,17 +94,44 @@ export function BatchImportDialog({
   const handleImport = async () => {
     setError(null);
     setResult(null);
-    operationIdRef.current = createOperationId();
+    setImportProgress(null);
+    setView("importing");
+    const operationId = createOperationId();
+    importOperationIdRef.current = operationId;
     try {
-      const next = await importBatch(operationIdRef.current, [...selected]);
+      const next = await importBatch(operationId, [...selected]);
       setResult(next);
+      setView("result");
       onImported(
         next.items.flatMap((item) => (item.book === undefined ? [] : [item.book])),
       );
     } catch (nextError) {
       setError(errorMessage(nextError));
+      setView("preview");
     }
   };
+
+  const cancelAndClose = () => {
+    const operationId =
+      view === "importing"
+        ? importOperationIdRef.current
+        : view === "scanning"
+          ? scanOperationIdRef.current
+          : null;
+    if (operationId !== null) void cancelDataOperation(operationId);
+    onClose();
+  };
+
+  const displayedImportProgress =
+    importProgress ??
+    ({
+      operationId: "pending-import",
+      kind: "batch-import",
+      phase: "hashing",
+      completed: 0,
+      total: selected.size,
+      message: "Preparing selected books",
+    } satisfies OperationProgress);
 
   return (
     <div className="batch-dialog-backdrop">
@@ -93,37 +140,95 @@ export function BatchImportDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        data-view={result !== null ? "result" : isImporting ? "progress" : "preview"}
+        data-view={view}
       >
         <header>
           <div>
             <p>
-              {result !== null
+              {view === "result"
                 ? "Import report"
-                : isImporting
+                : view === "importing"
                   ? "Local conversion"
-                  : "Review before import"}
+                  : view === "scanning"
+                    ? "Preparing import"
+                    : "Review before import"}
             </p>
             <h2 id={titleId}>
-              {result !== null
+              {view === "result"
                 ? resultCounts.issues.length > 0
                   ? "Some books need attention"
                   : "Import complete"
-                : isImporting
+                : view === "importing"
                   ? "Importing books"
-                  : "Import books"}
+                  : view === "scanning"
+                    ? "Scanning folder"
+                    : "Import books"}
             </h2>
           </div>
-          <button type="button" aria-label="Close import preview" onClick={onClose}>
+          <button
+            type="button"
+            aria-label="Close import preview"
+            onClick={cancelAndClose}
+          >
             ×
           </button>
         </header>
-        {preview === null && error === null ? (
-          <div className="batch-scanning" role="status">
-            Scanning folders and checking duplicates…
+        {view === "scanning" && error === null ? (
+          <div className="batch-scan-progress" role="status" aria-live="polite">
+            <div className="batch-progress__current">
+              <i className="batch-item__format" aria-hidden="true">
+                SCAN
+              </i>
+              <span>
+                <strong>
+                  {scanProgress?.phase === "hashing"
+                    ? "Checking discovered books"
+                    : "Discovering books in this folder"}
+                </strong>
+                <small>
+                  {scanProgress?.phase === "hashing"
+                    ? scanProgress.message
+                    : "Scanning supported files and nested folders"}
+                </small>
+              </span>
+              <em>
+                {scanProgress?.phase === "hashing" && scanProgress.total > 0
+                  ? `${scanProgress.completed} of ${scanProgress.total}`
+                  : "Local only"}
+              </em>
+            </div>
+            <div
+              className="batch-progress__meter"
+              data-indeterminate={scanProgress?.phase !== "hashing"}
+              aria-hidden="true"
+            >
+              <span
+                style={
+                  scanProgress?.phase === "hashing"
+                    ? {
+                        width: `${(scanProgress.completed / Math.max(1, scanProgress.total)) * 100}%`,
+                      }
+                    : undefined
+                }
+              />
+            </div>
+            <ol className="batch-scan-progress__stages" aria-label="Folder scan stages">
+              <li
+                data-state={scanProgress?.phase === "hashing" ? "complete" : "active"}
+              >
+                Scanning
+              </li>
+              <li data-state={scanProgress?.phase === "hashing" ? "active" : "pending"}>
+                Hashing
+              </li>
+              <li data-state="pending">Preview</li>
+            </ol>
+            <p className="batch-progress__privacy">
+              The folder stays on this computer. No book content is uploaded.
+            </p>
           </div>
         ) : null}
-        {preview !== null && !isImporting && result === null ? (
+        {preview !== null && view === "preview" ? (
           <>
             <div className="batch-summary">
               {counts.map(([status, count]) => (
@@ -136,6 +241,14 @@ export function BatchImportDialog({
                 <span data-status="error">10,000 item limit reached</span>
               ) : null}
             </div>
+            {preview.items.length === 0 ? (
+              <div className="batch-empty-preview" role="status">
+                <strong>No supported books found</strong>
+                <span>
+                  Choose another folder containing EPUB, TXT, PDF, MOBI, or AZW3.
+                </span>
+              </div>
+            ) : null}
             <div className="batch-list" role="list" aria-label="Import preview">
               {preview.items.map((item) => (
                 <label
@@ -176,28 +289,37 @@ export function BatchImportDialog({
             </div>
           </>
         ) : null}
-        {isImporting ? (
+        {view === "importing" ? (
           <div className="batch-progress" role="status">
             <div className="batch-progress__current">
               <i className="batch-item__format" aria-hidden="true">
-                {formatBadge(progress.message)}
+                {formatBadge(displayedImportProgress.message)}
               </i>
               <span>
-                <strong>{progress.message}</strong>
+                <strong>{displayedImportProgress.message}</strong>
                 <small>
-                  {progress.phase === "converting"
+                  {displayedImportProgress.phase === "converting"
                     ? "Converting locally with libmobi 0.12"
-                    : phaseLabel(progress.phase)}
+                    : phaseLabel(displayedImportProgress.phase)}
                 </small>
               </span>
               <em>
-                {Math.min(progress.completed + 1, progress.total)} of {progress.total}
+                {Math.min(
+                  displayedImportProgress.completed + 1,
+                  displayedImportProgress.total,
+                )}{" "}
+                of {displayedImportProgress.total}
               </em>
             </div>
             <div className="batch-progress__meter" aria-hidden="true">
               <span
                 style={{
-                  width: `${Math.max(8, (progress.completed / Math.max(1, progress.total)) * 100)}%`,
+                  width: `${Math.max(
+                    8,
+                    (displayedImportProgress.completed /
+                      Math.max(1, displayedImportProgress.total)) *
+                      100,
+                  )}%`,
                 }}
               />
             </div>
@@ -210,7 +332,10 @@ export function BatchImportDialog({
                 "committing",
                 "complete",
               ].map((phase) => (
-                <li key={phase} data-active={phase === progress.phase}>
+                <li
+                  key={phase}
+                  data-state={importStageState(displayedImportProgress.phase, phase)}
+                >
                   {phase === "complete" ? "Completed" : phaseLabel(phase)}
                 </li>
               ))}
@@ -275,19 +400,29 @@ export function BatchImportDialog({
           </div>
         )}
         <footer>
-          {progress !== null && result === null ? (
+          {view === "scanning" ? (
+            <button type="button" className="dialog-button" onClick={cancelAndClose}>
+              Cancel scan
+            </button>
+          ) : null}
+          {view === "importing" ? (
             <button
               type="button"
               className="dialog-button"
-              onClick={() => void cancelDataOperation(operationIdRef.current)}
+              onClick={() => {
+                if (importOperationIdRef.current !== null)
+                  void cancelDataOperation(importOperationIdRef.current);
+              }}
             >
               Cancel import
             </button>
           ) : null}
-          <button type="button" className="dialog-button" onClick={onClose}>
-            {result === null ? "Cancel" : "Done"}
-          </button>
-          {preview !== null && !isImporting && result === null ? (
+          {view !== "scanning" ? (
+            <button type="button" className="dialog-button" onClick={cancelAndClose}>
+              {view === "result" ? "Done" : "Cancel"}
+            </button>
+          ) : null}
+          {preview !== null && view === "preview" ? (
             <button
               type="button"
               className="dialog-button dialog-button--primary"
@@ -341,4 +476,22 @@ function importIssueLabel(message?: string): string {
 
 function phaseLabel(phase: string): string {
   return phase.charAt(0).toUpperCase() + phase.slice(1);
+}
+
+const IMPORT_STAGES = [
+  "scanning",
+  "hashing",
+  "converting",
+  "validating",
+  "committing",
+  "complete",
+] as const;
+
+function importStageState(currentPhase: string, phase: string): string {
+  const currentIndex = IMPORT_STAGES.indexOf(
+    currentPhase as (typeof IMPORT_STAGES)[number],
+  );
+  const phaseIndex = IMPORT_STAGES.indexOf(phase as (typeof IMPORT_STAGES)[number]);
+  if (phaseIndex < currentIndex) return "complete";
+  return phaseIndex === currentIndex ? "active" : "pending";
 }
