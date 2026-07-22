@@ -1,5 +1,14 @@
 # 进度日志
 
+## 2026-07-22 大阶段 14.6：阅读历史与统计设计审核
+
+- **状态：** design_review；从已合入 14.5 的集成提交 `af021a1` 创建 `codex/stage14-reading-history`。
+- **14.5 Git 收口：** 实现/测试/文档提交 `63dc50a` / `b115a41` / `b26fda6` 已推送，随后以 `--no-ff` 合入并推送 `codex/v0.3.0-integration` `af021a1`。
+- **状态板：** 01 desktop Insights dashboard；02 History & Privacy settings；03 disabled/active/export/clear states；04 双 375px Insights/History sheet。全部由可编辑 HTML 渲染，无外部位图资产。
+- **视觉检查：** Chromium 以 1440×900 渲染 4/4；每张只显示一个 active board，document scrollWidth/scrollHeight 精确为 1440/900。首轮 `.state-workspace` 的 display 覆盖使 clear dialog 泄漏到其他板，已改为仅 active flex；状态板又从全屏模糊 overlay 改为并列状态+确认卡，使所有状态可审核。
+- **文件复核：** 首次 PNG header 命令调用当前 PowerShell 不提供的 `System.Buffers.Binary.BinaryPrimitives`，因此宽高为空但 hash 有效；改用显式 big-endian byte reverse 后确认四张均为真实 1440×900 PNG，大小 50,462–82,887 bytes。
+- **暂停门：** 等待用户批准；本分支没有 schema、后端命令、生产组件或版本改动。
+
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
 ### 状态

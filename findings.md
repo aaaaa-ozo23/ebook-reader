@@ -1,5 +1,13 @@
 # 发现与决策
 
+## 2026-07-22 大阶段 14.6：阅读历史与统计状态板
+
+- **指标边界：** Insights 只显示 Today、最近 7 天、累计有效时长、每日分钟和按书时长；完成度直接显示现有 reading progress。不加入 streak、排行榜、效率分数或推断型指标，避免把本地阅读变成压力反馈。
+- **隐私层级：** History & Privacy 延续 Settings Center；首屏明确 local-only、默认启用、关闭立即结束活动会话但不隐式删除旧记录。CSV 导出与清空分开，清空说明保留 clear timestamp 以阻止旧备份复活已删除历史。
+- **计时说明：** 状态板把 visible、focused、recent interaction 作为用户可读条件；休眠、后台和超过 45 秒间隔的实现细节在生产文档与测试中展开，不让 dashboard 显示伪精确在线状态。
+- **响应式：** 375px 使用两张并列 full-screen sheet 评审视图：Insights 保留三摘要、紧凑趋势和按书列表；History 保留开关、导出、清空与 sticky Done。所有顶部/底部操作以 44px 为最小目标。
+- **审核边界：** 当前只提交四张 PNG、可编辑 HTML 与 README；未创建 `0009_reading_history.sql`、session/heartbeat Tauri 命令或生产 React/CSS。等待用户逐图批准。
+
 ## 2026-07-20 大阶段 14.3–14.7：实施决策与阅读器 UI 根因
 
 - **用户决策：** 本轮范围从原 14.3 停止边界扩展到 14.7；14.3 四张 MOBI/AZW3 状态板视为已批准；PDF Margin 也必须通过页面舞台留白与可用宽度变化真实生效。
