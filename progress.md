@@ -2,7 +2,7 @@
 
 ## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
 
-- **状态：** in_progress；正式发布目标为 `v0.3.0`，以已推送的 `codex/v0.3.0-integration` `9fe2c07` 为基线。
+- **状态：** complete；正式 `v0.3.0` 已公开为 Latest，远端资产/feed 已复核，release 分支已以 `--no-ff` 合入并推送 `main`；Stage 15 未启动。
 - **Chrome 预检：** 用户指定的 Chrome 已确认登录 GitHub 且仓库发行页提供“起草发行版”和管理入口；当前 Latest 为 v0.2.0。尚未创建 tag、草稿或上传文件。
 - **执行顺序：** 版本/文档/publication 分支 → 全量门禁与 final 产物 → 隔离空状态和 v0.2 升级 → tag → Chrome 草稿上传/公开 → 远端 hash/feed → `main` 收口。
 - **边界：** 不发布 acceptance 临时产物，不触碰正式用户 app-data，不泄露 updater 私钥；`.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
@@ -25,6 +25,7 @@
 - **Latest 验证：** Chrome 的公开 `/releases/latest` 已重定向至 `/releases/tag/v0.3.0`，并显示 v0.3.0 正式标题。
 - **公开 API/feed：** GitHub API 确认 `draft=false`、`prerelease=false`、13/13 assets 为 uploaded，名称和精确 byte size 全部匹配本地；公开 Latest feed 为 0.3.0、签名完整、下载 URL 指向 v0.3.0 NSIS。
 - **MSI final 复核：** 正式 MSI administrative image 成功，3 个预期运行文件合计 24,184,001 bytes，主 EXE 0.3.0，用户数据库/书籍/library payload 为 0，临时 image 已删除。
+- **Git 收口：** publication evidence commit `2a46c5a` 已推送 `release/v0.3.0`；随后以 `--no-ff` 合入 `main` 为 `f7480a2` 并推送。tag `v0.3.0` 继续指向 `8222671`，与正式产物 source 保持一致。
 
 ## 2026-07-25 大阶段 14.7：总验收
 

@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.8：v0.3.0 正式发布，in progress。以已完成 Stage 14 的 `codex/v0.3.0-integration` 为唯一源码基线，统一版本与发布文档，重建并验证 Windows x64 正式产物，通过 Chrome 草稿优先流程发布 `v0.3.0`；发布完成前不启动 Stage 15。
+大阶段 14.8：v0.3.0 正式发布，complete。Stage 14 的功能、全量门禁、Windows 正式产物、隔离安装/升级、Chrome 草稿优先公开、远端资产/feed 校验和 `main` 收口全部完成；停止在 Stage 15 之前。
 
 ## 分支策略
 
@@ -533,7 +533,7 @@
 | 14.5 全书库全文检索（implementation complete） | `codex/stage14-library-search-index` | 先审计并修复现有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索，再建立共享的多语言规范化、可失效本地索引、后台队列、结果和跳转；不上传内容 | 三类提交 `63dc50a` / `b115a41` / `b26fda6`，集成 `af021a1`；Core 9、Desktop 206、Rust 74、Playwright 33 全通过 |
 | 14.6 阅读历史与统计（complete） | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 四张批准稿已复刻；Core 9、Desktop 212、Rust 80；Browser 1280/375 与定向 Playwright 通过 |
 | 14.7 阶段 14 验收（complete） | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | Core 9、Desktop 212、Rust 81、Playwright 35/35、双安装包/SBOM/升级/包体门禁通过 |
-| 14.8 v0.3.0 正式发布（in progress） | `release/v0.3.0` | 统一 0.3.0 版本与发布文档，重建签名 NSIS/MSI/SBOM/checksum，验证干净安装与 v0.2 升级，通过 Chrome 创建并公开第三个正式发行版 | final 产物来自 tag source；初始书库为空；升级数据与 sidecar 保留；公开资产/hash/latest.json 全部复核 |
+| 14.8 v0.3.0 正式发布（complete） | `release/v0.3.0` | 统一 0.3.0 版本与发布文档，重建签名 NSIS/MSI/SBOM/checksum，验证干净安装与 v0.2 升级，通过 Chrome 创建并公开第三个正式发行版 | final 产物来自 tag source；初始书库为空；升级数据与 sidecar 保留；13 个公开资产的名称/大小/hash 与 latest.json 全部复核；`--no-ff` 合入 main |
 
 ### 阶段 14.1–14.7 执行契约
 

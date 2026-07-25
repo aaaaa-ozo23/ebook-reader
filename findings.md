@@ -24,6 +24,7 @@
 - **公开 API 复核：** GitHub Release API 返回 `draft=false`、`prerelease=false`、tag `v0.3.0`、13 个 assets 全为 `uploaded`；13 个远端精确 byte size 与本地 final 文件逐项一致。
 - **公开 updater feed：** `/releases/latest/download/latest.json` 返回 version `0.3.0`、notes `Ebook Reader v0.3.0`、完整签名和指向 `v0.3.0/Ebook.Reader_0.3.0_x64-setup.exe` 的 HTTPS URL；该文件公开 digest 已与本地匹配。
 - **MSI administrative image：** 最终 MSI administrative install 退出码 0，image 共 3 个预期运行文件 / 24,184,001 bytes，主 EXE FileVersion/ProductVersion 均为 0.3.0，数据库、书籍和 library payload 命中 0；临时 image 已清理。
+- **主线收口：** `release/v0.3.0` 已以 `--no-ff` 合入 `main`，merge commit 为 `f7480a2`，并成功推送到 `origin/main`；tag 仍固定在产物源码提交 `8222671`，没有因发布证据或主线合并而移动。
 
 ## 2026-07-25 大阶段 14.7：总验收
 

@@ -68,6 +68,6 @@ source. Acceptance or development artifacts do not authorize a tag or public Rel
 - [x] GitHub Release `Ebook Reader v0.3.0` is public.
 - [x] Public asset names, sizes, SHA-256 digests, updater signature, and `latest.json` match local
   final artifacts.
-- [ ] `release/v0.3.0` is merged into `main` with `--no-ff`; `main` and publication tracking docs
+- [x] `release/v0.3.0` is merged into `main` with `--no-ff`; `main` and publication tracking docs
   are pushed.
 - [x] Stage 15 has not started.
