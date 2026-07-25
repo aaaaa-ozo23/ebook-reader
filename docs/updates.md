@@ -27,7 +27,7 @@ once installation begins it cannot be canceled.
 
 `tauri.updater-test.conf.json` uses the independent identifier
 `com.ebookreader.desktop.updater-test` and an HTTPS loopback endpoint. The RC smoke harness must
-serve a trusted local certificate and exercise old test version to signed v0.2, invalid signature
+serve a trusted local certificate and exercise an old test version to signed v0.3, invalid signature
 rejection, throttled cancellation, retained data, and post-install version. It must never reuse the
 production identifier or production user data.
 

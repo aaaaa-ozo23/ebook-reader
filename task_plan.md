@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.1–14.7：complete。MOBI/AZW3、自定义字体、书内/全库多语言搜索、阅读历史与全部批准 UI 已实现并通过完整门禁；正式版本仍为 0.2.0，未创建 tag/Release，严格停止在 Stage 15 之前。
+大阶段 14.8：v0.3.0 正式发布，in progress。以已完成 Stage 14 的 `codex/v0.3.0-integration` 为唯一源码基线，统一版本与发布文档，重建并验证 Windows x64 正式产物，通过 Chrome 草稿优先流程发布 `v0.3.0`；发布完成前不启动 Stage 15。
 
 ## 分支策略
 
@@ -19,6 +19,7 @@
 | `codex/stageN-*` | 小阶段功能分支 | 从最新集成分支拉出，单一目标开发，完成后合回集成分支 |
 | `release/v0.1.0` | 首版发布候选 | Windows 打包、安装、升级验证通过后从集成分支切出 |
 | `release/v0.2.0` | v0.2 发布候选 | 阶段 13 全量验收通过后从 `codex/v0.2.0-integration` 切出 |
+| `release/v0.3.0` | v0.3 发布候选 | 阶段 14 全量验收通过后从 `codex/v0.3.0-integration` 切出；仅正式发布阶段允许统一版本、tag 和 Release |
 
 提交节奏：
 - 每个小阶段至少包含实现、测试、文档/计划更新三类提交。
@@ -532,6 +533,7 @@
 | 14.5 全书库全文检索（implementation complete） | `codex/stage14-library-search-index` | 先审计并修复现有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索，再建立共享的多语言规范化、可失效本地索引、后台队列、结果和跳转；不上传内容 | 三类提交 `63dc50a` / `b115a41` / `b26fda6`，集成 `af021a1`；Core 9、Desktop 206、Rust 74、Playwright 33 全通过 |
 | 14.6 阅读历史与统计（complete） | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 四张批准稿已复刻；Core 9、Desktop 212、Rust 80；Browser 1280/375 与定向 Playwright 通过 |
 | 14.7 阶段 14 验收（complete） | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | Core 9、Desktop 212、Rust 81、Playwright 35/35、双安装包/SBOM/升级/包体门禁通过 |
+| 14.8 v0.3.0 正式发布（in progress） | `release/v0.3.0` | 统一 0.3.0 版本与发布文档，重建签名 NSIS/MSI/SBOM/checksum，验证干净安装与 v0.2 升级，通过 Chrome 创建并公开第三个正式发行版 | final 产物来自 tag source；初始书库为空；升级数据与 sidecar 保留；公开资产/hash/latest.json 全部复核 |
 
 ### 阶段 14.1–14.7 执行契约
 
@@ -542,7 +544,9 @@
 - **文件夹导入回归门：** `codex/stage14-folder-import-fix` 已通过完整门禁并 `--no-ff` 合回集成提交 `5d261a4`；扫描 progress 不再遮蔽 preview，递归发现不再伪造百分比。
 - **阅读器 UI：** 14.3 同步统一 TXT/EPUB/PDF/MOBI/AZW3 的 SVG Previous/Next；Line height/Spacing/Margin 使用三套语义图标；Margin 对 EPUB/TXT/PDF 三格式均须产生可测量差异并持久化。
 - **后续能力：** 14.4 仅导入本地 TTF/OTF 并映射 TXT/EPUB；14.5 建立可重建本地全文索引；14.6 记录可关闭、可清空、可导出的本地有效阅读会话；14.7 做完整兼容、隐私、性能、许可证与双安装包验收。
-- **停止边界：** 完成 14.7 后停止；不修改正式应用版本，不创建 tag 或 Release，不启动 Stage 15。
+- **正式发布授权：** 用户已明确要求通过 Chrome 创建 v0.3 发行版，因此 14.8 是唯一允许把 root/core/desktop/Cargo/Tauri 提升到 0.3.0、创建 `v0.3.0` tag 和公开 GitHub Release 的阶段。
+- **发布顺序：** 当前集成源码与发布文档收口 → 全量自动化与双安装包/SBOM/签名 → 隔离空状态及 v0.2 升级验证 → publication commit/tag → Chrome 草稿上传 → 公开 → 远端资产、SHA-256 与 `latest.json` 复核 → 主线无快进收口。
+- **停止边界：** 完成 14.8 后停止；不启动 Stage 15。
 
 ## 大阶段 15：v0.4 macOS/Linux 桌面扩展
 

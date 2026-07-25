@@ -1,5 +1,15 @@
 # 进度日志
 
+## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
+
+- **状态：** in_progress；正式发布目标为 `v0.3.0`，以已推送的 `codex/v0.3.0-integration` `9fe2c07` 为基线。
+- **Chrome 预检：** 用户指定的 Chrome 已确认登录 GitHub 且仓库发行页提供“起草发行版”和管理入口；当前 Latest 为 v0.2.0。尚未创建 tag、草稿或上传文件。
+- **执行顺序：** 版本/文档/publication 分支 → 全量门禁与 final 产物 → 隔离空状态和 v0.2 升级 → tag → Chrome 草稿上传/公开 → 远端 hash/feed → `main` 收口。
+- **边界：** 不发布 acceptance 临时产物，不触碰正式用户 app-data，不泄露 updater 私钥；`.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+- **依赖状态错误：** 首次在版本统一后调用 `pnpm.cmd format:write`，pnpm 发现现有 `node_modules` 元数据与新的根 package 版本不一致，在无 TTY 下以 `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` 停止，并伴随 registry 元数据获取失败。没有依赖或锁文件变更；下一步改用 CI 模式的冻结离线安装恢复锁定环境，不重复普通交互式安装。
+- **依赖恢复：** 首次冻结离线安装在 180 秒外层限制内只完成删除旧 `node_modules`；第二次带 append-only reporter 明确定位 store 缺少一个锁定 tarball。经授权执行 CI 模式冻结安装后 291 个锁定包全部从 store 复用，downloaded=0，未升级依赖或改写 lockfile。
+- **版本校验错误：** `verify:release` 已通过 0.3.0；`verify:stage14` 首次失败是 Cargo 版本正则仍硬编码 0.2.0。已改为从唯一的 `expectedSourceVersion` 动态生成转义正则，避免未来发布再次出现双份常量。
+
 ## 2026-07-25 大阶段 14.7：总验收
 
 - **状态：** acceptance_complete，正在执行 Git 收口；14.6 功能、文档与代码门禁完成。早期 `.git` 写入审批曾因环境 usage limit 被拒绝，没有绕过；当前按用户授权重新走正式沙箱外 Git 流程。

@@ -30,7 +30,7 @@ the SmartScreen warning; it never labels updater minisign as Authenticode. This 
 
 ## CI publication boundary
 
-`.github/workflows/v0.2-rc-artifacts.yml` is `workflow_dispatch` only. It builds and uploads a
+`.github/workflows/v0.3-release-artifacts.yml` is `workflow_dispatch` only. It builds and uploads a
 short-retention workflow artifact called `draft`; it cannot create a tag or GitHub Release and has
 read-only repository contents permission. Public release publication remains a separate explicit
 authorization.
