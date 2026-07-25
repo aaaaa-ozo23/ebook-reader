@@ -1,5 +1,23 @@
 # 进度日志
 
+## 2026-07-25 大阶段 14.9：v0.3.0 安装初始状态审计
+
+- **状态：** complete；公开 v0.3.0 installer 无污染并保留，开发/正式数据隔离缺口已修复，真实 dev 空状态和 production 不变均验证通过。
+- **安全边界：** 不删除或重命名真实 `%APPDATA%\com.ebookreader.desktop`，不让重装静默清空数据；隔离复现使用独立 Windows 数据环境或测试 identifier。
+- **完成条件：** 若公开包携带数据库/书籍或干净环境首次启动不为空，则修复、重建、替换 v0.3.0 并重新校验；若只是既有本地数据复用，则保留 Release，给出可恢复的本机清理/备份方案并修正验收说明。
+- **本机证据：** production Roaming app-data 创建于 7 月 1 日；5 条 book 记录和 7 个 library 文件均创建于 7 月 1–22 日，早于 7 月 25 日的 v0.3.0 Release。数据库当前 schema migration 为 9，说明新安装只是迁移并继续使用旧库。
+- **payload 证据：** NSIS 构建输入只含 `ebook-reader-desktop.exe` 与 `mobitool.exe`，没有数据库或书籍；当前运行 EXE 位于新安装目录 `D:\ebook-reader\Ebook Reader`，但继续使用旧 production app-data，符合 identifier 驱动的数据路径。
+- **诊断命令错误：** 首次比较安装文件 hash 的 PowerShell `foreach { ... } | Format-Table` 触发 `Empty pipe element`；未产生写入。改用先收集 `$rows = @(foreach ...)` 再格式化，避免重复同一语法。
+- **根因确认：** 仓库 `tauri:dev` 未使用独立 config，当前开发命令和正式安装共享 `com.ebookreader.desktop`。Tauri 官方支持用 `--config` 合并独立 productName/identifier；将用此方式阻止未来开发数据继续污染 production app-data。
+- **修复实现：** 新增 `tauri.dev.conf.json`，开发版使用 `Ebook Reader Dev` / `com.ebookreader.desktop.dev`；`tauri:dev` 强制合并该配置。release verifier 现在同时锁定 production identifier、dev identifier 和脚本接线，开发/隐私文档同步说明重装保留与空 profile 的区别。
+- **格式门首轮：** targeted Prettier 仅报告 `apps/desktop/package.json` 与 `scripts/verify-release.mjs` 需要机械格式化；未进入 verifier。按仓库 Prettier 写入这两个文件后重跑，不手工猜测格式。
+- **dev 启动首轮：** 命令已确认实际展开为 `tauri dev --config src-tauri/tauri.dev.conf.json --no-watch`，但既有进程占用 1420 端口，Vite 在创建 dev app-data 前退出；这不是配置解析失败。下一步只读定位端口 owner，避免误杀用户正式版。
+- **端口根因：** 首次后台 dev 实际已成功启动但 Start-Process 未返回可见摘要；第二次命令因此撞到它自己的 Vite 1420。通过只读 PID/command-line 树确认 owner 后，没有重试第三份服务。
+- **运行态通过：** `Ebook Reader Dev` 创建独立 schema9 空库，0 books / 0 bookmarks / 0 annotations / 0 progress / 0 fonts / 0 history / 0 library files；production DB hash 与写入时间完全未变。
+- **进程清理：** 仅停止本轮创建的精确 pnpm/Tauri/Vite/Cargo/debug app PID 树；没有包含 `D:\ebook-reader\Ebook Reader` 的 production EXE。
+- **代码门禁：** targeted Prettier、`verify:release`、`git diff --check` 与完整 `pnpm.cmd check` 通过；Core 9/9、Desktop 212/212、lint、format 和 production build 全部通过。
+- **发行处置：** 不删除、不替换 v0.3.0 Release。重新构建不会清理现有 profile，也不应改变升级保留数据的契约；后续本机空状态需要单独的备份后 reset 授权。
+
 ## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
 
 - **状态：** complete；正式 `v0.3.0` 已公开为 Latest，远端资产/feed 已复核，release 分支已以 `--no-ff` 合入并推送 `main`；Stage 15 未启动。

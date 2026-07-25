@@ -24,6 +24,12 @@ the app stores:
 | `library/covers/` | Locally extracted EPUB covers and locally rendered PDF first-page thumbnails |
 | `library/fonts/` | Content-addressed app-local TTF/OTF files; these fonts are not installed into Windows |
 
+Repository development runs use the separate identifier `com.ebookreader.desktop.dev` and the
+visible name `Ebook Reader Dev`. This prevents locally imported fixtures from appearing in the
+packaged application's production data. Reinstalling or upgrading the production app intentionally
+retains `%APPDATA%\com.ebookreader.desktop`; use the documented backup-and-reset procedure when a
+completely empty local profile is required.
+
 Reader caches contain generated EPUB locations and EPUB/PDF table-of-contents JSON. They do not
 contain a cached copy of the full book text. The shared fallback-cover image is bundled with the
 application and is not downloaded at runtime.

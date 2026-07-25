@@ -71,3 +71,15 @@ source. Acceptance or development artifacts do not authorize a tag or public Rel
 - [x] `release/v0.3.0` is merged into `main` with `--no-ff`; `main` and publication tracking docs
   are pushed.
 - [x] Stage 15 has not started.
+
+## Post-publication empty-state audit
+
+- [x] Public NSIS SHA-256 still matches the verified local final installer.
+- [x] NSIS application payload contains only the main executable and pinned `mobitool`; no
+  database, managed library, or ebook fixture is bundled.
+- [x] Books reported on the maintainer machine predate v0.3.0 publication and belong to the
+  existing `%APPDATA%\com.ebookreader.desktop` profile retained across reinstall and upgrade.
+- [x] `tauri:dev` uses `Ebook Reader Dev` / `com.ebookreader.desktop.dev`; a real first launch
+  creates schema v9 with zero books and zero managed files without changing production app-data.
+- [x] The public v0.3.0 Release is retained because rebuilding the same production installer
+  would not clear an existing user profile and must not replace the documented upgrade behavior.

@@ -50,7 +50,11 @@ v0.3.0 也提供完全本地的全书库检索和阅读统计：`Ctrl+Shift+F` �
 pnpm.cmd install --frozen-lockfile
 pnpm.cmd build
 pnpm.cmd --filter @reader/desktop test
+pnpm.cmd --filter @reader/desktop tauri:dev
 cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml
 ```
+
+`tauri:dev` 使用独立的 `com.ebookreader.desktop.dev` 数据目录，不会读取或修改正式安装版的
+`%APPDATA%\com.ebookreader.desktop`。不要绕过脚本直接运行裸 `tauri dev`。
 
 发布流程见 [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md)，第三方许可声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。本项目采用 [MIT License](LICENSE)。
