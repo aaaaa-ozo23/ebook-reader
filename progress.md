@@ -1,13 +1,40 @@
 # 进度日志
 
-## 2026-07-22 大阶段 14.6：阅读历史与统计设计审核
+## 2026-07-25 大阶段 14.7：总验收
 
-- **状态：** design_review；从已合入 14.5 的集成提交 `af021a1` 创建 `codex/stage14-reading-history`。
+- **状态：** acceptance_complete，正在执行 Git 收口；14.6 功能、文档与代码门禁完成。早期 `.git` 写入审批曾因环境 usage limit 被拒绝，没有绕过；当前按用户授权重新走正式沙箱外 Git 流程。
+- **sidecar/转换：** `deps:verify-libmobi` 通过，固定 v0.12 sidecar 296,129 bytes / SHA-256 `438576...CF1`；三本真实 fixture 转换 56–211ms，峰值 working set 3,194,880–5,726,208 bytes。
+- **许可/安全：** `release:audit` 通过（291 JavaScript、556 Cargo、unknown=0，libmobi LGPL-3.0-or-later）；`release:security` 通过。
+- **迁移：** 增加 v0.2 schema + 既有 book/progress/bookmark → v9 数据保留测试。首次定向命令附带 `--exact` 后按完整模块名匹配不到测试（0 tests），改为名称子串后真实 1/1；Rust 全量 81/81。
+- **Playwright 首轮：** 外部 30 秒命令把 `-- --list` 作为字面参数意外启动矩阵，确认总数 35 后终止；随后标准矩阵 34/35，唯一失败为 DPR2 500 页连续 PDF 跳转捕获 53ms long task，其他格式/功能/响应式全通过。
+- **性能修复：** 连续 PDF 直接跳转拆分 position、virtualizer 与 render commit；书签指示器/active TOC 使用非紧急 React transition；不可见 overscan surface 延后 96ms 且变为可见会立即渲染。专用 DPR2 500 页轨连续两次通过（10.3s、10.4s），50ms 门槛与页数/像素预算保持不变。
+- **最终前端：** `pnpm.cmd check` 通过（Core 9、Desktop 212、ESLint、Prettier、production build）；ReaderShell 202.71 kB / gzip 58.52 kB。最终 Playwright 35/35 均明确输出 `ok`，外层仅在断言结束后因 Windows Vite 输出句柄达到 300 秒清理上限。
+- **双构建：** NSIS 8,019,737 bytes / SHA-256 `134D4152...83F3`，updater `.sig` 424 bytes；MSI 10,403,840 bytes / SHA-256 `583071C8...6E9C`。私钥仅进入 NSIS 构建进程，MSI 通过 WiX/Windows Installer Service；两包 Authenticode 如实为 `NotSigned`。
+- **SBOM/产物：** Syft 1.44.0 生成 source 1,410,141-byte 与 Windows artifact 885-byte CycloneDX；产物 verifier 通过。编排进程在所有文件完成后残留，已终止残留并独立重跑 verifier，未使用 0-byte 中间状态。
+- **体积：** 相对实际 v0.2.0 final，NSIS +646,045、MSI +942,080；MSI administrative image 从 21,616,128 增至 24,184,001 bytes，installed delta 2,567,873，全部低于门槛。
+- **独立升级：** 忽略目录配置使用 `com.ebookreader.desktop.stage14-acceptance`。0.2.0 baseline 导入 1 本 TXT 后覆盖 0.3.0-dev，升级安装退出码 0；schema v9、1 本书、1 个 managed file、history prefs 和固定 sidecar hash 均保留。测试产品/app-data 已清除，正式数据确认仍存在且未被修改。
+- **原生验收脚本修正：** baseline 首次验证假设 productName 会改变 Cargo EXE 文件名，实际安装文件仍是 `ebook-reader-desktop.exe`；改用真实文件后确认 FileVersion/ProductVersion 0.2.0。产品安装成功，错误只在验收脚本路径假设。
+- **停止边界：** Stage 14.1–14.7 complete；正式 root/core/desktop/Cargo/Tauri 版本仍为 0.2.0，不创建 v0.3 tag 或 Release，不启动 Stage 15。
+
+
+## 2026-07-22 大阶段 14.6：阅读历史与统计
+
+- **状态：** implementation_complete，正在执行阶段提交与合并；从已合入 14.5 的集成提交 `af021a1` 创建 `codex/stage14-reading-history`。
 - **14.5 Git 收口：** 实现/测试/文档提交 `63dc50a` / `b115a41` / `b26fda6` 已推送，随后以 `--no-ff` 合入并推送 `codex/v0.3.0-integration` `af021a1`。
 - **状态板：** 01 desktop Insights dashboard；02 History & Privacy settings；03 disabled/active/export/clear states；04 双 375px Insights/History sheet。全部由可编辑 HTML 渲染，无外部位图资产。
 - **视觉检查：** Chromium 以 1440×900 渲染 4/4；每张只显示一个 active board，document scrollWidth/scrollHeight 精确为 1440/900。首轮 `.state-workspace` 的 display 覆盖使 clear dialog 泄漏到其他板，已改为仅 active flex；状态板又从全屏模糊 overlay 改为并列状态+确认卡，使所有状态可审核。
 - **文件复核：** 首次 PNG header 命令调用当前 PowerShell 不提供的 `System.Buffers.Binary.BinaryPrimitives`，因此宽高为空但 hash 有效；改用显式 big-endian byte reverse 后确认四张均为真实 1440×900 PNG，大小 50,462–82,887 bytes。
-- **暂停门：** 等待用户批准；本分支没有 schema、后端命令、生产组件或版本改动。
+- **批准门：** 用户已批准全部四张状态板；它们现为 `0009`、会话命令、Insights、History & Privacy 和 375px sheet 的生产规格。正式版本号保持不变。
+- **首轮静态门禁：** Core 9、Desktop 206 单测均通过；ESLint 发现 Insights effect 同步调用含状态清理的 loader、heartbeat ref 在 render 调用 `Date.now()` 及非组件导出 warning。已改为 Promise 回调更新、零值 ref 在 effect 初始化并收回非组件导出，不重复原失败写法。
+- **定向命令错误：** `pnpm.cmd --filter @reader/desktop exec vitest ...` 在 Windows workspace 未解析到 `vitest` 可执行文件；改用该包已有 `test` script 传入文件路径，不安装或改写依赖。
+- **fake timer 测试错误：** heartbeat 首版测试在 fake timers 下使用 Testing Library `waitFor`，其轮询时钟未推进导致两例各超时 5 秒；已改为 `act` 显式清空 Promise microtask 后直接断言，再推进 30 秒，不延长超时掩盖问题。
+- **生产实现：** 新增 schema v9、Rust session/statistics/preferences/CSV 命令、Reader ready 会话 hook、Insights rail destination、History & Privacy settings、清空确认、Show in folder 与备份 v2 session/tombstone 合并。reader lazy boundary 和本地优先边界保持不变。
+- **Rust 门禁：** Cargo fmt check 与 80/80 tests 通过，覆盖 heartbeat 的 45 秒封顶/间隔排除、聚合、清空、CSV 和较新 clear tombstone 阻止旧备份会话恢复。
+- **前端门禁：** `pnpm.cmd check` 通过（Core 9/9、Desktop 212/212、ESLint、Prettier、production build）；ReaderShell 独立 chunk 202.56 kB（gzip 58.51 kB）。
+- **运行态门禁：** 内置 Browser 1280/375 无横向溢出、console warning/error 0，375px back/close/switch/export 均至少 44px且开关真实改变状态；带数据桌面和移动设置由 Playwright fixture 覆盖，2/2 场景输出通过。Windows 临时 Vite 子进程仍在断言完成后持有输出句柄，没有失败上下文。
+- **首轮 E2E 偏差：** 初版定向命令误把参数传给 package script 而启动完整矩阵；其中 14.6 两例暴露次要文字对比不足和 switch 只有 30px。已提高对比并把 44px target 与 30px视觉轨分离，未放宽 axe 或触控门槛。
+- **Browser 启动边界：** 沙箱外隐藏 `Start-Process` 被执行环境拒绝；没有规避，改用受控前台 Vite cell 完成同一真实页面检查，随后关闭会话。
+- **Git 环境阻塞：** 14.6 实现/测试/文档均已达到提交条件，但首次明确文件列表的 `git add` 沙箱外审批被执行环境以 usage limit 拒绝。用户此前已授权 Git 操作，失败并非仓库冲突；本轮不绕过 `.git` 写保护，先继续执行不依赖 Git 写入的 14.7 验收，待环境恢复后再按三类提交和 `--no-ff` 顺序封存。
 
 ## 2026-07-20 大阶段 14.3–14.7：实施启动
 
