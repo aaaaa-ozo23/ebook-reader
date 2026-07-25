@@ -422,6 +422,56 @@ export interface LibrarySearchRebuildResult {
   noTextBooks: number;
 }
 
+export interface ReadingHistoryPreferences {
+  enabled: boolean;
+  updatedAt: string;
+  clearedAt?: string;
+}
+
+export interface ReadingSession {
+  id: string;
+  bookId: string;
+  startedAt: string;
+  endedAt?: string;
+  lastHeartbeatAt: string;
+  activeSeconds: number;
+  finalProgress?: number;
+  updatedAt: string;
+}
+
+export interface ReadingDailyStatistic {
+  date: string;
+  activeSeconds: number;
+}
+
+export interface ReadingBookStatistic {
+  bookId: string;
+  title: string;
+  author?: string;
+  format: BookFormat;
+  activeSeconds: number;
+  sessionCount: number;
+  progress?: number;
+  lastReadAt?: string;
+}
+
+export interface ReadingStatistics {
+  enabled: boolean;
+  activeSession: boolean;
+  todaySeconds: number;
+  last7DaysSeconds: number;
+  totalSeconds: number;
+  daily: ReadingDailyStatistic[];
+  books: ReadingBookStatistic[];
+  clearedAt?: string;
+}
+
+export interface ReadingHistoryExportResult {
+  outputPath: string;
+  sessionCount: number;
+  bytesWritten: number;
+}
+
 export interface ReaderAdapter<TLocator extends Locator = Locator> {
   open(bookId: string): Promise<void>;
   close(): Promise<void>;

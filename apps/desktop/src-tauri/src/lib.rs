@@ -5,6 +5,7 @@ mod file_open;
 mod fonts;
 mod library_search;
 mod mobi;
+mod reading_history;
 mod updater;
 
 use tauri::{Emitter, Manager};
@@ -207,6 +208,67 @@ async fn search_library(
     })
     .await
     .map_err(|error| format!("[library-search-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn get_reading_history_preferences(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::get_preferences(&app)
+}
+
+#[tauri::command]
+fn save_reading_history_preferences(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::save_preferences(&app, enabled)
+}
+
+#[tauri::command]
+fn start_reading_session(
+    app: tauri::AppHandle,
+    book_id: String,
+) -> Result<Option<reading_history::ReadingSession>, reading_history::ReadingHistoryError> {
+    reading_history::start_session(&app, &book_id)
+}
+
+#[tauri::command]
+fn heartbeat_reading_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<reading_history::ReadingSession, reading_history::ReadingHistoryError> {
+    reading_history::heartbeat_session(&app, &session_id)
+}
+
+#[tauri::command]
+fn end_reading_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<reading_history::ReadingSession, reading_history::ReadingHistoryError> {
+    reading_history::end_session(&app, &session_id)
+}
+
+#[tauri::command]
+fn get_reading_statistics(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingStatistics, reading_history::ReadingHistoryError> {
+    reading_history::get_statistics(&app)
+}
+
+#[tauri::command]
+fn clear_reading_history(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::clear_history(&app)
+}
+
+#[tauri::command]
+fn export_reading_history(
+    app: tauri::AppHandle,
+    output_path: String,
+) -> Result<reading_history::ReadingHistoryExportResult, reading_history::ReadingHistoryError> {
+    reading_history::export_history(&app, std::path::Path::new(&output_path))
 }
 
 #[tauri::command]
@@ -511,6 +573,14 @@ pub fn run() {
             get_library_search_status,
             rebuild_library_search_index,
             search_library,
+            get_reading_history_preferences,
+            save_reading_history_preferences,
+            start_reading_session,
+            heartbeat_reading_session,
+            end_reading_session,
+            get_reading_statistics,
+            clear_reading_history,
+            export_reading_history,
             mark_book_opened,
             remove_book,
             get_book_details,
