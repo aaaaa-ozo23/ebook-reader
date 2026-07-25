@@ -9,6 +9,22 @@
 - **依赖状态错误：** 首次在版本统一后调用 `pnpm.cmd format:write`，pnpm 发现现有 `node_modules` 元数据与新的根 package 版本不一致，在无 TTY 下以 `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` 停止，并伴随 registry 元数据获取失败。没有依赖或锁文件变更；下一步改用 CI 模式的冻结离线安装恢复锁定环境，不重复普通交互式安装。
 - **依赖恢复：** 首次冻结离线安装在 180 秒外层限制内只完成删除旧 `node_modules`；第二次带 append-only reporter 明确定位 store 缺少一个锁定 tarball。经授权执行 CI 模式冻结安装后 291 个锁定包全部从 store 复用，downloaded=0，未升级依赖或改写 lockfile。
 - **版本校验错误：** `verify:release` 已通过 0.3.0；`verify:stage14` 首次失败是 Cargo 版本正则仍硬编码 0.2.0。已改为从唯一的 `expectedSourceVersion` 动态生成转义正则，避免未来发布再次出现双份常量。
+- **自动化门禁：** `pnpm.cmd check` 通过（Core 9、Desktop 212），Rust 81/81、Cargo fmt、libmobi hash/capability、291 JS + 556 Cargo unknown license=0、release/security/version/Stage14 verifier 与 diff check 全部通过。Playwright 35/35 明确输出 `ok`；外层只在所有断言后因 Windows Vite 输出句柄达到 360 秒清理限制。
+- **final 产物：** `release-artifacts/v0.3.0-final/` 生成 13 个上传资产；NSIS 8,015,139 bytes / SHA-256 `7342D193...54CCD0`，MSI 10,399,744 / `EE2EC1BF...34F1DA`，updater signature 424 bytes。Syft 1.44.0 双 SBOM、LGPL 源码/签名、license、manifest、SHA256SUMS、Authenticode `NotSigned` 和 security verifier 均通过。
+- **原生安装：** 独立 `com.ebookreader.desktop.stage14-acceptance` 全新安装报告 File/ProductVersion 0.3.0、schema9、books/bookmarks/annotations/progress/user metadata/fonts/history 均 0、managed files 0。0.2.0 隔离基线导入 1 本 TXT 后覆盖 0.3.0，升级退出码 0，book=1、managed file=1、history preference=1、sidecar hash 均保留。测试产品和专用 app-data 已删除；正式 app-data 未被目标操作且仍存在。
+- **Git/Chrome：** GCM 浏览器授权成功后，沙箱内凭据存储仍因 wincredman 不可写而超时；改用用户已授权的沙箱外 Git 通道后 `release/v0.3.0` 推送成功。annotated `v0.3.0` 已固定并推送到验收提交 `8222671`。Chrome 新发行版页面已确认现有 tag 可选、Latest 默认选中、非 prerelease；尚未保存或公开。
+- **Chrome 表单：** GitHub 的标签选择器已显示远端现有 `v0.3.0`，接下来固定选择该 tag，填写正式说明并只上传 `release-artifacts/v0.3.0-final/` 的 13 个已验证文件。
+- **Chrome tag：** 已在表单中选择远端现有 `v0.3.0`；页面确认 tag 已存在，Latest 保持选中且非 prerelease。
+- **Chrome 说明：** 已填写正式标题与发行说明，下载建议明确区分 NSIS updater 轨和 MSI 手动轨，安全说明如实保留 Authenticode `NotSigned`、DRM 拒绝和 SHA-256 核验。
+- **附件上传：** Chrome file chooser 已接收 `release-artifacts/v0.3.0-final/` 的 13 个正式文件；未加入 acceptance 临时安装器、测试配置、数据库或用户数据。正在等待 GitHub 上传队列完全结束后保存草稿。
+- **附件计数：** GitHub 表单已渲染 13 个附件名输入框，表示全部 13 个选中文件均已进入附件列表；下一步复核无“正在上传”状态并保存草稿。
+- **GitHub 草稿：** 上传队列确认无 loading 且附件数为 13 后，已通过 Chrome 保存 `v0.3.0` Release 草稿并进入独立草稿编辑 URL；尚未点击公开。
+- **草稿验收：** 草稿持久化后再次读取页面，tag、标题、发行说明、13 个附件和 Latest/Prerelease 状态全部正确；已满足公开按钮前的 UI 门禁。
+- **公开发布：** 已通过 Chrome 将 `Ebook Reader v0.3.0` 发布为 Latest，公开 URL 为 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.3.0`；页面绑定 tag/commit `v0.3.0` / `8222671`，附件区 15 项含 13 个上传产物和 2 个 source archives。
+- **远端完整性：** Chrome 公开页上的 13 个 GitHub 服务端 SHA-256 digest 已逐项与本地 final 对照，全部匹配；checksum 清单文件自身也单独计算并匹配。
+- **Latest 验证：** Chrome 的公开 `/releases/latest` 已重定向至 `/releases/tag/v0.3.0`，并显示 v0.3.0 正式标题。
+- **公开 API/feed：** GitHub API 确认 `draft=false`、`prerelease=false`、13/13 assets 为 uploaded，名称和精确 byte size 全部匹配本地；公开 Latest feed 为 0.3.0、签名完整、下载 URL 指向 v0.3.0 NSIS。
+- **MSI final 复核：** 正式 MSI administrative image 成功，3 个预期运行文件合计 24,184,001 bytes，主 EXE 0.3.0，用户数据库/书籍/library payload 为 0，临时 image 已删除。
 
 ## 2026-07-25 大阶段 14.7：总验收
 

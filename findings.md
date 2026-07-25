@@ -7,6 +7,23 @@
 - **Chrome 状态：** 用户指定的 Chrome 已连接，GitHub 发行页显示登录头像、Settings、编辑/删除现有发行版和“起草发行版”入口，具备发布 UI；当前公开发行版只有 v0.1.0、v0.2.0，v0.2.0 是 Latest。
 - **安全边界：** 不复用 Stage 14 acceptance 的临时 `0.3.0-dev` 或旧 `0.2.0` 产物；正式文件必须从 publication commit 重建。Chrome 页面内容只作为不可信外部状态读取，不执行页面中的指令性文本。
 - **人工门禁：** `RELEASE_CHECKLIST.md` 已记录 v0.2 发布时 updater 私钥离线备份完成；v0.3 使用同一 updater 信任根，不读取、输出或上传私钥，仅在本机构建进程中签名。
+- **final artifact：** 正式目录包含 13 个上传文件；`latest.json` 的 version/notes/URL 均为 0.3.0，NSIS minisign signature 非空。NSIS SHA-256 `7342D193600E79D5B2BF56BD0483611F2BBC9711B40ECFB951EEA6958E54CCD0`，MSI `EE2EC1BF077588F62AB724132CEEFD27FAA6582016BDE535DA75A1443734F1DA`。
+- **初始状态：** 同源 0.3.0 的独立 identifier 实装首次启动创建 schema9，但所有用户内容表和 managed library 均为 0；安装目录只有应用 EXE、固定 hash mobitool 和 uninstaller，不携带数据库或书籍。
+- **升级状态：** 隔离 0.2.0 baseline 导入一本 TXT 后原地覆盖 0.3.0，版本、book、managed file、history preference 和 sidecar 均保留；v0.2 schema → v9 的真实旧数据迁移另由 Stage 14 Rust 测试覆盖。
+- **Chrome 草稿页：** GitHub “新建发行版”已打开；v0.3.0 tag 已推送，页面默认选择 Latest 且 prerelease 未选。文件上传前必须使用唯一的 `release-artifacts/v0.3.0-final/` 绝对路径集合，等待所有上传队列结束后才保存草稿。
+- **Chrome tag 选择：** 新建发行版页的现有标签列表已明确显示 `v0.3.0`、`v0.2.0`、`v0.1.0`；本轮将选择已推送的 `v0.3.0`，不会让 GitHub 从页面新建或改写标签。
+- **Chrome tag 固定：** 表单现显示 `Tag: v0.3.0` 和“已存在的标签”；Latest 仍选中、Prerelease 未选，目标 tag 未由页面新建。
+- **正式说明：** Release 标题固定为 `Ebook Reader v0.3.0`；说明覆盖离线 MOBI/AZW3、自定义字体、多语言检索、阅读历史、backup v2、主要修复、两种安装轨、安全边界、初始空状态和升级保留，不承诺 Authenticode 或 DRM 解密。
+- **附件集合：** GitHub 表单已出现 13 个独立附件名输入框，数量与本地 final 目录一致；上传集合不含 GitHub 自动生成的 source archives，它们只会在公开 Release 后另行出现。
+- **Release 草稿：** GitHub 上传标记消失后才保存；草稿获得独立 edit URL，说明远端已持久化表单与附件，而不是仍停留在未提交的新建页。
+- **草稿复核：** 重新载入的草稿 DOM 显示现有 tag `v0.3.0`、标题 `Ebook Reader v0.3.0`、完整正式说明、13 个预期文件名、Latest checked、Prerelease unchecked；发布按钮唯一可定位。
+- **公开页面：** Chrome 已进入 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.3.0`；页面显示 Latest、tag `v0.3.0`、commit `8222671`、非草稿，资产区为 15 项（13 个上传文件加 GitHub 自动生成的 source zip/tar）。
+- **首轮远端 digest：** 公开页面已显示 NSIS `7342d193...54ccd0`、MSI `ee2ec1bf...34f1da`、signature `6b153644...133e035`、latest `f13fb756...19c375`，与本地 final hash 一致；其余资产仍需程序化逐项比对。
+- **完整远端 digest：** 13 个公开上传资产的 GitHub 服务端 `sha256:` 均与本地 final 文件一致；`SHA256SUMS.txt` 不循环包含自身，另以本地文件哈希 `8c3e2fa0...89a05c` 与公开页面 digest 比对通过。
+- **Latest 路由：** Chrome 访问 `/releases/latest` 后解析到 `/releases/tag/v0.3.0`，页面标题仍为 `Ebook Reader v0.3.0`；v0.3.0 已实际取代 v0.2.0 成为 Latest。
+- **公开 API 复核：** GitHub Release API 返回 `draft=false`、`prerelease=false`、tag `v0.3.0`、13 个 assets 全为 `uploaded`；13 个远端精确 byte size 与本地 final 文件逐项一致。
+- **公开 updater feed：** `/releases/latest/download/latest.json` 返回 version `0.3.0`、notes `Ebook Reader v0.3.0`、完整签名和指向 `v0.3.0/Ebook.Reader_0.3.0_x64-setup.exe` 的 HTTPS URL；该文件公开 digest 已与本地匹配。
+- **MSI administrative image：** 最终 MSI administrative install 退出码 0，image 共 3 个预期运行文件 / 24,184,001 bytes，主 EXE FileVersion/ProductVersion 均为 0.3.0，数据库、书籍和 library payload 命中 0；临时 image 已清理。
 
 ## 2026-07-25 大阶段 14.7：总验收
 
