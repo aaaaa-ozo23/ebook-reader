@@ -228,6 +228,31 @@ struct PortableBackupData {
     settings: Vec<PortableSetting>,
     #[serde(default)]
     custom_fonts: Vec<PortableCustomFont>,
+    #[serde(default)]
+    reading_sessions: Vec<PortableReadingSession>,
+    #[serde(default)]
+    reading_history_preferences: Option<PortableReadingHistoryPreferences>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableReadingSession {
+    id: String,
+    book_id: String,
+    started_at: String,
+    ended_at: Option<String>,
+    last_heartbeat_at: String,
+    active_seconds: i64,
+    final_progress: Option<f64>,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableReadingHistoryPreferences {
+    enabled: bool,
+    updated_at: String,
+    cleared_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -790,6 +815,8 @@ fn inspect_archive(backup_path: &Path, canceled: &AtomicBool) -> anyhow::Result<
             annotations: Vec::new(),
             settings: Vec::new(),
             custom_fonts: Vec::new(),
+            reading_sessions: Vec::new(),
+            reading_history_preferences: None,
         }
     };
     validate_portable_data(&data, &manifest)?;
@@ -927,10 +954,34 @@ fn validate_portable_data(
                 .iter()
                 .map(|record| record.book_id.as_str()),
         )
+        .chain(
+            data.reading_sessions
+                .iter()
+                .map(|record| record.book_id.as_str()),
+        )
     {
         if !book_ids.contains(book_id) {
             bail!("[orphan-record] portable reading record references an unknown book");
         }
+    }
+    let session_ids: HashSet<&str> = data
+        .reading_sessions
+        .iter()
+        .map(|session| session.id.as_str())
+        .collect();
+    if session_ids.len() != data.reading_sessions.len()
+        || data.reading_sessions.iter().any(|session| {
+            session.id.trim().is_empty()
+                || session.active_seconds < 0
+                || session.started_at.trim().is_empty()
+                || session.last_heartbeat_at.trim().is_empty()
+                || session.updated_at.trim().is_empty()
+                || session
+                    .final_progress
+                    .is_some_and(|progress| !(0.0..=1.0).contains(&progress))
+        })
+    {
+        bail!("[reading-history-invalid] portable reading history is invalid");
     }
     Ok(())
 }
@@ -1292,6 +1343,13 @@ fn merge_restore_data(
     let font_id_map = merge_custom_fonts(transaction, &data.custom_fonts, moved_files, &mut items)?;
     let remapped_settings = remap_font_settings(&data.settings, &font_id_map);
     merge_settings(transaction, &remapped_settings, &mut items)?;
+    merge_reading_history(
+        transaction,
+        &data.reading_sessions,
+        data.reading_history_preferences.as_ref(),
+        &book_id_map,
+        &mut items,
+    )?;
     Ok(items)
 }
 
@@ -1774,6 +1832,153 @@ fn merge_settings(
     Ok(())
 }
 
+fn merge_reading_history(
+    transaction: &Transaction<'_>,
+    sessions: &[PortableReadingSession],
+    incoming_preferences: Option<&PortableReadingHistoryPreferences>,
+    book_id_map: &HashMap<String, String>,
+    items: &mut Vec<RestoreResultItem>,
+) -> anyhow::Result<()> {
+    let local_preferences: (bool, String, Option<String>) = transaction.query_row(
+        "SELECT enabled, updated_at, cleared_at
+         FROM reading_history_preferences WHERE id = 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let incoming_cleared_at = incoming_preferences.and_then(|value| value.cleared_at.as_deref());
+    let effective_cleared_at =
+        max_optional_timestamp(local_preferences.2.as_deref(), incoming_cleared_at)
+            .map(str::to_string);
+
+    if incoming_cleared_at.is_some_and(|incoming| {
+        local_preferences
+            .2
+            .as_deref()
+            .is_none_or(|local| incoming > local)
+    }) {
+        let incoming = incoming_cleared_at.expect("checked incoming clear timestamp");
+        transaction.execute(
+            "DELETE FROM reading_sessions WHERE updated_at <= ?1",
+            [incoming],
+        )?;
+    }
+
+    for session in sessions {
+        let Some(local_book_id) = book_id_map.get(&session.book_id) else {
+            items.push(restore_item(
+                "history",
+                &session.id,
+                "Reading session",
+                RestoreItemStatus::Skipped,
+                "The related book was not available in this backup",
+            ));
+            continue;
+        };
+        if effective_cleared_at
+            .as_deref()
+            .is_some_and(|cleared_at| session.updated_at.as_str() <= cleared_at)
+        {
+            items.push(restore_item(
+                "history",
+                &session.id,
+                "Reading session",
+                RestoreItemStatus::LocalKept,
+                "A newer clear-history action was kept",
+            ));
+            continue;
+        }
+        let local_updated_at: Option<String> = transaction
+            .query_row(
+                "SELECT updated_at FROM reading_sessions WHERE id = ?1",
+                [&session.id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let incoming_newer = local_updated_at
+            .as_deref()
+            .is_none_or(|local| session.updated_at.as_str() > local);
+        if incoming_newer {
+            let safe_ended_at = session.ended_at.as_deref().unwrap_or(&session.updated_at);
+            transaction.execute(
+                "INSERT INTO reading_sessions (
+                   id, book_id, started_at, ended_at, last_heartbeat_at,
+                   active_seconds, final_progress, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(id) DO UPDATE SET
+                   book_id=excluded.book_id,
+                   started_at=excluded.started_at,
+                   ended_at=excluded.ended_at,
+                   last_heartbeat_at=excluded.last_heartbeat_at,
+                   active_seconds=excluded.active_seconds,
+                   final_progress=excluded.final_progress,
+                   updated_at=excluded.updated_at",
+                params![
+                    &session.id,
+                    local_book_id,
+                    &session.started_at,
+                    safe_ended_at,
+                    &session.last_heartbeat_at,
+                    session.active_seconds.max(0),
+                    session.final_progress,
+                    &session.updated_at,
+                ],
+            )?;
+        }
+        items.push(restore_item(
+            "history",
+            &session.id,
+            "Reading session",
+            if local_updated_at.is_none() {
+                RestoreItemStatus::Restored
+            } else if incoming_newer {
+                RestoreItemStatus::Merged
+            } else {
+                RestoreItemStatus::LocalKept
+            },
+            if incoming_newer {
+                "Reading session merged by UUID and update time"
+            } else {
+                "Local reading session was newer or equal"
+            },
+        ));
+    }
+
+    if let Some(incoming) = incoming_preferences {
+        let incoming_newer = incoming.updated_at > local_preferences.1;
+        if incoming_newer || incoming_cleared_at == effective_cleared_at.as_deref() {
+            transaction.execute(
+                "UPDATE reading_history_preferences
+                 SET enabled = CASE WHEN ?1 THEN ?2 ELSE enabled END,
+                     updated_at = CASE WHEN ?1 THEN ?3 ELSE updated_at END,
+                     cleared_at = ?4
+                 WHERE id = 1",
+                params![
+                    incoming_newer,
+                    incoming.enabled,
+                    &incoming.updated_at,
+                    effective_cleared_at.as_deref(),
+                ],
+            )?;
+        }
+        items.push(restore_item(
+            "history",
+            "preferences",
+            "History & Privacy",
+            if incoming_newer {
+                RestoreItemStatus::Merged
+            } else {
+                RestoreItemStatus::LocalKept
+            },
+            if incoming_newer {
+                "History preference merged by update time"
+            } else {
+                "Local history preference was newer or equal"
+            },
+        ));
+    }
+    Ok(())
+}
+
 fn count_conflicts(conn: &Connection, data: &PortableBackupData) -> anyhow::Result<u64> {
     let mut conflicts = 0_u64;
     for bookmark in &data.bookmarks {
@@ -1794,6 +1999,13 @@ fn count_conflicts(conn: &Connection, data: &PortableBackupData) -> anyhow::Resu
         conflicts += conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key = ?1)",
             params![&setting.key],
+            |row| row.get::<_, bool>(0),
+        )? as u64;
+    }
+    for session in &data.reading_sessions {
+        conflicts += conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM reading_sessions WHERE id = ?1)",
+            params![&session.id],
             |row| row.get::<_, bool>(0),
         )? as u64;
     }
@@ -2029,6 +2241,8 @@ fn collect_portable_data(
             annotations: query_annotations(conn)?,
             settings: query_settings(conn)?,
             custom_fonts,
+            reading_sessions: query_reading_sessions(conn)?,
+            reading_history_preferences: query_reading_history_preferences(conn)?,
         },
         file_payloads,
     ))
@@ -2151,6 +2365,49 @@ fn query_settings(conn: &Connection) -> anyhow::Result<Vec<PortableSetting>> {
     Ok(rows)
 }
 
+fn query_reading_sessions(conn: &Connection) -> anyhow::Result<Vec<PortableReadingSession>> {
+    let mut statement = conn.prepare(
+        "SELECT id, book_id, started_at, ended_at, last_heartbeat_at,
+                active_seconds, final_progress, updated_at
+         FROM reading_sessions ORDER BY started_at, id",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(PortableReadingSession {
+                id: row.get(0)?,
+                book_id: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                last_heartbeat_at: row.get(4)?,
+                active_seconds: row.get(5)?,
+                final_progress: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(anyhow::Error::from)?;
+    Ok(rows)
+}
+
+fn query_reading_history_preferences(
+    conn: &Connection,
+) -> anyhow::Result<Option<PortableReadingHistoryPreferences>> {
+    conn.query_row(
+        "SELECT enabled, updated_at, cleared_at
+         FROM reading_history_preferences WHERE id = 1",
+        [],
+        |row| {
+            Ok(PortableReadingHistoryPreferences {
+                enabled: row.get(0)?,
+                updated_at: row.get(1)?,
+                cleared_at: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(anyhow::Error::from)
+}
+
 fn json_column(row: &Row<'_>, index: usize) -> rusqlite::Result<Value> {
     let raw: String = row.get(index)?;
     serde_json::from_str(&raw).map_err(|error| {
@@ -2227,6 +2484,10 @@ fn record_counts(data: &PortableBackupData, files: &[FilePayload]) -> BTreeMap<S
     counts.insert("annotations".to_string(), data.annotations.len() as u64);
     counts.insert("settings".to_string(), data.settings.len() as u64);
     counts.insert("customFonts".to_string(), data.custom_fonts.len() as u64);
+    counts.insert(
+        "readingSessions".to_string(),
+        data.reading_sessions.len() as u64,
+    );
     counts.insert(
         "covers".to_string(),
         files
@@ -2628,6 +2889,101 @@ mod tests {
     }
 
     #[test]
+    fn backup_v2_history_merge_keeps_newer_clear_tombstone() {
+        let directory = tempdir().expect("tempdir");
+        let database = directory.path().join("history.sqlite3");
+        let library = directory.path().join("library");
+        fs::create_dir_all(&library).expect("library");
+        init_database_at(&database).expect("database");
+        let mut conn = Connection::open(&database).expect("connection");
+        conn.execute(
+            "UPDATE reading_history_preferences
+             SET cleared_at = '2026-07-22T10:00:00Z',
+                 updated_at = '2026-07-22T10:00:00Z'
+             WHERE id = 1",
+            [],
+        )
+        .expect("local clear");
+
+        let mut data = empty_portable_data();
+        data.books.push(PortableBook {
+            id: "backup-book".to_string(),
+            title: "History backup".to_string(),
+            author: None,
+            format: "txt".to_string(),
+            file_hash: "a".repeat(64),
+            cover_status: "fallback".to_string(),
+            cover_archive_path: None,
+            book_archive_path: None,
+            reader_format: Some("txt".to_string()),
+            reader_hash: Some("a".repeat(64)),
+            reader_archive_path: None,
+            converter_id: None,
+            converter_version: None,
+            created_at: "2026-07-20T00:00:00Z".to_string(),
+            updated_at: "2026-07-20T00:00:00Z".to_string(),
+            last_opened_at: None,
+            user_title: None,
+            title_override_updated_at: None,
+            user_author: None,
+            author_override_updated_at: None,
+            user_cover: false,
+            cover_override_updated_at: None,
+        });
+        data.reading_sessions.push(PortableReadingSession {
+            id: "old-session".to_string(),
+            book_id: "backup-book".to_string(),
+            started_at: "2026-07-20T00:00:00Z".to_string(),
+            ended_at: Some("2026-07-20T00:30:00Z".to_string()),
+            last_heartbeat_at: "2026-07-20T00:30:00Z".to_string(),
+            active_seconds: 1_800,
+            final_progress: Some(0.25),
+            updated_at: "2026-07-20T00:30:00Z".to_string(),
+        });
+        data.reading_sessions.push(PortableReadingSession {
+            id: "new-session".to_string(),
+            book_id: "backup-book".to_string(),
+            started_at: "2026-07-22T11:00:00Z".to_string(),
+            ended_at: Some("2026-07-22T11:30:00Z".to_string()),
+            last_heartbeat_at: "2026-07-22T11:30:00Z".to_string(),
+            active_seconds: 1_800,
+            final_progress: Some(0.5),
+            updated_at: "2026-07-22T11:30:00Z".to_string(),
+        });
+        data.reading_history_preferences = Some(PortableReadingHistoryPreferences {
+            enabled: true,
+            updated_at: "2026-07-21T00:00:00Z".to_string(),
+            cleared_at: None,
+        });
+
+        let transaction = conn.transaction().expect("transaction");
+        let items = merge_restore_data(&transaction, &data, &HashMap::new(), &library)
+            .expect("merge history");
+        transaction.commit().expect("commit");
+        let session_ids = Connection::open(&database)
+            .expect("restored connection")
+            .prepare("SELECT id FROM reading_sessions ORDER BY id")
+            .expect("statement")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("rows")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("session ids");
+        assert_eq!(session_ids, vec!["new-session"]);
+        assert!(items.iter().any(|item| {
+            item.id == "old-session" && item.status == RestoreItemStatus::LocalKept
+        }));
+        let cleared_at: Option<String> = Connection::open(&database)
+            .expect("preferences connection")
+            .query_row(
+                "SELECT cleared_at FROM reading_history_preferences WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("cleared timestamp");
+        assert_eq!(cleared_at.as_deref(), Some("2026-07-22T10:00:00Z"));
+    }
+
+    #[test]
     fn operation_registry_exposes_cooperative_cancellation() {
         let registry = DataOperationRegistry::default();
         let canceled = registry.register("backup-1").expect("register");
@@ -2645,6 +3001,8 @@ mod tests {
             annotations: Vec::new(),
             settings: Vec::new(),
             custom_fonts: Vec::new(),
+            reading_sessions: Vec::new(),
+            reading_history_preferences: None,
         }
     }
 

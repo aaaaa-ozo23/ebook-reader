@@ -18,6 +18,7 @@ import {
 } from "../tauri/backup";
 import { UpdatesSettings } from "./UpdatesSettings";
 import { ReadingFontsSettings } from "./ReadingFontsSettings";
+import { ReadingHistorySettings } from "./ReadingHistorySettings";
 
 import "./SettingsCenter.css";
 
@@ -30,11 +31,15 @@ const DEFAULT_OPTIONS: BackupOptions = {
 export function SettingsCenter({
   onClose,
   onLibraryChanged = () => undefined,
+  initialSection = "data",
 }: {
   onClose: () => void;
   onLibraryChanged?: () => void;
+  initialSection?: "data" | "fonts" | "history" | "updates";
 }) {
-  const [section, setSection] = useState<"data" | "fonts" | "updates">("data");
+  const [section, setSection] = useState<"data" | "fonts" | "history" | "updates">(
+    initialSection,
+  );
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
@@ -219,6 +224,15 @@ export function SettingsCenter({
           <button
             type="button"
             className="settings-nav-item"
+            aria-current={section === "data" ? "page" : undefined}
+            onClick={() => setSection("data")}
+          >
+            <DatabaseIcon />
+            <span>Data &amp; Backup</span>
+          </button>
+          <button
+            type="button"
+            className="settings-nav-item"
             aria-current={section === "fonts" ? "page" : undefined}
             onClick={() => setSection("fonts")}
           >
@@ -228,11 +242,11 @@ export function SettingsCenter({
           <button
             type="button"
             className="settings-nav-item"
-            aria-current={section === "data" ? "page" : undefined}
-            onClick={() => setSection("data")}
+            aria-current={section === "history" ? "page" : undefined}
+            onClick={() => setSection("history")}
           >
-            <DatabaseIcon />
-            <span>Data &amp; Backup</span>
+            <HistoryIcon />
+            <span>History &amp; Privacy</span>
           </button>
           <button
             type="button"
@@ -247,7 +261,7 @@ export function SettingsCenter({
       </aside>
 
       <section className="settings-content">
-        {section === "fonts" ? (
+        {section === "fonts" || section === "history" ? (
           <header className="settings-mobile-header">
             <button
               type="button"
@@ -256,7 +270,9 @@ export function SettingsCenter({
             >
               <BackIcon />
             </button>
-            <strong>Reading &amp; Fonts</strong>
+            <strong>
+              {section === "fonts" ? "Reading & Fonts" : "History & Privacy"}
+            </strong>
             <button type="button" aria-label="Close settings" onClick={onClose}>
               <CloseIcon />
             </button>
@@ -269,7 +285,9 @@ export function SettingsCenter({
                 ? "Local-first controls"
                 : section === "fonts"
                   ? "Reading preferences"
-                  : "Release track"}
+                  : section === "history"
+                    ? "Private by design"
+                    : "Release track"}
             </p>
             <h1 id={titleId}>
               {section === "data" ? (
@@ -283,6 +301,8 @@ export function SettingsCenter({
                     Your type, locally.
                   </span>
                 </>
+              ) : section === "history" ? (
+                "History & Privacy"
               ) : (
                 "Updates"
               )}
@@ -301,6 +321,8 @@ export function SettingsCenter({
                     typefaces.
                   </span>
                 </>
+              ) : section === "history" ? (
+                "Reading history is stored only on this device. It is never uploaded, compared or used for recommendations."
               ) : (
                 "You decide when the app checks, downloads, and installs."
               )}
@@ -318,6 +340,8 @@ export function SettingsCenter({
 
         {section === "updates" ? (
           <UpdatesSettings />
+        ) : section === "history" ? (
+          <ReadingHistorySettings />
         ) : section === "fonts" ? (
           <ReadingFontsSettings />
         ) : (
@@ -697,6 +721,13 @@ const UpdateIcon = () => (
   <SvgIcon>
     <path d="M20 7v5h-5" />
     <path d="M19 12a7 7 0 1 0-2 5" />
+  </SvgIcon>
+);
+const HistoryIcon = () => (
+  <SvgIcon>
+    <path d="M12 7v5l3 2" />
+    <circle cx="12" cy="12" r="8" />
+    <path d="M4.5 5.5 3 7M19.5 5.5 21 7" />
   </SvgIcon>
 );
 const ShieldIcon = () => (

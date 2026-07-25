@@ -1447,10 +1447,12 @@
   .settings-close {
     display: none;
   }
-  .settings-shell--fonts .settings-sidebar {
+  .settings-shell--fonts .settings-sidebar,
+  .settings-shell--history .settings-sidebar {
     display: none;
   }
-  .settings-shell--fonts .settings-content {
+  .settings-shell--fonts .settings-content,
+  .settings-shell--history .settings-content {
     padding-top: 0;
   }
   .settings-mobile-header {

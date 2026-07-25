@@ -55,6 +55,12 @@ const LazyLibrarySearch = lazy(() =>
   })),
 );
 
+const LazyReadingInsights = lazy(() =>
+  import("./library/ReadingInsights").then((module) => ({
+    default: module.ReadingInsights,
+  })),
+);
+
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -70,7 +76,11 @@ function App() {
   const [batchImportPaths, setBatchImportPaths] = useState<string[] | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<
+    "data" | "fonts" | "history" | "updates"
+  >("data");
   const [isLibrarySearchOpen, setIsLibrarySearchOpen] = useState(false);
+  const [isReadingInsightsOpen, setIsReadingInsightsOpen] = useState(false);
   const [librarySearchRequest, setLibrarySearchRequest] =
     useState<LibrarySearchHit | null>(null);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
@@ -476,8 +486,34 @@ function App() {
   const handleOpenLibrarySearch = useCallback(() => {
     setBookActionMenu(null);
     setIsSettingsOpen(false);
+    setIsReadingInsightsOpen(false);
     setIsLibrarySearchOpen(true);
   }, []);
+
+  const handleOpenReadingInsights = useCallback(() => {
+    setBookActionMenu(null);
+    setIsSettingsOpen(false);
+    setIsLibrarySearchOpen(false);
+    setIsReadingInsightsOpen(true);
+  }, []);
+
+  const handleCloseReadingInsights = useCallback(() => {
+    setIsReadingInsightsOpen(false);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("[data-reading-insights-trigger]")?.focus();
+    });
+  }, []);
+
+  const handleOpenSettings = useCallback(
+    (section: "data" | "fonts" | "history" | "updates" = "data") => {
+      setBookActionMenu(null);
+      setIsLibrarySearchOpen(false);
+      setIsReadingInsightsOpen(false);
+      setSettingsInitialSection(section);
+      setIsSettingsOpen(true);
+    },
+    [],
+  );
 
   const handleCloseLibrarySearch = useCallback(() => {
     setIsLibrarySearchOpen(false);
@@ -596,9 +632,25 @@ function App() {
           onClose={handleCloseLibrarySearch}
           onOpenHit={handleOpenLibrarySearchHit}
           onOpenSettings={() => {
-            setIsLibrarySearchOpen(false);
-            setIsSettingsOpen(true);
+            handleOpenSettings("data");
           }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (isReadingInsightsOpen) {
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading reading insights...
+          </main>
+        }
+      >
+        <LazyReadingInsights
+          onClose={handleCloseReadingInsights}
+          onOpenSettings={() => handleOpenSettings("history")}
         />
       </Suspense>
     );
@@ -614,6 +666,7 @@ function App() {
         }
       >
         <LazySettingsCenter
+          initialSection={settingsInitialSection}
           onClose={() => setIsSettingsOpen(false)}
           onLibraryChanged={() => void loadLibrary()}
         />
@@ -646,7 +699,8 @@ function App() {
         onImportFolder={() => void openBatchPicker("folder")}
         onOpenBook={handleOpenBook}
         onOpenSearch={handleOpenLibrarySearch}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenInsights={handleOpenReadingInsights}
+        onOpenSettings={() => handleOpenSettings("data")}
         onRequestRemoval={requestBookRemoval}
         onRetryLibrary={loadLibrary}
         onSelectLibraryView={handleSelectLibraryView}

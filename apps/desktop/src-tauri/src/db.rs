@@ -76,6 +76,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "library_search",
         sql: include_str!("../migrations/0008_library_search.sql"),
     },
+    Migration {
+        version: 9,
+        name: "reading_history",
+        sql: include_str!("../migrations/0009_reading_history.sql"),
+    },
 ];
 
 #[derive(Debug, Serialize)]
@@ -2882,10 +2887,11 @@ mod tests {
         PdfPaginatedViewMode, PdfRect, PdfViewMode, PdfZoomMode, ReaderExperiencePreferences,
         ReaderFormat, ReaderLayoutPreferences, ReaderTheme, ReaderThemeMode, TextOverridePatch,
         TxtExperiencePreferences, TxtLocator, TxtPaginatedViewMode, TxtViewMode, DB_FILE_NAME,
+        MIGRATIONS,
     };
 
     #[test]
-    fn migration_v8_creates_expected_tables_and_is_idempotent() {
+    fn migration_v9_creates_expected_tables_and_is_idempotent() {
         let temp_dir = tempdir().expect("temp dir");
         let database_path = temp_dir.path().join(DB_FILE_NAME);
 
@@ -2908,7 +2914,9 @@ mod tests {
                     'book_derivatives',
                     'custom_fonts',
                     'library_search_books',
-                    'library_search_chunks'
+                    'library_search_chunks',
+                    'reading_history_preferences',
+                    'reading_sessions'
                 )",
                 [],
                 |row| row.get(0),
@@ -2920,7 +2928,7 @@ mod tests {
             })
             .expect("count migration records");
 
-        assert_eq!(table_count, 13);
+        assert_eq!(table_count, 15);
         let bookmark_updated_at_columns: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM pragma_table_info('bookmarks') WHERE name = 'updated_at'",
@@ -2929,9 +2937,109 @@ mod tests {
             )
             .expect("count bookmark updated_at columns");
 
-        assert_eq!(migration_count, 8);
-        assert_eq!(schema_version(&conn).expect("schema version"), 8);
+        assert_eq!(migration_count, 9);
+        assert_eq!(schema_version(&conn).expect("schema version"), 9);
         assert_eq!(bookmark_updated_at_columns, 1);
+    }
+
+    #[test]
+    fn migration_from_v0_2_schema_preserves_existing_library_data() {
+        let temp_dir = tempdir().expect("temp dir");
+        let database_path = temp_dir.path().join(DB_FILE_NAME);
+        let mut legacy = Connection::open(&database_path).expect("open legacy database");
+
+        let transaction = legacy.transaction().expect("start legacy transaction");
+        for migration in MIGRATIONS.iter().take(5) {
+            transaction
+                .execute_batch(migration.sql)
+                .expect("apply legacy migration");
+            transaction
+                .execute(
+                    "INSERT OR IGNORE INTO schema_migrations(version, name) VALUES (?1, ?2)",
+                    params![migration.version, migration.name],
+                )
+                .expect("record legacy migration");
+        }
+        transaction.commit().expect("commit legacy schema");
+
+        legacy
+            .execute(
+                "INSERT INTO books(
+                    id, title, author, format, source_path, library_path, file_hash,
+                    cover_path, created_at, updated_at, last_opened_at
+                 ) VALUES (
+                    'legacy-book', 'Legacy title', 'Legacy author', 'epub',
+                    'C:/source/legacy.epub', 'C:/managed/legacy.epub', 'legacy-hash',
+                    NULL, '2026-07-01T00:00:00Z', '2026-07-01T00:00:00Z',
+                    '2026-07-02T00:00:00Z'
+                 )",
+                [],
+            )
+            .expect("seed legacy book");
+        legacy
+            .execute(
+                "INSERT INTO reading_progress(book_id, locator_json, progress, updated_at)
+                 VALUES ('legacy-book', '{\"kind\":\"epub\",\"cfi\":\"epubcfi(/6/2)\"}', 0.42,
+                    '2026-07-02T00:00:00Z')",
+                [],
+            )
+            .expect("seed legacy progress");
+        legacy
+            .execute(
+                "INSERT INTO bookmarks(id, book_id, locator_json, label, created_at, updated_at)
+                 VALUES ('legacy-bookmark', 'legacy-book',
+                    '{\"kind\":\"epub\",\"cfi\":\"epubcfi(/6/4)\"}', 'Keep me',
+                    '2026-07-02T00:00:00Z', '2026-07-02T00:00:00Z')",
+                [],
+            )
+            .expect("seed legacy bookmark");
+        drop(legacy);
+
+        init_database_at(&database_path).expect("migrate legacy database to v9");
+
+        let migrated = Connection::open(&database_path).expect("open migrated database");
+        assert_eq!(schema_version(&migrated).expect("schema version"), 9);
+        assert_eq!(
+            migrated
+                .query_row(
+                    "SELECT title FROM books WHERE id='legacy-book'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("read migrated book"),
+            "Legacy title"
+        );
+        assert_eq!(
+            migrated
+                .query_row(
+                    "SELECT progress FROM reading_progress WHERE book_id='legacy-book'",
+                    [],
+                    |row| row.get::<_, f64>(0),
+                )
+                .expect("read migrated progress"),
+            0.42
+        );
+        assert_eq!(
+            migrated
+                .query_row(
+                    "SELECT label FROM bookmarks WHERE id='legacy-bookmark'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .expect("read migrated bookmark"),
+            "Keep me"
+        );
+        let new_tables: i64 = migrated
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN (
+                    'book_derivatives', 'custom_fonts', 'library_search_books',
+                    'reading_history_preferences', 'reading_sessions'
+                )",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count post-v0.2 tables");
+        assert_eq!(new_tables, 5);
     }
 
     #[test]

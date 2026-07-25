@@ -99,6 +99,7 @@ import type {
 } from "./readerUiTypes";
 import type { EpubSpreadMode } from "../epub/EpubReaderAdapter";
 import { useReaderNavigationController } from "./useReaderNavigationController";
+import { useReadingHistorySession } from "./useReadingHistorySession";
 
 function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
   const isDark = theme.mode === "dark";
@@ -515,6 +516,11 @@ export function ReaderShell({
     currentBookmarkPosition?.bookId === book.id
       ? currentBookmarkPosition.locator
       : null;
+  const isReadingHistoryReady =
+    readerFormat === "txt"
+      ? document !== null && !isLoading && error === null
+      : currentBookmarkPosition?.bookId === book.id;
+  useReadingHistorySession({ bookId: book.id, ready: isReadingHistoryReady });
   const currentLocationBookmark = useMemo(
     () =>
       currentBookmarkLocator === null
