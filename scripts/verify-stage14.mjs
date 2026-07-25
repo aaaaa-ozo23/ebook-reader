@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { log } from "node:console";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { URL, fileURLToPath } from "node:url";
 
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const readText = (relativePath) =>
@@ -105,7 +106,7 @@ requireCondition(
   "Core must retain the source-format/reader-format boundary",
 );
 
-console.log(
+log(
   `Stage 14 contracts verified: version ${expectedSourceVersion}, migrations 0006-0009, ` +
     `MOBI/AZW3 associations, libmobi ${libmobi.version} ${sidecar.length} bytes ${sidecarHash}`,
 );
