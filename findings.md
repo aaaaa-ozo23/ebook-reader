@@ -1,5 +1,24 @@
 # 发现与决策
 
+## 2026-07-25 大阶段 14.9：v0.3.0 安装初始状态审计
+
+- **用户报告：** 从公开 v0.3.0 Release 的安装程序安装后，应用显示本机测试时导入的文件；用户要求确认是否为发行问题，确有问题则重建发行版。
+- **判定边界：** 安装包携带数据库/书籍属于发行污染；同一 production identifier 读取安装前已存在的 `%APPDATA%` 数据属于升级保留行为。重建相同二进制不会让后者变空，安装器主动清空则会破坏正常用户升级数据，因此必须先做来源审计。
+- **既有证据风险：** 14.8 的“空状态”使用独立 acceptance identifier，证明 payload 本身不含测试书，但没有模拟“当前 Windows 用户已有 production app-data 后重新安装正式 identifier”的视觉结果；用户本机报告正好落在这个差异上。
+- **production app-data 时间线：** `%APPDATA%\com.ebookreader.desktop` 创建于 2026-07-01 12:47，正式 v0.3.0 发布前已存在；数据库中 5 本书的 `created_at` 分布在 7 月 1、10、14、17、22 日，managed library 的 7 个文件也在相同日期创建。v0.3.0 于 7 月 25 日发布，因此这些内容不是本次安装新增。
+- **数据路径：** Rust 使用 Tauri `app.path().app_data_dir()` 并固定 `ebook-reader.sqlite3` / `library`；production identifier 是 `com.ebookreader.desktop`。安装或升级同一 identifier 会故意复用该目录。
+- **当前初步结论：** 用户看到的是安装前 production app-data 中的 5 本测试书，而非已证明的安装时新增数据；仍需直接检查公开 NSIS payload 和隔离首次启动，才可关闭发行污染假设。
+- **NSIS 构建脚本：** 与公开 installer hash 对应的 Tauri NSIS 输入只有主 EXE 与 `mobitool.exe` 两条应用 payload；没有 `ebook-reader.sqlite3`、`library/` 或 EPUB/TXT/PDF/MOBI/AZW3 文件。公开 NSIS 本地 hash 仍为 `7342D193...54CCD0`。
+- **进程路径分离：** 当前运行的 v0.3 应用来自新的 `D:\ebook-reader\Ebook Reader\ebook-reader-desktop.exe`，而旧程序目录位于 `%LOCALAPPDATA%\Ebook Reader`；二者都使用相同 production identifier，所以新的安装位置仍读取 7 月 1 日创建的 Roaming 数据库。
+- **根因方向：** 发行资产没有携带测试书；本机过去的开发/安装运行使用了 production identifier 并留下数据。需要审计开发命令/config，防止后续开发继续污染 production app-data。
+- **开发配置缺口：** `apps/desktop/package.json` 的 `tauri:dev` 直接执行 `tauri dev`，继承 production `tauri.conf.json` 的 `com.ebookreader.desktop`；开发运行会真实写入正式 Roaming 数据目录，这是本机测试书进入 production app-data 的根因。
+- **官方修复路径：** Tauri 2 官方文档明确支持 `--config` JSON Merge Patch，并以独立 productName/identifier 的 beta flavor 作为隔离应用示例。应增加 dev-only config 并让 `tauri:dev` 显式使用，正式 build scripts 继续使用 production base + NSIS/MSI flavor。
+- **真实 dev 运行：** 修复后的命令实际启动 `target/debug/ebook-reader-desktop.exe`，VersionInfo ProductName 为 `Ebook Reader Dev`，只创建 `%APPDATA%\com.ebookreader.desktop.dev`。新库 migration=9，books/bookmarks/annotations/progress/fonts/history 与 managed files 均为 0。
+- **production 未触碰：** dev 启动前后 production DB SHA-256 均为 `C315EAF9...5DB06B`，LastWriteTime 保持 23:33:47；审计结束只终止本轮精确 dev 进程树，没有删除或改写 production app-data。
+- **发行判定：** v0.3.0 公开 NSIS 不存在测试数据污染，用户现象由安装前已有 production 数据被正常保留导致。删除并重建 Release 不会改变该目录，反而会制造无意义的签名/hash 变更；公开 Release 应保留。
+- **本机恢复边界：** README 已明确卸载/重装默认保留 `%APPDATA%\com.ebookreader.desktop`。若维护者希望这台电脑显示空书架，应先从 Settings 导出 `.erbackup`，退出应用，再由维护者明确授权移动或删除 production app-data；该动作与重新发布无关，本轮不擅自执行。
+- **最终结论：** 公开 v0.3.0 安装程序没有问题，不重新创建 Release。仓库真实缺陷是 dev/prod identifier 未隔离，现已修复并由运行态证据和 release verifier 锁定。
+
 ## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
 
 - **用户授权：** 用户明确要求使用 Chrome 创建新的 v0.3 发行版；仓库既有版本命名与 Stage 14 契约均指向正式 `v0.3.0`。

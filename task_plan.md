@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 14.8：v0.3.0 正式发布，complete。Stage 14 的功能、全量门禁、Windows 正式产物、隔离安装/升级、Chrome 草稿优先公开、远端资产/feed 校验和 `main` 收口全部完成；停止在 Stage 15 之前。
+大阶段 14.9：v0.3.0 安装初始状态审计，complete。公开 installer 不含数据库或书籍；用户看到的是 7 月 1–22 日已写入 production profile 的本机测试数据，重装按设计保留。开发命令已切到独立 dev identifier 并完成真实空库验证；v0.3.0 Release 无需重建，Stage 15 未启动。
 
 ## 分支策略
 
@@ -534,6 +534,7 @@
 | 14.6 阅读历史与统计（complete） | `codex/stage14-reading-history` | 记录本地阅读会话、时长和完成度，提供按书/日期统计及清空开关 | 四张批准稿已复刻；Core 9、Desktop 212、Rust 80；Browser 1280/375 与定向 Playwright 通过 |
 | 14.7 阶段 14 验收（complete） | `codex/stage14-acceptance` | 对实际启用的 v0.3 能力做兼容、隐私、性能、许可证和打包验收 | Core 9、Desktop 212、Rust 81、Playwright 35/35、双安装包/SBOM/升级/包体门禁通过 |
 | 14.8 v0.3.0 正式发布（complete） | `release/v0.3.0` | 统一 0.3.0 版本与发布文档，重建签名 NSIS/MSI/SBOM/checksum，验证干净安装与 v0.2 升级，通过 Chrome 创建并公开第三个正式发行版 | final 产物来自 tag source；初始书库为空；升级数据与 sidecar 保留；13 个公开资产的名称/大小/hash 与 latest.json 全部复核；`--no-ff` 合入 main |
+| 14.9 v0.3.0 安装初始状态审计（complete） | `codex/stage14-release-empty-state-audit` | 审查公开 NSIS/MSI、production app-data 与首次启动路径，区分发行污染和既有本机数据复用；隔离开发 identifier 防止再次污染 | NSIS payload 无 DB/书籍；旧书时间早于 Release；真实 dev 首启 schema9/0 books/0 files 且 production hash 不变；不重建 Release |
 
 ### 阶段 14.1–14.7 执行契约
 

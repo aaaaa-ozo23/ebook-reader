@@ -8,14 +8,21 @@ const expectedVersion = "0.3.0";
 const readJson = async (path) =>
   JSON.parse(await readFile(resolve(root, path), "utf8"));
 
-const [rootPackage, desktopPackage, corePackage, tauriConfig, cargoManifest] =
-  await Promise.all([
-    readJson("package.json"),
-    readJson("apps/desktop/package.json"),
-    readJson("packages/core/package.json"),
-    readJson("apps/desktop/src-tauri/tauri.conf.json"),
-    readFile(resolve(root, "apps/desktop/src-tauri/Cargo.toml"), "utf8"),
-  ]);
+const [
+  rootPackage,
+  desktopPackage,
+  corePackage,
+  tauriConfig,
+  tauriDevConfig,
+  cargoManifest,
+] = await Promise.all([
+  readJson("package.json"),
+  readJson("apps/desktop/package.json"),
+  readJson("packages/core/package.json"),
+  readJson("apps/desktop/src-tauri/tauri.conf.json"),
+  readJson("apps/desktop/src-tauri/tauri.dev.conf.json"),
+  readFile(resolve(root, "apps/desktop/src-tauri/Cargo.toml"), "utf8"),
+]);
 
 const cargoVersion = cargoManifest.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
 const cargoLicense = cargoManifest.match(/^license\s*=\s*"([^"]+)"/m)?.[1];
@@ -47,6 +54,23 @@ if (tauriConfig.productName !== "Ebook Reader") {
 }
 if (tauriConfig.identifier !== "com.ebookreader.desktop") {
   releaseConfigErrors.push("identifier must remain com.ebookreader.desktop");
+}
+if (tauriDevConfig.productName !== "Ebook Reader Dev") {
+  releaseConfigErrors.push("development productName must be Ebook Reader Dev");
+}
+if (tauriDevConfig.identifier !== "com.ebookreader.desktop.dev") {
+  releaseConfigErrors.push(
+    "development identifier must be com.ebookreader.desktop.dev",
+  );
+}
+if (
+  desktopPackage.scripts?.["tauri:dev"] !==
+  "tauri dev --config src-tauri/tauri.dev.conf.json"
+) {
+  releaseConfigErrors.push("tauri:dev must use the isolated development configuration");
+}
+if (tauriDevConfig.identifier === tauriConfig.identifier) {
+  releaseConfigErrors.push("development identifier must not share production app data");
 }
 if (JSON.stringify(tauriConfig.bundle?.targets) !== JSON.stringify(["nsis", "msi"])) {
   releaseConfigErrors.push("bundle targets must be nsis and msi");

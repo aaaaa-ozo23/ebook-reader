@@ -382,6 +382,11 @@ pnpm.cmd --filter @reader/desktop tauri:dev
 cargo test --manifest-path apps\desktop\src-tauri\Cargo.toml
 ```
 
+`tauri:dev` merges `src-tauri/tauri.dev.conf.json`, so development runs use the separate
+`com.ebookreader.desktop.dev` data directory and the visible product name `Ebook Reader Dev`.
+Never start routine development with a bare `tauri dev`: the production
+`com.ebookreader.desktop` identifier is reserved for packaged releases and upgrade testing.
+
 ### 阶段 1：书架和导入
 
 目标：
