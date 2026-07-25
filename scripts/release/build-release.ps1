@@ -1,5 +1,5 @@
 param(
-  [string]$Version = '0.2.0',
+  [string]$Version = '0.3.0',
   [string]$OutputDirectory = "release-artifacts/v$Version-rc",
   [switch]$SkipQualityGates,
   [switch]$SkipBuild
@@ -77,7 +77,7 @@ try {
 
   $latest = [ordered]@{
     version = $Version
-    notes = 'Ebook Reader v0.2.0'
+    notes = "Ebook Reader v$Version"
     pub_date = (Get-Date).ToUniversalTime().ToString('o')
     platforms = [ordered]@{
       'windows-x86_64' = [ordered]@{
@@ -136,7 +136,7 @@ try {
     'UNSIGNED Authenticode downgrade: no Code Signing certificate was available; SmartScreen may warn.'
   }
   $acceptanceReport = @(
-    '# v0.2.0 release acceptance report'
+    "# v$Version release acceptance report"
     ''
     "- Generated: $((Get-Date).ToUniversalTime().ToString('o'))"
     '- Updater signature: required and generated for NSIS.'

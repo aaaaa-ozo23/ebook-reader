@@ -14,7 +14,7 @@ const requireCondition = (condition, message) => {
   }
 };
 
-const expectedSourceVersion = "0.2.0";
+const expectedSourceVersion = "0.3.0";
 const packageVersions = [
   ["package.json", readJson("package.json").version],
   ["packages/core/package.json", readJson("packages/core/package.json").version],
@@ -28,14 +28,18 @@ const packageVersions = [
 for (const [source, version] of packageVersions) {
   requireCondition(
     version === expectedSourceVersion,
-    `${source} must remain at ${expectedSourceVersion} until the v0.3 release stage`,
+    `${source} must report the formal Stage 14 release version ${expectedSourceVersion}`,
   );
 }
 
 const cargoManifest = readText("apps/desktop/src-tauri/Cargo.toml");
+const expectedCargoVersion = new RegExp(
+  `^version = "${expectedSourceVersion.replaceAll(".", "\\.")}"$`,
+  "m",
+);
 requireCondition(
-  /^version = "0\.2\.0"$/m.test(cargoManifest),
-  "Cargo.toml must remain at 0.2.0 until the v0.3 release stage",
+  expectedCargoVersion.test(cargoManifest),
+  `Cargo.toml must report the formal Stage 14 release version ${expectedSourceVersion}`,
 );
 
 for (const migration of [

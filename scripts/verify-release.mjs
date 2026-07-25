@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const expectedVersion = "0.2.0";
+const expectedVersion = "0.3.0";
 
 const readJson = async (path) =>
   JSON.parse(await readFile(resolve(root, path), "utf8"));
@@ -62,10 +62,13 @@ const associatedExtensions = new Set(
     (association) => association.ext ?? [],
   ),
 );
-for (const extension of ["epub", "txt", "pdf"]) {
+for (const extension of ["epub", "txt", "pdf", "mobi", "azw3"]) {
   if (!associatedExtensions.has(extension)) {
     releaseConfigErrors.push(`missing .${extension} file association`);
   }
+}
+if (!tauriConfig.bundle?.externalBin?.includes("binaries/mobitool")) {
+  releaseConfigErrors.push("bundle must include the pinned mobitool sidecar");
 }
 
 for (const path of [
