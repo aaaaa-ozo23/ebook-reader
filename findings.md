@@ -1,12 +1,26 @@
 # 发现与决策
 
+## 2026-07-25 大阶段 14.7：总验收
+
+- **sidecar 与许可：** 固定 mobitool 仍为 296,129 bytes / SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`，x64 PE、libmobi 0.12、EPUB/KF8 能力与无密码/解密入口均复核通过。三本真实 fixture 为 56–211ms、峰值 3.19–5.73 MiB。
+- **依赖安全：** 291 个 JavaScript 与 556 个 Cargo 外部包 unknown license 均为 0；updater 公钥 fingerprint、HTTPS endpoint、私钥标记扫描、sidecar metadata 与仓库安全门通过。
+- **升级数据：** 新增从仅应用 0001–0005 的 v0.2 schema 出发的迁移测试，预置 book、reading progress 和 bookmark 后执行正式 migration runner；schema 到 v9，旧数据及新表均保留。
+- **PDF 性能根因：** Stage 14 总矩阵的唯一首轮失败是 DPR2 500 页 PDF 从第 1 页直接跳到第 250 页时出现 53–63ms long task。位置更新、continuous virtualizer 定位、ReaderShell 书签/目录派生 chrome 和三张 overscan canvas 在同一任务启动。最终把连续跳转拆到相邻 frame、派生 chrome 放入 React transition，并把不可见 overscan 页延后 96ms 预热；专用 50ms 轨连续两次通过，阈值、画质和虚拟页/像素预算均未降低。
+- **原生升级：** 独立 `com.ebookreader.desktop.stage14-acceptance` 轨从 0.2.0 baseline 导入 1 本 TXT，再以 0.3.0-dev 覆盖；版本、schema v9、书籍记录、managed file、history preferences 和 sidecar hash 均正确保留。验收后卸载测试产品并删除专用 app-data，正式数据未被目标操作触碰。
+- **包体结论：** 最终 NSIS 8,019,737 bytes（较 v0.2.0 final +646,045），MSI 10,403,840 bytes（+942,080）；MSI administrative image 安装目录增量 2,567,873 bytes。三项均远低于 10 MiB/10 MiB/20 MiB 门槛。
+- **Stage 14 结论：** Core 9、Desktop 212、Rust 81、Playwright 35/35、CycloneDX、安全、许可、签名 NSIS、MSI 和升级矩阵全部关闭；完整报告见 `docs/architecture/stage14-acceptance.md`。正式版本不变，不创建 tag/Release，不进入 Stage 15。
+
+
 ## 2026-07-22 大阶段 14.6：阅读历史与统计状态板
 
 - **指标边界：** Insights 只显示 Today、最近 7 天、累计有效时长、每日分钟和按书时长；完成度直接显示现有 reading progress。不加入 streak、排行榜、效率分数或推断型指标，避免把本地阅读变成压力反馈。
 - **隐私层级：** History & Privacy 延续 Settings Center；首屏明确 local-only、默认启用、关闭立即结束活动会话但不隐式删除旧记录。CSV 导出与清空分开，清空说明保留 clear timestamp 以阻止旧备份复活已删除历史。
 - **计时说明：** 状态板把 visible、focused、recent interaction 作为用户可读条件；休眠、后台和超过 45 秒间隔的实现细节在生产文档与测试中展开，不让 dashboard 显示伪精确在线状态。
 - **响应式：** 375px 使用两张并列 full-screen sheet 评审视图：Insights 保留三摘要、紧凑趋势和按书列表；History 保留开关、导出、清空与 sticky Done。所有顶部/底部操作以 44px 为最小目标。
-- **审核边界：** 当前只提交四张 PNG、可编辑 HTML 与 README；未创建 `0009_reading_history.sql`、session/heartbeat Tauri 命令或生产 React/CSS。等待用户逐图批准。
+- **批准状态：** 用户已批准全部四张状态板；后续 `0009_reading_history.sql`、session/heartbeat Tauri 命令和生产 React/CSS 必须忠实保留这些状态、指标与隐私边界。
+- **生产结论：** schema v9、30 秒 heartbeat、45 秒间隔上限、五分钟交互窗口、UUID 会话、CSV/Show in folder、clear tombstone 和备份合并均已完成。Insights 直接读取已有进度，不生成 streak 或推断型完成度。
+- **性能边界：** Reader ready 后才启动会话；可见性、焦点和高频交互时间存于 ref，重型 ReaderShell 不因 pointer/wheel/heartbeat 重渲染，EPUB/PDF runtime 继续保留在原 lazy boundary。
+- **运行态纠偏：** 375px switch 的可见轨保持 30px，但真实 hit target 扩展为 44px；趋势次要文本提高到 AA 对比度；CSV 成功态补齐批准稿的 Show in folder。Browser 1280/375 无溢出、console 0，完整差异账本见 `docs/design/v0.3/stage14-reading-history-fidelity.md`。
 
 ## 2026-07-20 大阶段 14.3–14.7：实施决策与阅读器 UI 根因
 

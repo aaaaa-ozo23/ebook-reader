@@ -2193,7 +2193,6 @@ export function PdfReaderContent({
   const handlePositionChange = useCallback(
     (nextPosition: PdfPosition) => {
       positionRef.current = nextPosition;
-      onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
       setPageInput(String(nextPosition.page));
 
@@ -2205,7 +2204,13 @@ export function PdfReaderContent({
         tocItemsRef.current,
         nextPosition.page,
       );
-      onActiveTocItemChange(activeTocItemId);
+      // Bookmark indicators and the active TOC row are derived chrome. Keep
+      // the local page/canvas update urgent while allowing React to publish
+      // this reader-shell chrome in a separate transition.
+      startTransition(() => {
+        onCurrentLocatorChange(nextPosition.locator);
+        onActiveTocItemChange(activeTocItemId);
+      });
 
       pendingProgressRef.current = {
         locator: nextPosition.locator,
@@ -2494,7 +2499,21 @@ export function PdfReaderContent({
       try {
         pdfTransitionControllerRef.current?.cancel();
         await adapter.goTo(locator);
+
+        // A distant continuous-PDF jump changes the reader position, relocates the
+        // virtual window, and refreshes the newly mounted canvases. Keeping those
+        // three commits in one browser task can cross the 50 ms interaction budget
+        // on DPR2 documents, even though the mounted-page and backing-pixel budgets
+        // remain bounded. Let React publish the position before the virtualizer
+        // scrolls, then let the scroll commit before refreshing visible surfaces.
+        const isContinuousJump = positionRef.current?.renderedMode === "continuous";
+        if (isContinuousJump) {
+          await yieldToAnimationFrame();
+        }
         setPdfNavigationVersion((version) => version + 1);
+        if (isContinuousJump) {
+          await yieldToAnimationFrame();
+        }
         await renderVisiblePages();
 
         if (resolvePdfLocatorAnchorKind(locator) === "rect") {
@@ -4003,6 +4022,10 @@ async function waitForPdfPageElement(
   }
 
   return null;
+}
+
+function yieldToAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 export function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {

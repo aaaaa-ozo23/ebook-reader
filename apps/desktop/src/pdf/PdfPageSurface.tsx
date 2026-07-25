@@ -47,7 +47,6 @@ export const PdfPageSurface = memo(function PdfPageSurface({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const renderIdentityRef = useRef(0);
-  const renderImmediatelyRef = useRef(isVisible);
   const [metrics, setMetrics] = useState<PdfPageMetrics | null>(
     () => adapter.getCachedPageMetrics(pageNumber) ?? null,
   );
@@ -102,7 +101,7 @@ export const PdfPageSurface = memo(function PdfPageSurface({
 
     const renderIdentity = renderIdentityRef.current + 1;
     renderIdentityRef.current = renderIdentity;
-    let frameHandle: number | null = null;
+    let deferredRenderTimer: number | null = null;
     let isCurrent = true;
     setIsReady(false);
     setRenderError(null);
@@ -135,20 +134,25 @@ export const PdfPageSurface = memo(function PdfPageSurface({
       }
     };
 
-    if (renderImmediatelyRef.current) {
+    if (isVisible) {
       void renderSurface();
     } else {
-      frameHandle = window.requestAnimationFrame(() => {
-        frameHandle = null;
+      // Continuous mode mounts one overscan page on either side of the
+      // viewport. Do not start all three PDF.js canvas renders in the same
+      // navigation frame: keep the visible page immediate and pre-warm the
+      // adjacent surfaces shortly afterwards. Becoming visible cancels this
+      // timer through the effect cleanup and renders without the delay.
+      deferredRenderTimer = window.setTimeout(() => {
+        deferredRenderTimer = null;
         void renderSurface();
-      });
+      }, 96);
     }
 
     return () => {
       isCurrent = false;
       renderIdentityRef.current += 1;
-      if (frameHandle !== null) {
-        window.cancelAnimationFrame(frameHandle);
+      if (deferredRenderTimer !== null) {
+        window.clearTimeout(deferredRenderTimer);
       }
       renderHandle?.release();
       if (renderHandle === null) {
@@ -156,7 +160,15 @@ export const PdfPageSurface = memo(function PdfPageSurface({
       }
       window.getSelection()?.removeAllRanges();
     };
-  }, [adapter, effectiveScale, metrics, pageNumber, renderVersion, retryVersion]);
+  }, [
+    adapter,
+    effectiveScale,
+    isVisible,
+    metrics,
+    pageNumber,
+    renderVersion,
+    retryVersion,
+  ]);
 
   useEffect(() => {
     const textLayer = textLayerRef.current;
