@@ -11,6 +11,7 @@ import {
 } from "react";
 import {
   defaultReaderTheme,
+  type CustomFont,
   type PageTransitionMode,
   type ReaderTheme,
   type ReaderThemeMode,
@@ -80,6 +81,7 @@ export function getReaderThemeTokens(theme: ReaderTheme): Record<string, string>
 }
 
 interface ReaderThemePanelProps {
+  customFonts?: readonly CustomFont[];
   isOpen: boolean;
   onClose: () => void;
   pageViewDisabled?: boolean;
@@ -112,6 +114,7 @@ interface MobileSheetGesture {
 }
 
 export function ReaderThemePanel({
+  customFonts = [],
   isOpen,
   onClose,
   pageViewDisabled = false,
@@ -145,8 +148,8 @@ export function ReaderThemePanel({
     [onThemeChange, theme],
   );
   const handleFontFamilyChange = useCallback(
-    (fontFamily: string) => {
-      onThemeChange({ ...theme, fontFamily });
+    (fontId: string | undefined, fontFamily: string) => {
+      onThemeChange({ ...theme, fontId, fontFamily });
     },
     [onThemeChange, theme],
   );
@@ -329,6 +332,8 @@ export function ReaderThemePanel({
           <div className="theme-field theme-field--font">
             <span>Font</span>
             <FontFamilySelect
+              customFonts={customFonts}
+              fontId={theme.fontId}
               value={theme.fontFamily}
               onChange={handleFontFamilyChange}
             />
@@ -344,18 +349,21 @@ export function ReaderThemePanel({
         </div>
         <TypographyChoice
           label="Line height"
+          variant="line"
           value={theme.lineHeight}
           options={[1.5, 1.75, 2]}
           onChange={handleNumberChange("lineHeight")}
         />
         <TypographyChoice
           label="Spacing"
+          variant="spacing"
           value={theme.paragraphSpacing}
           options={[6, 12, 20]}
           onChange={handleNumberChange("paragraphSpacing")}
         />
         <TypographyChoice
           label="Margin"
+          variant="margin"
           value={theme.pageMargin}
           options={[20, 32, 56]}
           onChange={handleNumberChange("pageMargin")}
@@ -511,19 +519,43 @@ export function ReaderThemePanel({
 }
 
 interface FontFamilySelectProps {
-  onChange: (value: string) => void;
+  customFonts: readonly CustomFont[];
+  fontId?: string;
+  onChange: (fontId: string | undefined, value: string) => void;
   value: string;
 }
 
-function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
+function FontFamilySelect({
+  customFonts,
+  fontId,
+  onChange,
+  value,
+}: FontFamilySelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const options = [
+    ...FONT_OPTIONS.map((option) => ({
+      ...option,
+      id: undefined as string | undefined,
+    })),
+    ...customFonts
+      .filter((font) => font.enabled)
+      .map((font) => ({
+        id: font.id,
+        label: font.familyName,
+        value: `"${font.familyAlias}"`,
+      })),
+  ];
   const selectedIndex = Math.max(
     0,
-    FONT_OPTIONS.findIndex((option) => option.value === value),
+    options.findIndex((option) =>
+      fontId === undefined
+        ? option.id === undefined && option.value === value
+        : option.id === fontId,
+    ),
   );
-  const selectedOption = FONT_OPTIONS[selectedIndex] ?? FONT_OPTIONS[0];
+  const selectedOption = options[selectedIndex] ?? options[0];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -553,9 +585,9 @@ function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
   }, [isOpen]);
 
   const selectIndex = (index: number) => {
-    const option = FONT_OPTIONS[index];
+    const option = options[index];
     if (option === undefined) return;
-    onChange(option.value);
+    onChange(option.id, option.value);
     setIsOpen(false);
   };
 
@@ -580,22 +612,21 @@ function FontFamilySelect({ onChange, value }: FontFamilySelectProps) {
       </button>
       {isOpen ? (
         <div id={listboxId} className="theme-font-select__menu" role="listbox">
-          {FONT_OPTIONS.map((option, index) => (
+          {options.map((option, index) => (
             <button
-              key={option.label}
+              key={option.id ?? option.label}
               type="button"
               role="option"
               aria-selected={index === selectedIndex}
               onClick={() => selectIndex(index)}
               onKeyDown={(event) => {
                 let nextIndex: number | null = null;
-                if (event.key === "ArrowDown")
-                  nextIndex = (index + 1) % FONT_OPTIONS.length;
+                if (event.key === "ArrowDown") nextIndex = (index + 1) % options.length;
                 if (event.key === "ArrowUp") {
-                  nextIndex = (index - 1 + FONT_OPTIONS.length) % FONT_OPTIONS.length;
+                  nextIndex = (index - 1 + options.length) % options.length;
                 }
                 if (event.key === "Home") nextIndex = 0;
-                if (event.key === "End") nextIndex = FONT_OPTIONS.length - 1;
+                if (event.key === "End") nextIndex = options.length - 1;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   selectIndex(index);
@@ -683,12 +714,29 @@ function handleRadioKeyDown<T extends string>(
 
 interface TypographyChoiceProps {
   label: "Line height" | "Spacing" | "Margin";
+  variant: "line" | "spacing" | "margin";
   onChange: (value: number) => void;
   options: readonly number[];
   value: number;
 }
 
-function TypographyChoice({ label, onChange, options, value }: TypographyChoiceProps) {
+const TYPOGRAPHY_CHOICE_NAMES = {
+  line: ["Compact line height", "Comfortable line height", "Relaxed line height"],
+  spacing: [
+    "Compact paragraph spacing",
+    "Standard paragraph spacing",
+    "Wide paragraph spacing",
+  ],
+  margin: ["Narrow page margin", "Medium page margin", "Wide page margin"],
+} as const;
+
+function TypographyChoice({
+  label,
+  onChange,
+  options,
+  value,
+  variant,
+}: TypographyChoiceProps) {
   const selectedIndex = options.reduce(
     (closestIndex, option, index) =>
       Math.abs(option - value) < Math.abs((options[closestIndex] ?? option) - value)
@@ -711,7 +759,7 @@ function TypographyChoice({ label, onChange, options, value }: TypographyChoiceP
             type="button"
             role="radio"
             aria-checked={index === selectedIndex}
-            aria-label={`${label} ${index + 1}`}
+            aria-label={TYPOGRAPHY_CHOICE_NAMES[variant][index]}
             tabIndex={index === selectedIndex ? 0 : -1}
             onClick={() => onChange(option)}
             onKeyDown={(event) => {
@@ -736,18 +784,60 @@ function TypographyChoice({ label, onChange, options, value }: TypographyChoiceP
               if (nextValue !== undefined) onChange(nextValue);
             }}
           >
-            <span
-              className={`theme-typography-glyph theme-typography-glyph--${label.toLowerCase()} theme-typography-glyph--${index + 1}`}
-              aria-hidden="true"
-            >
-              <i />
-              <i />
-              <i />
-            </span>
+            <TypographyGlyph index={index} variant={variant} />
           </button>
         ))}
       </div>
     </div>
+  );
+}
+
+function TypographyGlyph({
+  index,
+  variant,
+}: {
+  index: number;
+  variant: TypographyChoiceProps["variant"];
+}) {
+  const lineY = [
+    [6, 10, 14],
+    [4, 10, 16],
+    [2, 10, 18],
+  ][index] ?? [4, 10, 16];
+  const spacingY = [
+    [4, 7, 11, 14],
+    [3, 6, 12, 15],
+    [2, 5, 13, 16],
+  ][index] ?? [3, 6, 12, 15];
+  const marginInset = [1, 4, 7][index] ?? 4;
+  const ys = variant === "line" ? lineY : spacingY;
+
+  return (
+    <svg
+      aria-hidden="true"
+      className={`theme-typography-glyph theme-typography-glyph--${variant}`}
+      viewBox="0 0 24 20"
+      width="24"
+      height="20"
+    >
+      {variant === "margin" ? (
+        <>
+          <path d={`M${marginInset} 2v16M${24 - marginInset} 2v16`} />
+          <path
+            d={`M${marginInset + 3} 5H${21 - marginInset}M${marginInset + 3} 10H${21 - marginInset}M${marginInset + 3} 15H${21 - marginInset}`}
+          />
+        </>
+      ) : (
+        ys.map((y, lineIndex) => (
+          <path
+            key={`${variant}-${y}`}
+            d={
+              variant === "spacing" && lineIndex % 2 === 1 ? `M5 ${y}h14` : `M3 ${y}h18`
+            }
+          />
+        ))
+      )}
+    </svg>
   );
 }
 

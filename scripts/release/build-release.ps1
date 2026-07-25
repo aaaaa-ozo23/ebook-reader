@@ -1,5 +1,5 @@
 param(
-  [string]$Version = '0.2.0',
+  [string]$Version = '0.3.0',
   [string]$OutputDirectory = "release-artifacts/v$Version-rc",
   [switch]$SkipQualityGates,
   [switch]$SkipBuild
@@ -32,6 +32,9 @@ try {
     & cargo test --locked --manifest-path apps\desktop\src-tauri\Cargo.toml
     if ($LASTEXITCODE -ne 0) { throw 'cargo test failed' }
   }
+
+  & pnpm.cmd deps:libmobi
+  if ($LASTEXITCODE -ne 0) { throw 'libmobi sidecar build and verification failed' }
 
   & node scripts\release\audit-licenses.mjs (Join-Path $OutputDirectory 'license-audit.json')
   if ($LASTEXITCODE -ne 0) { throw 'license audit failed' }
@@ -69,10 +72,12 @@ try {
   Copy-Item -LiteralPath $sourceNsis.FullName -Destination (Join-Path $output $nsisName)
   Copy-Item -LiteralPath $sourceMsi.FullName -Destination (Join-Path $output $msiName)
   Copy-Item -LiteralPath $sourceSignature.FullName -Destination (Join-Path $output $signatureName)
+  Copy-Item -LiteralPath (Join-Path $root '.tools\libmobi-v0.12\libmobi-0.12.tar.gz') -Destination $output
+  Copy-Item -LiteralPath (Join-Path $root '.tools\libmobi-v0.12\libmobi-0.12.tar.gz.asc') -Destination $output
 
   $latest = [ordered]@{
     version = $Version
-    notes = 'Ebook Reader v0.2.0'
+    notes = "Ebook Reader v$Version"
     pub_date = (Get-Date).ToUniversalTime().ToString('o')
     platforms = [ordered]@{
       'windows-x86_64' = [ordered]@{
@@ -131,7 +136,7 @@ try {
     'UNSIGNED Authenticode downgrade: no Code Signing certificate was available; SmartScreen may warn.'
   }
   $acceptanceReport = @(
-    '# v0.2.0 release acceptance report'
+    "# v$Version release acceptance report"
     ''
     "- Generated: $((Get-Date).ToUniversalTime().ToString('o'))"
     '- Updater signature: required and generated for NSIS.'

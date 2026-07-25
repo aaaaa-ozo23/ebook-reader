@@ -1,78 +1,73 @@
-# Ebook Reader v0.2.0 RC checklist
+# Ebook Reader v0.3.0 release checklist
 
-This checklist separates reproducible repository gates from native Windows checks. A checked item
-must have current-run evidence; draft artifacts alone do not authorize a tag or public Release.
+This checklist separates reproducible repository gates, isolated native Windows checks, and
+external publication. A checked item must have current-run evidence from the final publication
+source. Acceptance or development artifacts do not authorize a tag or public Release.
 
-## Source and data contract
+## Source and Stage 14 contract
 
-- [x] Root, core, desktop, Cargo, Tauri, and release verifier report `0.2.0`.
-- [x] Product name remains `Ebook Reader`; identifier remains `com.ebookreader.desktop`.
-- [x] EPUB, TXT, and PDF associations, stable app-data location, and reader lazy boundary remain.
-- [x] Migrations `0004_backup_portability.sql` and `0005_book_user_metadata.sql` are transactional.
-- [x] `.erbackup` v1 excludes absolute paths, reader caches, and update-check timestamps.
+- [x] Root, core, desktop, Cargo, Tauri, release verifier, and Stage 14 verifier report `0.3.0`.
+- [x] Product name remains `Ebook Reader`; production identifier remains
+  `com.ebookreader.desktop`.
+- [x] EPUB, TXT, PDF, MOBI, and AZW3 associations are present; `mobitool` is bundled as an external
+  binary and matches the pinned libmobi 0.12 hash.
+- [x] Migrations 0001–0009 run transactionally and a v0.2 database retains books, settings,
+  progress, bookmarks, annotations, covers, and user metadata.
+- [x] `.erbackup` v1 migrates in memory; v2 includes source/reader derivatives, custom fonts, and
+  reading history while excluding the rebuildable search index.
 
-## Backup, import, and updater security
-
-- [x] Backup round-trip, checksum/size/version rejection, traversal/bomb limits, cancellation,
-  merge conflicts, missing-file repair, and rollback cleanup have automated Rust coverage.
-- [x] Custom cover validation and metadata set/reset/backup merge have automated coverage.
-- [x] Batch scanning enforces depth/item/canonical/reparse limits and partial-result semantics.
-- [x] NSIS embeds the locked updater public key and HTTPS endpoint; MSI disables updater commands.
-- [x] Updater private-key material is absent from tracked files, SBOM, and draft artifacts.
-- [ ] Maintainer has completed and privately recorded an offline backup of the updater private key.
-
-## Reproducible quality gates
+## Quality, search, conversion, and privacy
 
 - [x] `pnpm.cmd install --frozen-lockfile`
 - [x] `pnpm.cmd check`
-- [x] `pnpm.cmd --filter @reader/desktop test:e2e` at 1280/900/640/375, DPR2,
-  reduced-motion, keyboard focus, modal/sheet, drop overlay, and axe serious/critical.
+- [x] Full Playwright matrix passes for 1280/900/640/375, DPR2, reduced motion, keyboard focus,
+  axe, EPUB/TXT/PDF/MOBI/AZW3, folder import, fonts, multilingual in-book/library search, and
+  reading history.
 - [x] `cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check`
 - [x] `cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml`
+- [x] libmobi verification and conversion benchmarks pass without DRM/decryption capability.
 - [x] `pnpm.cmd release:audit` reports no unknown locked licenses.
-- [x] `pnpm.cmd verify:release` and `pnpm.cmd release:security` pass.
+- [x] `pnpm.cmd verify:release`, `pnpm.cmd verify:stage14`, and release security checks pass.
 - [x] `git diff --check` passes.
 
-## Draft artifacts
+## Final Windows artifacts
 
-- [x] NSIS, MSI, NSIS updater `.sig`, `latest.json`, CycloneDX source/artifact SBOMs,
-  `SHA256SUMS.txt`, artifact manifest, Authenticode report, and acceptance report exist under
-  ignored `release-artifacts/v0.2.0-rc/`.
-- [x] Syft is exactly v1.44.0 and both its official manifest and archive checksum are verified.
-- [x] NSIS updater signature is present and `latest.json` schema/signature fields validate.
-- [x] NSIS/MSI Authenticode status is truthfully `NotSigned`; SmartScreen guidance is present.
-- [x] No private key, certificate, local repository path, or secret marker exists in release artifacts.
+- [x] Final NSIS, MSI, updater `.sig`, `latest.json`, CycloneDX source/artifact SBOMs,
+  `SHA256SUMS.txt`, artifact manifest, Authenticode report, acceptance report, and LGPL libmobi
+  source/signature exist under ignored `release-artifacts/v0.3.0-final/`.
+- [x] NSIS updater signature validates; `latest.json` reports `0.3.0` and points only to the
+  v0.3.0 NSIS artifact over HTTPS.
+- [x] MSI keeps the manual-update track and is not mixed with NSIS.
+- [x] Authenticode remains truthfully `NotSigned`; SmartScreen guidance is present.
+- [x] No updater private key, local repository path, user data, test book, database, or secret
+  marker exists in release artifacts.
+- [x] Maintainer's previously recorded offline backup of the updater private key remains the
+  trusted recovery copy; only the public fingerprint is recorded.
 
-## Isolated native updater smoke
+## Isolated installation and upgrade
 
-- [ ] Uses `com.ebookreader.desktop.updater-test`, never the production identifier or user data.
-- [ ] Signed old test version discovers, downloads, and installs the signed v0.2 artifact.
-- [ ] Invalid signature is rejected.
-- [ ] Throttled download can be canceled and leaves no partial install state.
-- [ ] Test data survives installation and post-install version reports `0.2.0`.
+- [x] Clean NSIS installation launches with version `0.3.0`, zero books, zero reading records, and
+  zero managed library files.
+- [x] Clean MSI administrative image contains only expected application/runtime files and no user
+  database or book payload.
+- [x] Isolated v0.2.0 → v0.3.0 upgrade retains library records, managed files, settings, progress,
+  bookmarks, annotations, covers, and metadata.
+- [x] Stage 14 schema reaches v9; MOBI/AZW3 derivatives, custom fonts, search index, and history can
+  be created after upgrade.
+- [x] Installed `mobitool` matches the committed SHA-256.
+- [x] Uninstall targets only the isolated test product and preserves original imported files;
+  production app-data is not read, deleted, or overwritten.
 
-## Windows installation matrix
+## GitHub publication
 
-- [ ] Clean NSIS installation launches with zero books.
-- [ ] Clean MSI installation launches with zero books.
-- [ ] v0.1.0 → v0.2.0 NSIS preserves books, settings, progress, bookmarks, annotations, and covers.
-- [ ] v0.1.0 → v0.2.0 MSI manual upgrade preserves the same data.
-- [ ] NSIS updater performs the signed upgrade; MSI remains manual and tracks are not mixed.
-- [ ] Uninstall preserves app data and never deletes original imported book files.
-
-## Branch and publication boundary
-
-- [x] Stage branch is merged with `--no-ff` into `codex/v0.2.0-integration` and pushed.
-- [x] `release/v0.2.0` is created from that integration head and pushed.
-- [x] Workflow is manual, contents-read-only, and uploads draft workflow artifacts only.
-- [x] No formal tag or GitHub Release is created or published in this stage.
-
-## Formal v0.2.0 publication run
-
-- [x] Final artifacts are regenerated from the current publication source and pass security/schema verification.
-- [x] Isolated clean launch reports version `0.2.0`, zero books, and zero managed library book files.
-- [x] GitHub draft targets `release/v0.2.0`, is marked Latest, and contains all 11 final assets.
-- [x] Updater private key offline-backup confirmation is recorded without exposing its location or contents.
-- [x] `v0.2.0` tag targets the accepted publication commit and is pushed.
-- [x] GitHub Release `Ebook Reader v0.2.0` is public, non-prerelease, and marked Latest.
-- [x] Public installer, updater feed/signature, SBOM/report, and checksum assets match local final artifacts.
+- [x] `release/v0.3.0` is created from the accepted `codex/v0.3.0-integration` head and pushed.
+- [x] Publication commit contains the 0.3.0 version contract and final release documentation.
+- [x] Annotated `v0.3.0` tag targets the accepted publication commit and is pushed.
+- [x] Chrome draft is based on `v0.3.0`, is non-prerelease, marked Latest, and contains every
+  final uploaded asset.
+- [x] GitHub Release `Ebook Reader v0.3.0` is public.
+- [x] Public asset names, sizes, SHA-256 digests, updater signature, and `latest.json` match local
+  final artifacts.
+- [ ] `release/v0.3.0` is merged into `main` with `--no-ff`; `main` and publication tracking docs
+  are pushed.
+- [x] Stage 15 has not started.

@@ -7,7 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { type Book, type ImportBookResult } from "@reader/core";
+import { type Book, type ImportBookResult, type LibrarySearchHit } from "@reader/core";
 
 import "./App.css";
 import {
@@ -49,6 +49,18 @@ const LazySettingsCenter = lazy(() =>
   })),
 );
 
+const LazyLibrarySearch = lazy(() =>
+  import("./library/LibrarySearch").then((module) => ({
+    default: module.LibrarySearch,
+  })),
+);
+
+const LazyReadingInsights = lazy(() =>
+  import("./library/ReadingInsights").then((module) => ({
+    default: module.ReadingInsights,
+  })),
+);
+
 function App() {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +76,13 @@ function App() {
   const [batchImportPaths, setBatchImportPaths] = useState<string[] | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<
+    "data" | "fonts" | "history" | "updates"
+  >("data");
+  const [isLibrarySearchOpen, setIsLibrarySearchOpen] = useState(false);
+  const [isReadingInsightsOpen, setIsReadingInsightsOpen] = useState(false);
+  const [librarySearchRequest, setLibrarySearchRequest] =
+    useState<LibrarySearchHit | null>(null);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
     null,
   );
@@ -257,27 +276,31 @@ function App() {
     }
   }, []);
 
-  const handleOpenBook = useCallback(async (book: Book) => {
-    setBookActionMenu(null);
-    setFeedback(null);
+  const handleOpenBook = useCallback(
+    async (book: Book, searchHit?: LibrarySearchHit) => {
+      setBookActionMenu(null);
+      setFeedback(null);
 
-    setOpeningBookId(book.id);
+      setOpeningBookId(book.id);
 
-    try {
-      const openedBook = await markBookOpened(book.id);
-      setBooks((currentBooks) => upsertBook(currentBooks, openedBook));
-      setReaderBook(openedBook);
-    } catch (error) {
-      setFeedback({
-        actionLabel: "Choose file to repair",
-        kind: "error",
-        title: "Book could not be opened",
-        message: getErrorMessage(error),
-      });
-    } finally {
-      setOpeningBookId(null);
-    }
-  }, []);
+      try {
+        const openedBook = await markBookOpened(book.id);
+        setBooks((currentBooks) => upsertBook(currentBooks, openedBook));
+        setLibrarySearchRequest(searchHit ?? null);
+        setReaderBook(openedBook);
+      } catch (error) {
+        setFeedback({
+          actionLabel: "Choose file to repair",
+          kind: "error",
+          title: "Book could not be opened",
+          message: getErrorMessage(error),
+        });
+      } finally {
+        setOpeningBookId(null);
+      }
+    },
+    [],
+  );
 
   const handleAssociatedBookFiles = useCallback(
     async (paths: string[]) => {
@@ -457,7 +480,91 @@ function App() {
 
   const handleBackToLibrary = useCallback(() => {
     setReaderBook(null);
+    setLibrarySearchRequest(null);
   }, []);
+
+  const handleOpenLibrarySearch = useCallback(() => {
+    setBookActionMenu(null);
+    setIsSettingsOpen(false);
+    setIsReadingInsightsOpen(false);
+    setIsLibrarySearchOpen(true);
+  }, []);
+
+  const handleOpenReadingInsights = useCallback(() => {
+    setBookActionMenu(null);
+    setIsSettingsOpen(false);
+    setIsLibrarySearchOpen(false);
+    setIsReadingInsightsOpen(true);
+  }, []);
+
+  const handleCloseReadingInsights = useCallback(() => {
+    setIsReadingInsightsOpen(false);
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("[data-reading-insights-trigger]")?.focus();
+    });
+  }, []);
+
+  const handleOpenSettings = useCallback(
+    (section: "data" | "fonts" | "history" | "updates" = "data") => {
+      setBookActionMenu(null);
+      setIsLibrarySearchOpen(false);
+      setIsReadingInsightsOpen(false);
+      setSettingsInitialSection(section);
+      setIsSettingsOpen(true);
+    },
+    [],
+  );
+
+  const handleCloseLibrarySearch = useCallback(() => {
+    setIsLibrarySearchOpen(false);
+    window.requestAnimationFrame(() => {
+      const liveSearchTrigger = document.querySelector<HTMLElement>(
+        "[data-library-search-trigger]",
+      );
+      if (liveSearchTrigger !== null && liveSearchTrigger.offsetParent !== null) {
+        liveSearchTrigger.focus();
+        return;
+      }
+      const liveBookshelf = document.querySelector<HTMLElement>(
+        'main[aria-label="Ebook Reader bookshelf"]',
+      );
+      liveBookshelf?.focus();
+    });
+  }, []);
+
+  const handleOpenLibrarySearchHit = useCallback(
+    (hit: LibrarySearchHit) => {
+      const book = books.find((candidate) => candidate.id === hit.bookId);
+      if (book === undefined || hit.availability === "missing") {
+        setIsLibrarySearchOpen(false);
+        setFeedback({
+          kind: "error",
+          title: "File needed",
+          message: "Re-import the original book file before opening this result.",
+        });
+        return;
+      }
+      setIsLibrarySearchOpen(false);
+      void handleOpenBook(book, hit);
+    },
+    [books, handleOpenBook],
+  );
+
+  useEffect(() => {
+    const handleGlobalSearchShortcut = (event: globalThis.KeyboardEvent) => {
+      if (
+        readerBook === null &&
+        event.ctrlKey &&
+        event.shiftKey &&
+        event.key.toLocaleLowerCase() === "f"
+      ) {
+        event.preventDefault();
+        handleOpenLibrarySearch();
+      }
+    };
+    window.addEventListener("keydown", handleGlobalSearchShortcut);
+    return () => window.removeEventListener("keydown", handleGlobalSearchShortcut);
+  }, [handleOpenLibrarySearch, readerBook]);
 
   const handleSetViewMode = useCallback(
     (mode: ViewMode, animate: boolean) => {
@@ -503,7 +610,48 @@ function App() {
           </main>
         }
       >
-        <LazyReaderShell book={readerBook} onBackToLibrary={handleBackToLibrary} />
+        <LazyReaderShell
+          book={readerBook}
+          librarySearchRequest={librarySearchRequest}
+          onBackToLibrary={handleBackToLibrary}
+        />
+      </Suspense>
+    );
+  }
+
+  if (isLibrarySearchOpen) {
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading library search...
+          </main>
+        }
+      >
+        <LazyLibrarySearch
+          onClose={handleCloseLibrarySearch}
+          onOpenHit={handleOpenLibrarySearchHit}
+          onOpenSettings={() => {
+            handleOpenSettings("data");
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  if (isReadingInsightsOpen) {
+    return (
+      <Suspense
+        fallback={
+          <main className="reader-loading-state" role="status" aria-live="polite">
+            Loading reading insights...
+          </main>
+        }
+      >
+        <LazyReadingInsights
+          onClose={handleCloseReadingInsights}
+          onOpenSettings={() => handleOpenSettings("history")}
+        />
       </Suspense>
     );
   }
@@ -518,6 +666,7 @@ function App() {
         }
       >
         <LazySettingsCenter
+          initialSection={settingsInitialSection}
           onClose={() => setIsSettingsOpen(false)}
           onLibraryChanged={() => void loadLibrary()}
         />
@@ -549,7 +698,9 @@ function App() {
         onImportFiles={() => void openBatchPicker("files")}
         onImportFolder={() => void openBatchPicker("folder")}
         onOpenBook={handleOpenBook}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSearch={handleOpenLibrarySearch}
+        onOpenInsights={handleOpenReadingInsights}
+        onOpenSettings={() => handleOpenSettings("data")}
         onRequestRemoval={requestBookRemoval}
         onRetryLibrary={loadLibrary}
         onSelectLibraryView={handleSelectLibraryView}
@@ -573,7 +724,7 @@ function App() {
       {isDropActive ? (
         <div className="book-drop-overlay" role="status">
           <strong>Drop to review books</strong>
-          <span>EPUB, TXT, PDF, or a folder</span>
+          <span>EPUB, TXT, PDF, MOBI, AZW3, or a folder</span>
         </div>
       ) : null}
     </>

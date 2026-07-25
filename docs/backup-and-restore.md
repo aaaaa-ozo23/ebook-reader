@@ -1,6 +1,6 @@
 # Backup and restore
 
-Ebook Reader backups are user-initiated, local files. The v1 archive format uses the
+Ebook Reader backups are user-initiated, local files. The versioned archive format uses the
 `.erbackup` extension and standard ZIP storage so the app can validate and migrate it without
 depending on machine-specific paths.
 
@@ -8,23 +8,34 @@ depending on machine-specific paths.
 
 - Core reading data: included and required.
 - Managed covers: included by default.
-- Original EPUB, TXT, and PDF library copies: excluded by default and available as an explicit
-  option.
-- Reader caches, absolute source/library paths, update-check timestamps, logs, and other
-  machine-only state: always excluded.
+- App-local custom font registrations and their content-addressed TTF/OTF files: included with
+  core reading data by default.
+- Original EPUB, TXT, PDF, MOBI, and AZW3 library copies: excluded by default and available as
+  an explicit option. MOBI/AZW3 exports also include their verified reader EPUB derivative.
+- Reader caches, the rebuildable full-text search index, absolute source/library paths,
+  update-check timestamps, logs, and other machine-only state: always excluded.
 
 The suggested file name is `ebook-reader-backup-YYYY-MM-DD.erbackup`.
 
-## Format version 1
+## Format versions
+
+v0.3 exports `formatVersion: 2`. It records the source format/hash separately from an optional
+reader EPUB descriptor so MOBI/AZW3 books retain their real library identity while reading
+through the existing EPUB adapter. Version 1 archives remain accepted through an explicit
+in-memory migrator. A v2 backup created by v0.3 is not guaranteed to restore in v0.2.
 
 Every archive contains:
 
-- `manifest.json`: format identifier, `formatVersion: 1`, app/schema versions, UTC export time,
+- `manifest.json`: format identifier, format version, app/schema versions, UTC export time,
   selected options, record counts, and a path/size/SHA-256 descriptor for every payload.
 - `data.json`: portable book identity and metadata, reader settings/layout/theme, progress,
-  bookmarks, annotations, and annotation deletion tombstones.
+  bookmarks, annotations and their deletion tombstones, reading-history sessions and preferences,
+  and the reading-history clear timestamp.
 - `covers/`: optional managed cover payloads, addressed by the book file hash.
-- `books/`: optional managed original book payloads, addressed by the book file hash.
+- `fonts/`: app-local static TTF/OTF payloads, addressed by SHA-256. Restore deduplicates them by
+  hash and remaps the selected `fontId` to the local registration.
+- `books/`: optional managed original book payloads, addressed by the source file hash. For
+  MOBI/AZW3 this also includes the verified EPUB derivative used by the reader.
 
 `manifest.json` does not include a checksum for itself, avoiding a circular signature. Payload
 paths use `/` separators and never contain absolute paths.
@@ -38,7 +49,7 @@ temporary file and never modifies the database.
 
 ## Security boundary
 
-Version 1 backups are **not encrypted**. A backup may contain copyrighted book files, reading
+Backups are **not encrypted**. A backup may contain copyrighted book files, reading
 history, bookmarks, and private annotations. Keep it in a trusted location and apply operating
 system or storage encryption when confidentiality is required.
 
@@ -51,8 +62,8 @@ unsupported major versions, undeclared or missing payloads, checksum/declared-si
 excessive entry counts or sizes, and unsafe compression ratios. Unknown optional fields are
 ignored; older supported formats must pass an explicit migrator before merge.
 
-Files are first extracted beneath app-data staging. Verified books and covers are moved into the
-managed library by content address without overwriting different content. If the database merge
+Files are first extracted beneath app-data staging. Verified books, covers, and fonts are moved
+into their managed directories by content address without overwriting different content. If the database merge
 fails, the transaction rolls back and files newly introduced by that restore are removed.
 Cancellation stops new work and performs the same cleanup.
 
@@ -64,11 +75,21 @@ Cancellation stops new work and performs the same cleanup.
 - Annotation `deletedAt` tombstones participate in that comparison so deleted notes do not
   reappear.
 - Settings match by key with the same timestamp rule; `lastOpenedAt` keeps the newer value.
+- Reading sessions match by UUID. A strictly newer `updatedAt` wins and equal timestamps keep the
+  local session. Restored active sessions are closed instead of being resumed on another machine.
+- The newer reading-history clear timestamp wins. Sessions at or before that timestamp are not
+  restored, preventing an older backup from reviving history the user already cleared.
+- Custom fonts match by file hash. The newer enabled/disabled state wins, and a selected font ID is
+  mapped to the local registration; an unavailable font payload is skipped rather than leaving a
+  broken selection.
 - User title, author, and cover overrides merge independently by field timestamp; resetting one
   field does not clear the others or replace the extracted automatic metadata.
 - If an original file is absent and no matching local file exists, the book remains visible as
   `availability: "missing"` with **File needed**. Importing the same hash later repairs the managed
   file while preserving its progress, bookmarks and annotations.
+- A valid local MOBI/AZW3 reader derivative wins over restored converter output for the same
+  source hash. If only the original source is present, v0.3 rebuilds the reader EPUB locally;
+  if neither payload is available, the book remains **File needed**.
 
 The result report classifies each item as `restored`, `merged`, `local-kept`, `missing-file`,
 `skipped`, or `failed`.

@@ -1,5 +1,273 @@
 # 进度日志
 
+## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
+
+- **状态：** in_progress；正式发布目标为 `v0.3.0`，以已推送的 `codex/v0.3.0-integration` `9fe2c07` 为基线。
+- **Chrome 预检：** 用户指定的 Chrome 已确认登录 GitHub 且仓库发行页提供“起草发行版”和管理入口；当前 Latest 为 v0.2.0。尚未创建 tag、草稿或上传文件。
+- **执行顺序：** 版本/文档/publication 分支 → 全量门禁与 final 产物 → 隔离空状态和 v0.2 升级 → tag → Chrome 草稿上传/公开 → 远端 hash/feed → `main` 收口。
+- **边界：** 不发布 acceptance 临时产物，不触碰正式用户 app-data，不泄露 updater 私钥；`.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+- **依赖状态错误：** 首次在版本统一后调用 `pnpm.cmd format:write`，pnpm 发现现有 `node_modules` 元数据与新的根 package 版本不一致，在无 TTY 下以 `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` 停止，并伴随 registry 元数据获取失败。没有依赖或锁文件变更；下一步改用 CI 模式的冻结离线安装恢复锁定环境，不重复普通交互式安装。
+- **依赖恢复：** 首次冻结离线安装在 180 秒外层限制内只完成删除旧 `node_modules`；第二次带 append-only reporter 明确定位 store 缺少一个锁定 tarball。经授权执行 CI 模式冻结安装后 291 个锁定包全部从 store 复用，downloaded=0，未升级依赖或改写 lockfile。
+- **版本校验错误：** `verify:release` 已通过 0.3.0；`verify:stage14` 首次失败是 Cargo 版本正则仍硬编码 0.2.0。已改为从唯一的 `expectedSourceVersion` 动态生成转义正则，避免未来发布再次出现双份常量。
+- **自动化门禁：** `pnpm.cmd check` 通过（Core 9、Desktop 212），Rust 81/81、Cargo fmt、libmobi hash/capability、291 JS + 556 Cargo unknown license=0、release/security/version/Stage14 verifier 与 diff check 全部通过。Playwright 35/35 明确输出 `ok`；外层只在所有断言后因 Windows Vite 输出句柄达到 360 秒清理限制。
+- **final 产物：** `release-artifacts/v0.3.0-final/` 生成 13 个上传资产；NSIS 8,015,139 bytes / SHA-256 `7342D193...54CCD0`，MSI 10,399,744 / `EE2EC1BF...34F1DA`，updater signature 424 bytes。Syft 1.44.0 双 SBOM、LGPL 源码/签名、license、manifest、SHA256SUMS、Authenticode `NotSigned` 和 security verifier 均通过。
+- **原生安装：** 独立 `com.ebookreader.desktop.stage14-acceptance` 全新安装报告 File/ProductVersion 0.3.0、schema9、books/bookmarks/annotations/progress/user metadata/fonts/history 均 0、managed files 0。0.2.0 隔离基线导入 1 本 TXT 后覆盖 0.3.0，升级退出码 0，book=1、managed file=1、history preference=1、sidecar hash 均保留。测试产品和专用 app-data 已删除；正式 app-data 未被目标操作且仍存在。
+- **Git/Chrome：** GCM 浏览器授权成功后，沙箱内凭据存储仍因 wincredman 不可写而超时；改用用户已授权的沙箱外 Git 通道后 `release/v0.3.0` 推送成功。annotated `v0.3.0` 已固定并推送到验收提交 `8222671`。Chrome 新发行版页面已确认现有 tag 可选、Latest 默认选中、非 prerelease；尚未保存或公开。
+- **Chrome 表单：** GitHub 的标签选择器已显示远端现有 `v0.3.0`，接下来固定选择该 tag，填写正式说明并只上传 `release-artifacts/v0.3.0-final/` 的 13 个已验证文件。
+- **Chrome tag：** 已在表单中选择远端现有 `v0.3.0`；页面确认 tag 已存在，Latest 保持选中且非 prerelease。
+- **Chrome 说明：** 已填写正式标题与发行说明，下载建议明确区分 NSIS updater 轨和 MSI 手动轨，安全说明如实保留 Authenticode `NotSigned`、DRM 拒绝和 SHA-256 核验。
+- **附件上传：** Chrome file chooser 已接收 `release-artifacts/v0.3.0-final/` 的 13 个正式文件；未加入 acceptance 临时安装器、测试配置、数据库或用户数据。正在等待 GitHub 上传队列完全结束后保存草稿。
+- **附件计数：** GitHub 表单已渲染 13 个附件名输入框，表示全部 13 个选中文件均已进入附件列表；下一步复核无“正在上传”状态并保存草稿。
+- **GitHub 草稿：** 上传队列确认无 loading 且附件数为 13 后，已通过 Chrome 保存 `v0.3.0` Release 草稿并进入独立草稿编辑 URL；尚未点击公开。
+- **草稿验收：** 草稿持久化后再次读取页面，tag、标题、发行说明、13 个附件和 Latest/Prerelease 状态全部正确；已满足公开按钮前的 UI 门禁。
+- **公开发布：** 已通过 Chrome 将 `Ebook Reader v0.3.0` 发布为 Latest，公开 URL 为 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.3.0`；页面绑定 tag/commit `v0.3.0` / `8222671`，附件区 15 项含 13 个上传产物和 2 个 source archives。
+- **远端完整性：** Chrome 公开页上的 13 个 GitHub 服务端 SHA-256 digest 已逐项与本地 final 对照，全部匹配；checksum 清单文件自身也单独计算并匹配。
+- **Latest 验证：** Chrome 的公开 `/releases/latest` 已重定向至 `/releases/tag/v0.3.0`，并显示 v0.3.0 正式标题。
+- **公开 API/feed：** GitHub API 确认 `draft=false`、`prerelease=false`、13/13 assets 为 uploaded，名称和精确 byte size 全部匹配本地；公开 Latest feed 为 0.3.0、签名完整、下载 URL 指向 v0.3.0 NSIS。
+- **MSI final 复核：** 正式 MSI administrative image 成功，3 个预期运行文件合计 24,184,001 bytes，主 EXE 0.3.0，用户数据库/书籍/library payload 为 0，临时 image 已删除。
+
+## 2026-07-25 大阶段 14.7：总验收
+
+- **状态：** acceptance_complete，正在执行 Git 收口；14.6 功能、文档与代码门禁完成。早期 `.git` 写入审批曾因环境 usage limit 被拒绝，没有绕过；当前按用户授权重新走正式沙箱外 Git 流程。
+- **sidecar/转换：** `deps:verify-libmobi` 通过，固定 v0.12 sidecar 296,129 bytes / SHA-256 `438576...CF1`；三本真实 fixture 转换 56–211ms，峰值 working set 3,194,880–5,726,208 bytes。
+- **许可/安全：** `release:audit` 通过（291 JavaScript、556 Cargo、unknown=0，libmobi LGPL-3.0-or-later）；`release:security` 通过。
+- **迁移：** 增加 v0.2 schema + 既有 book/progress/bookmark → v9 数据保留测试。首次定向命令附带 `--exact` 后按完整模块名匹配不到测试（0 tests），改为名称子串后真实 1/1；Rust 全量 81/81。
+- **Playwright 首轮：** 外部 30 秒命令把 `-- --list` 作为字面参数意外启动矩阵，确认总数 35 后终止；随后标准矩阵 34/35，唯一失败为 DPR2 500 页连续 PDF 跳转捕获 53ms long task，其他格式/功能/响应式全通过。
+- **性能修复：** 连续 PDF 直接跳转拆分 position、virtualizer 与 render commit；书签指示器/active TOC 使用非紧急 React transition；不可见 overscan surface 延后 96ms 且变为可见会立即渲染。专用 DPR2 500 页轨连续两次通过（10.3s、10.4s），50ms 门槛与页数/像素预算保持不变。
+- **最终前端：** `pnpm.cmd check` 通过（Core 9、Desktop 212、ESLint、Prettier、production build）；ReaderShell 202.71 kB / gzip 58.52 kB。最终 Playwright 35/35 均明确输出 `ok`，外层仅在断言结束后因 Windows Vite 输出句柄达到 300 秒清理上限。
+- **双构建：** NSIS 8,019,737 bytes / SHA-256 `134D4152...83F3`，updater `.sig` 424 bytes；MSI 10,403,840 bytes / SHA-256 `583071C8...6E9C`。私钥仅进入 NSIS 构建进程，MSI 通过 WiX/Windows Installer Service；两包 Authenticode 如实为 `NotSigned`。
+- **SBOM/产物：** Syft 1.44.0 生成 source 1,410,141-byte 与 Windows artifact 885-byte CycloneDX；产物 verifier 通过。编排进程在所有文件完成后残留，已终止残留并独立重跑 verifier，未使用 0-byte 中间状态。
+- **体积：** 相对实际 v0.2.0 final，NSIS +646,045、MSI +942,080；MSI administrative image 从 21,616,128 增至 24,184,001 bytes，installed delta 2,567,873，全部低于门槛。
+- **独立升级：** 忽略目录配置使用 `com.ebookreader.desktop.stage14-acceptance`。0.2.0 baseline 导入 1 本 TXT 后覆盖 0.3.0-dev，升级安装退出码 0；schema v9、1 本书、1 个 managed file、history prefs 和固定 sidecar hash 均保留。测试产品/app-data 已清除，正式数据确认仍存在且未被修改。
+- **原生验收脚本修正：** baseline 首次验证假设 productName 会改变 Cargo EXE 文件名，实际安装文件仍是 `ebook-reader-desktop.exe`；改用真实文件后确认 FileVersion/ProductVersion 0.2.0。产品安装成功，错误只在验收脚本路径假设。
+- **停止边界：** Stage 14.1–14.7 complete；正式 root/core/desktop/Cargo/Tauri 版本仍为 0.2.0，不创建 v0.3 tag 或 Release，不启动 Stage 15。
+
+
+## 2026-07-22 大阶段 14.6：阅读历史与统计
+
+- **状态：** implementation_complete，正在执行阶段提交与合并；从已合入 14.5 的集成提交 `af021a1` 创建 `codex/stage14-reading-history`。
+- **14.5 Git 收口：** 实现/测试/文档提交 `63dc50a` / `b115a41` / `b26fda6` 已推送，随后以 `--no-ff` 合入并推送 `codex/v0.3.0-integration` `af021a1`。
+- **状态板：** 01 desktop Insights dashboard；02 History & Privacy settings；03 disabled/active/export/clear states；04 双 375px Insights/History sheet。全部由可编辑 HTML 渲染，无外部位图资产。
+- **视觉检查：** Chromium 以 1440×900 渲染 4/4；每张只显示一个 active board，document scrollWidth/scrollHeight 精确为 1440/900。首轮 `.state-workspace` 的 display 覆盖使 clear dialog 泄漏到其他板，已改为仅 active flex；状态板又从全屏模糊 overlay 改为并列状态+确认卡，使所有状态可审核。
+- **文件复核：** 首次 PNG header 命令调用当前 PowerShell 不提供的 `System.Buffers.Binary.BinaryPrimitives`，因此宽高为空但 hash 有效；改用显式 big-endian byte reverse 后确认四张均为真实 1440×900 PNG，大小 50,462–82,887 bytes。
+- **批准门：** 用户已批准全部四张状态板；它们现为 `0009`、会话命令、Insights、History & Privacy 和 375px sheet 的生产规格。正式版本号保持不变。
+- **首轮静态门禁：** Core 9、Desktop 206 单测均通过；ESLint 发现 Insights effect 同步调用含状态清理的 loader、heartbeat ref 在 render 调用 `Date.now()` 及非组件导出 warning。已改为 Promise 回调更新、零值 ref 在 effect 初始化并收回非组件导出，不重复原失败写法。
+- **定向命令错误：** `pnpm.cmd --filter @reader/desktop exec vitest ...` 在 Windows workspace 未解析到 `vitest` 可执行文件；改用该包已有 `test` script 传入文件路径，不安装或改写依赖。
+- **fake timer 测试错误：** heartbeat 首版测试在 fake timers 下使用 Testing Library `waitFor`，其轮询时钟未推进导致两例各超时 5 秒；已改为 `act` 显式清空 Promise microtask 后直接断言，再推进 30 秒，不延长超时掩盖问题。
+- **生产实现：** 新增 schema v9、Rust session/statistics/preferences/CSV 命令、Reader ready 会话 hook、Insights rail destination、History & Privacy settings、清空确认、Show in folder 与备份 v2 session/tombstone 合并。reader lazy boundary 和本地优先边界保持不变。
+- **Rust 门禁：** Cargo fmt check 与 80/80 tests 通过，覆盖 heartbeat 的 45 秒封顶/间隔排除、聚合、清空、CSV 和较新 clear tombstone 阻止旧备份会话恢复。
+- **前端门禁：** `pnpm.cmd check` 通过（Core 9/9、Desktop 212/212、ESLint、Prettier、production build）；ReaderShell 独立 chunk 202.56 kB（gzip 58.51 kB）。
+- **运行态门禁：** 内置 Browser 1280/375 无横向溢出、console warning/error 0，375px back/close/switch/export 均至少 44px且开关真实改变状态；带数据桌面和移动设置由 Playwright fixture 覆盖，2/2 场景输出通过。Windows 临时 Vite 子进程仍在断言完成后持有输出句柄，没有失败上下文。
+- **首轮 E2E 偏差：** 初版定向命令误把参数传给 package script 而启动完整矩阵；其中 14.6 两例暴露次要文字对比不足和 switch 只有 30px。已提高对比并把 44px target 与 30px视觉轨分离，未放宽 axe 或触控门槛。
+- **Browser 启动边界：** 沙箱外隐藏 `Start-Process` 被执行环境拒绝；没有规避，改用受控前台 Vite cell 完成同一真实页面检查，随后关闭会话。
+- **Git 环境阻塞：** 14.6 实现/测试/文档均已达到提交条件，但首次明确文件列表的 `git add` 沙箱外审批被执行环境以 usage limit 拒绝。用户此前已授权 Git 操作，失败并非仓库冲突；本轮不绕过 `.git` 写保护，先继续执行不依赖 Git 写入的 14.7 验收，待环境恢复后再按三类提交和 `--no-ff` 顺序封存。
+
+## 2026-07-20 大阶段 14.3–14.7：实施启动
+
+### 状态
+- **当前状态：** 14.5 search implementation_in_progress；14.5a folder_import_fix 已完成、合入并带入当前分支
+- **备份编译修正：** 首轮将备份字体的 `u64 fileSize` 直接传给 rusqlite，`ToSql` 不支持该类型；数据库列受 20 MiB 上限约束，已在写入事务处安全转换为 `i64`，备份 JSON 仍保留无符号大小契约。
+- **迁移测试修正：** 全量 Rust 首轮 64/65；唯一失败是旧测试仍锁定 schema v6/10 tables。已升级为 v7/11 tables 并显式验证 `custom_fonts`，不是迁移执行失败。
+- **当前分支：** `codex/stage14-library-search-index`
+- **基线：** v0.3 integration merge `5d261a4`
+
+### 已执行
+- 用户批准 14.3 四张状态板，并把范围扩展为依次完成 14.3、14.4、14.5、14.6、14.7。
+- 锁定阅读器 UI 修复：全格式 Previous/Next 使用一致 SVG 与文字对齐；三组排版图标按批准稿表达不同语义；Margin 对 EPUB/TXT/PDF 均须真实生效。
+- 完整读取文件规划、前端设计、Build Web Apps、React 性能、前端测试和内置 Browser 规范；恢复三份台账与 Git 现场。
+- session catchup 检出 36 条未同步上下文，均来自本轮计划确认与技能/现场检查；产品代码工作树仍无未提交改动，用户 `.codex/`、`AGENTS.md` 保持未跟踪。
+
+### 阶段顺序
+- 14.3 生产实现、Browser/Playwright/Rust/双构建验收并 `--no-ff` 合回集成分支。
+- 14.4–14.6 各自先提交状态板等待批准，批准后再实现和合并。
+
+### 14.3 完成证据
+
+- migration 0006、source/reader 双身份、事务式转换导入、删除/repair、备份 v2/v1 migrator 与五种导入入口已接通；MOBI/AZW3 书架保留源标签，阅读复用 EPUB adapter 与 EpubLocator。
+- Previous/Next 统一为共享 20px SVG 控件；Line height/Spacing/Margin 使用三套语义图标；TXT/EPUB/PDF 三档 Margin 通过运行态几何与重开持久化断言。
+- 四张批准状态板已与真实运行截图逐项对照，转换与 DRM 部分失败改为独立视图；内置 Browser 的 1280/375 页面无横向溢出、console 0，Playwright axe serious/critical 为 0。
+- `pnpm.cmd check` 通过（Core 9、Desktop 178），Cargo fmt 与 Rust 61/61 通过；Playwright 29/29 均输出通过，命令只在全部断言结束后受既有 Vite teardown 句柄影响超时。
+- libmobi v0.12 sidecar 固定为 296,129 bytes / SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`；三项真实 fixture 转换 39–181 ms、峰值内存低于 6 MiB。
+- NSIS 因当前沙箱不可读用户级签名私钥而停在 bundle 前；MSI 已编译 release EXE 后停在受限 WiX Installer service。两项保留到 14.7，不复用旧产物，不伪造通过。
+- 2026-07-22 用户授权沙箱外 Git、NSIS updater 私钥与 Windows Installer Service 验收；提交前追加书签空态/Add bookmark fidelity、移除 Add note、非 Focus Double 修复。
+- 书签空态已补齐线性图标、标题与解释文案；`Add bookmark` 改为透明整行操作并保留 44px target，Notes 侧栏 `Add note` 已删除，选区添加批注能力不变。
+- EPUB 非 Focus 的根因是 760px CSS 上限永远达不到旧 860px spread 门槛；现 requested Double 先扩展内容列，EPUB/PDF 统一按 820px 实际 frame 判定，并向 DOM 暴露 requested/rendered page view。生成 EPUB/MOBI/AZW3 与 PDF 均验证非 Focus Double；640/375 继续回退 Single。
+- 全量 Playwright 29/29 输出通过；DPR2 500 页 PDF 严格 50ms 性能项目前置隔离执行后通过。拖放 fixture 先等待 Tauri listener 注册，消除测试时序竞态；Windows Vite 仍在全部断言完成后保留 teardown 句柄。
+- 沙箱外原生门禁通过：NSIS 生成 7,520,335-byte installer 与 424-byte updater signature；MSI 生成 9,674,752-byte bundle。两个 installer manifest 均包含固定 hash 的 296,129-byte `mobitool.exe`，包体增量仍远低于门槛。
+- 14.7 执行总验收后停止；不改正式版本、不创建 tag/Release、不启动 Stage 15。
+
+### 14.3 Git 收口
+
+- 实现提交 `7a82b07`、测试提交 `47ee17f`、文档提交 `0d405eb` 已推送至 `codex/stage14-mobi-import`。
+- `codex/stage14-mobi-import` 已通过 `--no-ff` 合入并推送 `codex/v0.3.0-integration`，合并提交为 `1bdd2a7`。
+- `.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+
+### 14.4 自定义字体设计审核
+
+- 从最新集成分支创建并推送 `codex/stage14-custom-fonts`；本次只产生设计资产与审核契约，没有创建 `0007_custom_fonts.sql`、Tauri 命令或生产 React/CSS。
+- 四张状态板覆盖桌面 Reading & Fonts 字体库、TTF/OTF 导入确认、重复/不支持/删除当前字体回退，以及 375px 全屏 sheet。
+- 设计明确 app-local、不安装到 Windows、20 MiB 上限、许可责任前置、hash 去重、删除当前字体立即回退 Lora，以及 PDF 保留文档嵌入字体。
+- 静态源在 1440×900 与 375×812 真实渲染后逐图检查；移动端手势把手避开所有字体开关，主操作保持 44px 以上。
+- 用户于 2026-07-22 批准全部四张状态板；从本条起它们是生产实现规格，允许开始 migration、Rust/Tauri、React/CSS、备份与测试。
+- 实现边界继续锁定：静态 TTF/OTF、20 MiB、内容 hash 去重、应用私有目录、TXT/EPUB 使用、PDF 保持嵌入字体；不顺带开放 TTC/OTC/WOFF/WOFF2。
+- 后端首轮 `cargo check` 仅发现 `list_custom_fonts_at` 尾表达式的 rusqlite `MappedRows` 临时生命周期过长；不是 schema/解析逻辑错误，改为先收集到局部 `Vec` 再返回，避免重复同一失败命令。
+- 首次单独运行 desktop build 时共享 core 尚未先重建，因此新 `CustomFont/fontId` 导出仍是旧产物；同时 ReaderShell 的 `document` 状态名遮蔽了全局 DOM document。后续改为 `globalThis.document.fonts` 并先构建 `@reader/core`，不把旧 core 产物误判成接口缺失。
+- `0007_custom_fonts.sql`、静态 TTF/OTF 容器/name/cmap/head/outline 校验、20 MiB 上限、内容 hash 去重和 app-data 原子写入已完成；没有向 core 引入 DOM/Tauri 依赖，也没有安装字体到 Windows。
+- Reading & Fonts 已按四张批准稿接入设置中心；导入先 inspect/review，再确认复制；启停或删除选中字体会立即保存 Lora 回退。TXT/EPUB 使用稳定内部 family alias，EPUB 只向 rendition iframe 注入；PDF 明确保持文档嵌入字体。
+- 备份 v2 默认携带字体注册和文件，恢复按 hash 去重并重映射 `fontId`；v1 通过 serde 默认字段继续兼容。缺失或损坏字体不会阻止应用启动。
+- 内置 Browser 首轮与最终 Chromium 截图关闭桌面双标题、移动页头实心图标和小字对比度偏差。1280/900/640/375 无横向溢出，移动 back/close/import 均至少 44px，reduced-motion、焦点恢复、console 0 与 axe serious/critical 0。
+- 最终门禁：`pnpm.cmd check` 通过（Core 9/9、Desktop 184/184）；Cargo fmt 与 Rust 65/65；Playwright 31/31，含 DPR2、TXT、MOBI/AZW3 和独立 500 页 PDF 性能轨。
+- 新增 14.5 缺陷范围：现有书内搜索在 EPUB/PDF/MOBI/AZW3 有错误或漏报，必须与全库搜索一起修复多语言规范化、跨节点/跨 text item 匹配、摘录与 locator 精确回跳；中文、英文、重音组合字符及主流非拉丁文字均需 fixtures。
+
+### 14.4 Git 收口
+
+- 实现提交 `9e37dcc`、测试提交 `1a1616f`、文档提交 `8bb4576` 已推送至 `codex/stage14-custom-fonts`。
+- 14.4 已通过 `--no-ff` 合入并推送 `codex/v0.3.0-integration`，合并提交 `86821bd`。
+- `.codex/` 与 `AGENTS.md` 保持未跟踪、未修改。
+
+### 14.5 全库检索与多语言搜索设计审核
+
+- 从最新集成提交 `86821bd` 创建并推送 `codex/stage14-library-search-index`；当前只包含设计资产、算法审计和审核契约。
+- 四张状态板覆盖桌面按书分组的全库结果、多语言/跨节点书内搜索正确性、索引 rebuild/cancel/损坏/missing/no-text PDF 状态，以及两个 375px 全屏 sheet。
+- 状态板明确 `Ctrl+Shift+F` 与现有 `Ctrl+F` 分工，源格式标签、正确摘录与 locator 同源、索引可删除/不备份、取消后已完成书籍继续可用、单书失败不阻塞其他书。
+- 现有实现审计确认三类缺陷：Unicode 大小写/规范化后的 offset 漂移；PDF text item 固定插空格；EPUB `section.find()` 与侧栏高亮各自使用不一致的简化匹配。14.5 生产实现必须先解决这些问题，再接 FTS 与 UI。
+- 四张 PNG 均由仓库 Chromium 真实渲染为 1440×900，页面断言 `scrollWidth/clientWidth=1440`、`scrollHeight/clientHeight=900` 且只存在一个 active board；逐图目检无裁切或重叠。内置 Browser 拒绝 `file://` URL，已按安全策略停止，未尝试规避。
+- 用户批准 01 桌面全库结果、03 索引维护/错误和 04 移动 sheet；02 多语言书内搜索板仅需降低深墨侧栏命中高亮的饱和度/明度对比，正文必须清楚可读。生产门禁明确同时覆盖全库搜索和每本书原有书内搜索。
+- 新增 Import folder 回归修复：扫描进度不得以“根目录 1/1”冒充全部完成，阶段轨必须随递归扫描/分类变化，扫描成功后必须进入可选择的文件预览；取消、空目录、超限、unsupported 和单项错误均需测试。
+- 根因已落到代码：Rust scan 发出非法 `reading` 阶段，前端 `isImporting = progress !== null && result === null` 把扫描事件误判为正式导入，且 scan resolve 不清 progress。计划新增独立 `codex/stage14-folder-import-fix`，先完成该回归并合入集成，再进入 14.5 生产搜索实现。
+- 第二次计划补丁也因 Markdown 表格中的 `375px状态板` 与预期空格不一致而未修改文件；已改为精确上下文应用，产品代码和状态板均未受影响。
+- 02 修订板已重新以 Chromium 1440×900 渲染；侧栏 computed style 为 `rgba(148, 211, 206, 0.16)` / `rgb(247, 251, 250)`，逐图目检确认中文正文不再落在高亮色块中丢失笔画，右侧浅色卡片高亮未变。
+- 修订渲染命令先在 `apps/desktop` 工作目录误用根目录 Prettier 路径，格式化子命令未执行但 Chromium 截图成功；不将该次格式结果计为通过，最终从仓库根重新执行 Prettier 与 diff check。
+- 记录一次无产品影响的文档补丁失败：首个 `apply_patch` 上下文少了 `Chromium` 与 `以` 之间的空格，未修改任何文件；已用精确行重新应用，不重复原命令。
+- 用户于 2026-07-22 批准修订后的 02，并确认四张 14.5 状态板全部进入生产规格；设计门已关闭。实施顺序固定为先完成独立文件夹导入修复并合入集成，再把最新集成基线带入搜索分支。
+- 本轮首次审批同步补丁因 `computed style 为` 的空格上下文不一致而整体未应用；已拆分为精确小补丁后成功，不重复失败命令，生产代码未受影响。
+- 首次使用 `pnpm.cmd exec prettier` 时命令解析未找到二进制；确认锁定依赖存在后改用仓库本地 `node_modules\\.bin\\prettier.cmd`，四份审批文档格式化成功。
+
+### 14.5 生产实现与验收
+
+- 新增 `0008_library_search.sql`、FTS5 trigram index/status/chunk、Rust 增量提取和 `get/rebuild/search_library` 命令；导入、repair、恢复、元数据/派生变化和删除会使本地索引失效或清理。
+- 修复原有 TXT/EPUB/PDF/MOBI/AZW3 书内搜索：共享多语言原文 offset map、跨 inline DOM Range/CFI、PDF text-item 几何重建、无文本层明确失败、柔和侧栏高亮。
+- 全库 Search rail、`Ctrl+Shift+F`、结果分组/过滤、missing file、可取消 rebuild、375px full-screen UI 与精确重复命中回跳完成；搜索页继续为独立 lazy chunk，ReaderShell lazy boundary 保持。
+- 内置 Browser：1280/375 实页、console warning/error 0、无横向溢出、375px filters 44px、初始输入焦点和 Escape 返回焦点通过。
+- `pnpm.cmd check` 通过：Core 9/9、Desktop 206/206、ESLint、Prettier、TypeScript、production build；LibrarySearch gzip 2.76 kB，ReaderShell gzip 58.18 kB。
+- Cargo fmt、Rust 74/74、`git diff --check` 通过；Playwright 全矩阵 33/33，含 DPR2、reduced-motion、axe、MOBI/AZW3、500 页 PDF 和新增桌面/375px 全库搜索。
+- 过程修正：首次 Playwright 参数错误包含 `tests/` 前缀而未匹配用例；定向用例随后暴露了真实的卸载节点焦点恢复缺陷与测试的歧义 Search locator，分别修复产品焦点策略与 scope。首次 `pnpm check` 还发现 effect 状态更新规则和 Prettier 差异，已按 React 边界拆分后全量重跑。
+
+### 14.5a 文件夹导入回归修复
+
+- 从最新集成 `86821bd` 创建并推送 `codex/stage14-folder-import-fix`；搜索生产分支只先封存四张批准状态板，未把导入修复混入搜索提交。
+- `BatchImportDialog` 已拆分扫描与导入 operation ID/progress，并以显式四态驱动页面；监听注册后才调用 scan，扫描完成原子进入 preview。关闭扫描会发送取消，空目录显示明确说明。
+- Rust 递归发现发 `scanning, total=0`，候选收集后发 `hashing n/N`；每层递归检查取消令牌，正式导入完成补发 `complete`。
+- 完整 `pnpm.cmd check` 通过：Core 9/9、Desktop 187/187、ESLint、Prettier、TypeScript 与 production build 均通过；Cargo fmt 与 Rust 66/66 通过。
+- Playwright 全矩阵 31 项均输出通过，其中新的 Import folder 流程验证 Scanning → Hashing 1/2 → Preview → Import；目标用例单独复跑 1/1 通过。Windows Vite teardown 仍在断言全部完成后保留句柄，外层超时不作为断言通过的替代证据。
+- 内置 Browser 验证 `http://127.0.0.1:4173/` 页面身份、Import folder 菜单、1280px 无横向溢出与 console warning/error 0；Web fallback 无 Tauri 原生选择器，按计划用 Playwright bridge fixture 完成目标流。
+- 过程错误：隐藏 `Start-Process` 未保持 Vite 子进程，且 CIM 进程诊断受当前权限拒绝；改用任务直接持有并可终止的 Vite server。`pnpm --filter ... exec playwright` 未解析局部 CLI，随后直接命令首次多带 `tests/` 前缀导致 no tests；改用 apps/desktop testDir 相对文件名后目标用例 1/1 通过。所有错误均未修改用户数据。
+- 文档收口首个组合补丁因集成基线中不存在预期的 `### 14.4 Git 收口` 标题而整体未应用；已拆成精确文件补丁，生产实现未受影响。
+- 首轮 `pnpm check` 的 React refs 规则拒绝在 render fallback progress 中读取 import operation ref；该字段不参与 UI，改为静态内部占位 ID，实际命令和取消仍只在事件处理器读取 ref，随后重跑完整门禁。
+- 第二轮 `pnpm check` 在测试 deferred resolver 上触发 TypeScript 的异步赋值控制流 `never` 推断；resolver 在 Promise 构造时必定赋值，改为明确 definite assignment 后继续重跑，产品代码编译已越过上一轮 lint 问题。
+- 14.5a 三类提交 `fcc93a7` / `3e5244a` / `eb2747f` 已推送，并以 `--no-ff` 合入/推送集成提交 `5d261a4`；当前搜索分支已带入该基线。
+
+## 2026-07-19 大阶段 14.3：MOBI/AZW3 导入设计审核
+
+### 状态
+- **当前状态：** design_approved
+- **当前分支：** `codex/stage14-mobi-import`
+- **基线：** v0.3 integration `6e15884`
+
+### 已执行
+- 14.2 三类提交已推送，并以 `--no-ff` 合入/推送 `codex/v0.3.0-integration`。
+- 逐项复核 Stage 13 书架、系统状态、响应式与控件状态批准稿，并核对当前 `BatchImportDialog`、drop overlay 和现有视觉 token。
+- 创建四组静态可审核状态：桌面预览、转换进度/取消、DRM/部分失败、375px sheet/drop overlay；未修改生产 React/CSS。
+
+### 遇到的错误
+- 分支创建后的只读 `rg` 命令把以 `--` 开头的正则误识别为参数；分支已成功创建且无文件修改，改用 `rg -e` 后完成 token 盘点。
+- 首次尝试用隐藏 `Start-Process` 启动静态服务时，当前 Windows 环境同时含 `Path`/`PATH` 键导致 PowerShell 构造环境字典失败；没有子进程被创建。改为由任务直接持有可终止的本地 server，Browser 检查结束后已终止，端口只剩 `TIME_WAIT`。
+- PNG 尺寸复核命令首次未加载 `System.Drawing` 程序集，hash 仍成功计算但宽高字段为空；实际 Browser viewport/DOM 已逐页确认 1440×900，后续改用 PNG header 复核，不把失败读数计为证据。
+- 内置 Browser `screenshot()` 返回 JFIF bytes，即使目标名使用 `.png`；不保留错误扩展名。桌面预览以仓库 Chromium 重新截图为 PNG，其余三张以 Windows `System.Drawing` 无缩放转码为真实 PNG。首次 Playwright CLI 截图生成后复现已知的 Windows 清理挂起，产物已成功写入，终止残留命令后未再批量重跑。
+
+### 待执行
+- 设计资产已提交并推送，用户已于 2026-07-20 批准；进入生产 UI 与 14.3 功能接线。
+
+### 设计验收结果
+- 内置 Browser 逐页确认四组状态板均为单一可见 board、1440×900、无横向或纵向溢出、console warning/error 0。
+- 桌面预览保留 MOBI/AZW3 源标签与本地转换说明；转换页按六阶段显示且取消按钮 44px；DRM 页无 password/decrypt/online 控件；两个移动 frame 均为 375px，sticky action 为 48px。
+- 四张 PNG 已保存至 `docs/design/v0.3/stage14-mobi-concepts/`，临时 viewport 已重置，Browser tab 与本地 server 已清理。
+- 最终四张均为真实 PNG、1440×900；大小依次为 126,710 / 211,694 / 294,826 / 336,666 bytes，HTML 通过 Prettier，`git diff --check` 通过。
+
+## 2026-07-19 大阶段 14.2：MOBI/AZW3 转换原型
+
+### 状态
+- **当前状态：** implementation_complete
+- **当前分支：** `codex/stage14-mobi-conversion-spike`
+- **基线：** v0.3 integration `be6a63c`
+
+### 已执行
+- 14.1 三类提交已推送，并以 `--no-ff` 合入/推送 `codex/v0.3.0-integration`。
+- 创建 14.2 分支；审计现有 operation registry、batch-import progress 和 ZIP 安全边界。
+- 使用上游 hybrid fixture 实测 bundled sidecar，确认默认 KF8 转换会生成单个有效 EPUB 候选。
+- 已实现不写数据库/正式书库的 `MobiConversionService`、DRM preflight、独立 staging、取消/超时、子进程清理和 EPUB ZIP/OPF 安全验证。
+- 8 项定向 Rust 测试全部通过；可重复测量确认三个 fixture 为 53–181 ms、峰值 working set 3.19–5.89 MB，scratch 成功清理。
+
+### 遇到的错误
+- 首轮 7 项定向 Rust 测试有 3 项失败：PalmDOC DRM v1 fixture 使用旧式 `TEXtREAd` type/creator，预检在读取 encryption type 前误报格式；Windows `canonicalize()` 又生成 MinGW `mobitool` 无法解析的 `\\?\` 路径。修正为同时识别只用于预检的 `BOOKMOBI`/`TEXtREAd`，仍以 encryption type 拒绝 DRM；安全边界继续使用 canonical path，仅在无 shell 的 sidecar 参数边界去除 verbatim 前缀。
+- 第二轮 7 项定向测试只剩 Unicode 断言失败：上游 `sample-unicode-uncompressed.mobi` 虽声明 UTF-8，但正文恰好全为 ASCII。测试改为在临时副本中对 hybrid 两个 rendition 做等长 UTF-8 中文替换，再验证派生 EPUB 保留 `中文测试`；不修改上游 fixture 或引入来源不明样本。
+- 首次新增 duplicate ZIP 测试时，`zip` writer 自身拒绝写同名 entry；改为先写等长不同名，再只在测试产物的 local/central directory 中等长替换成重复名，以实际验证后端 duplicate 检查。首次性能脚本的 `Start-Process` 对象在 `WaitForExit` 后未刷新，`ExitCode` 仍为空；进程实际已成功生成 EPUB，脚本增加 `Refresh()` 后再读取退出码。
+- 第二次 duplicate 产物由 `ZipArchive` 在构造阶段直接以 `Duplicate filename` 拒绝，属于预期安全拒绝但错误链位于 anyhow source；断言改为检查完整错误链。性能脚本第二次仍因 Windows `Start-Process` 未保留原生 handle 而读不到 exit code；启动后立即访问 `Handle`，确保进程退出状态和峰值内存可读取。
+- `Start-Process` 在当前 PowerShell/重定向组合下即使访问 handle 仍不提供 `ExitCode`；性能测量改用显式 `System.Diagnostics.ProcessStartInfo`，关闭 shell、独立传入已引号路径并重定向标准流，继续轮询真实 `PeakWorkingSet64`。
+- 14.2 首轮仓库 `pnpm.cmd check` 在 ESLint 停止：14.1 verifier 顶部遗留了未使用的 `process` global 声明，脚本实际没有读取环境变量。删除该多余声明后重跑，不改变 sidecar 验证逻辑。
+- 第二轮 `pnpm.cmd check` 通过 ESLint 后在 Prettier 检出 `package.json` 与 14.1 verifier 的机械格式差异；使用仓库锁定的本地 Prettier 只格式化这两个文件后继续。
+- 文档提交前 `git diff --cached --check` 检出报告头两行的 Markdown 尾空格；首次命令使用分号仍继续创建了提交，随即删除尾空格、重新执行严格检查并 amend，同一提交最终无 whitespace 错误。
+
+### 待执行
+- 完成三类提交和阶段合并；随后只产出 14.3 四组 UI 状态板并等待用户审核。
+
+### 阶段结果
+- **结论：** go；`MobiConversionService` 保持内部原型边界，不写数据库或正式 library。
+- **功能证据：** 8 项转换专项通过，覆盖 MOBI/AZW3、hybrid KF8、中文 UTF-8、图片/NCX/OPF、DRM、取消、超时、converter 非零退出、重复 ZIP、压缩炸弹和清理。
+- **仓库门禁：** `pnpm.cmd check` 通过（core 8 / desktop 176）；Cargo fmt 与 Rust 59/59 通过；sidecar hash/无 encryption、license audit（291 JS / 529 Cargo / 1 bundled）、release security 和 `git diff --check` 通过。
+- **资源证据：** 三个上游合成 fixture 为 53–181 ms、3,194,880–5,885,952 bytes peak working set；完整记录见 `docs/architecture/mobi-conversion-spike.md`。
+
+## 2026-07-19 大阶段 14.1：MOBI/AZW3 决策
+
+### 状态
+- **当前状态：** in_progress
+- **集成分支：** `codex/v0.3.0-integration`
+- **当前分支：** `codex/stage14-mobi-azw3-evaluation`
+
+### 已执行
+- 完整读取 `planning-with-files-zh`、Build Web Apps、`frontend-design`、React 最佳实践和前端测试规范。
+- 核对远端 `v0.2.0` tag、发布后 `main` `ed72614`、工作树和阶段 14 路线图。
+- 从 `main` 创建并推送 `codex/v0.3.0-integration`，再创建 14.1 阶段分支。
+- 锁定 libmobi v0.12 sidecar、无 DRM、仅 MOBI/AZW3、先状态板后生产 UI 的实施边界。
+- 官方网页核验确认 v0.12、MOBI/KF8/AZW3、Windows MinGW/MSVC 和 LGPL-3.0-or-later；Tauri sidecar 配置契约已核对。
+
+### 遇到的错误
+- Web 安全策略拒绝直接打开 GitHub Releases API URL；改用受控 PowerShell HTTPS 请求获取 release 元数据和资产，不重复同一 Web 调用。
+- Git for Windows 的 `gpg.exe` 把绝对 Windows `GNUPGHOME` 再次拼接到当前 MSYS 路径，导致隔离 keyring 不可写；改为仓库相对、正斜杠路径后重试，不使用全局 keyring。
+- 首次 Git Bash 构建命令在 PowerShell 双引号中错误展开 `$PATH`，使 `export` 把后续 configure 参数当作变量；改用 PowerShell 单引号包裹完整 Bash 脚本，保持 Bash 自己展开 PATH。
+- 第二次 configure 已正确识别 Windows x64 MinGW、静态工具和内置 miniz/xmlwriter，但自动依赖跟踪阶段因环境没有名为 `make` 的命令而停止；下一次改用独立 out-of-tree 目录、`MAKE=mingw32-make` 和 `--disable-dependency-tracking`，并同时显式关闭 encryption。
+- out-of-tree 重试被 autotools 拒绝，因为第一次尝试已在同一源码树写入配置；不执行模糊清理，改为从已验证 tarball 解压一份全新的 source-clean 后构建。
+- 干净源码 configure 成功并确认 `encryption=no`、静态 libmobi、内置 miniz/xmlwriter；首次 make 因 Makefile 展开的 Git `sh.exe` 路径包含空格而失败，下一步显式传入 MSYS `/usr/bin/sh`，不改上游源码。
+- make 覆盖 `SHELL=/usr/bin/sh` 后仍被 MSYS 转回含空格的 Git Bash 路径；已确认等价 8.3 路径 `C:\PROGRA~1\Git\usr\bin\sh.exe` 存在，将在全新源码树的 configure 环境同时固定 `SHELL`/`CONFIG_SHELL`。
+- 一次只读工具探测误把数组传给 PowerShell `-Filter`，随后改用 `Where-Object` 完成检查；未影响任何文件或构建结果。
+- 首次运行固化脚本时，严格模式下单个 Git 工具候选被 PowerShell 解包为标量且没有 `.Count`；将过滤结果显式包成数组后重跑。
+- 固化脚本连续两次生成 296,129-byte sidecar，但 SHA-256 分别为 `3C145166…` 与 `1F556E72…`；`SOURCE_DATE_EPOCH` 已将版本时间固定到 2024-06-17，实际 Makefile 却只保留 `-O2`。改为在 configure 前导出 CFLAGS/LDFLAGS/确定性 ARFLAGS，再重新执行双构建门禁。
+- 规范化参数修复后，两次全新构建均得到 296,129 bytes / `438576B7…47CF1`，可重复性通过；该 hash 已写入构建脚本和组件元数据，非匹配产物不会覆盖 bundled sidecar。
+- 首轮 `pnpm.cmd check` 仅在 Prettier 门停止，涉及新增 JSON 与两份 release JS；ESLint 已通过。将只格式化这四个明确文件后重跑完整门禁。
+- `pnpm.cmd exec prettier --write` 在当前 pnpm 11 环境没有解析本地 bin；改用仓库已安装的 `node_modules\.bin\prettier.cmd`，不安装或更改依赖。
+
+### 完成项
+- 已核验 libmobi 源码资产、签名、许可证与可重复 Windows x64 构建路径。
+- 已建立第三方声明、sidecar 构建脚本、安全/体积门禁和 14.1 go/no-go 报告。
+- 阶段提交并合回集成分支后进入 14.2 隔离转换原型。
+
+### 阶段结果
+- **状态：** implementation_complete；结论 go。
+- **sidecar：** 296,129 bytes，SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`；双构建一致，x64 PE、无非系统 DLL、无 encryption 选项。
+- **体积：** NSIS +111,310 bytes，MSI +139,264 bytes，安装目录 +296,129 bytes；全部通过阈值。
+- **质量门：** `pnpm.cmd check`（core 8 / desktop 176）、Rust 51、Cargo fmt、license audit（291 JS / 529 Cargo / 1 bundled）、release security、NSIS 和 MSI 均通过。
+- **环境重试：** NSIS 在沙箱内无法读取既有 updater key，按安全边界在批准环境重跑；MSI 在沙箱内无法访问 WiX/Installer Service，批准环境重跑通过。两次均未输出私钥内容或改变用户数据。
+
 ## 2026-06-21 大阶段 5：书签、高亮、想法与检索
 
 ### 状态

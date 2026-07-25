@@ -53,6 +53,8 @@ interface BookshelfProps {
   onImportFiles: () => void;
   onImportFolder: () => void;
   onOpenBook: (book: Book) => void;
+  onOpenSearch: () => void;
+  onOpenInsights: () => void;
   onOpenSettings: () => void;
   onRequestRemoval: (book: Book) => void;
   onRetryLibrary: () => void;
@@ -88,6 +90,8 @@ export function Bookshelf({
   onImportFiles,
   onImportFolder,
   onOpenBook,
+  onOpenSearch,
+  onOpenInsights,
   onOpenSettings,
   onRequestRemoval,
   onRetryLibrary,
@@ -101,10 +105,12 @@ export function Bookshelf({
       : books;
 
   return (
-    <main className="app-shell" aria-label="Ebook Reader bookshelf">
+    <main className="app-shell" aria-label="Ebook Reader bookshelf" tabIndex={-1}>
       <LibraryRail
         activeView={activeLibraryView}
         bookCount={books.length}
+        onOpenSearch={onOpenSearch}
+        onOpenInsights={onOpenInsights}
         onOpenSettings={onOpenSettings}
         onSelectView={onSelectLibraryView}
       />
@@ -164,11 +170,15 @@ function LibraryRail({
   activeView,
   bookCount,
   onSelectView,
+  onOpenSearch,
+  onOpenInsights,
   onOpenSettings,
 }: {
   activeView: LibraryView;
   bookCount: number;
   onSelectView: (view: LibraryView) => void;
+  onOpenSearch: () => void;
+  onOpenInsights: () => void;
   onOpenSettings: () => void;
 }) {
   return (
@@ -198,6 +208,28 @@ function LibraryRail({
             <RecentIcon />
           </span>
           <span>Recent</span>
+        </button>
+        <button
+          type="button"
+          className="rail-link"
+          data-library-search-trigger
+          onClick={onOpenSearch}
+        >
+          <span className="rail-link__icon" aria-hidden="true">
+            <SearchIcon />
+          </span>
+          <span>Search</span>
+        </button>
+        <button
+          type="button"
+          className="rail-link"
+          data-reading-insights-trigger
+          onClick={onOpenInsights}
+        >
+          <span className="rail-link__icon" aria-hidden="true">
+            <InsightsIcon />
+          </span>
+          <span>Insights</span>
         </button>
         <button type="button" className="rail-link" onClick={onOpenSettings}>
           <span className="rail-link__icon" aria-hidden="true">
@@ -869,6 +901,23 @@ function RecentIcon() {
   return (
     <svg viewBox="0 0 24 24">
       <path d="M12 7v5l3 2M4.8 8.2A8 8 0 1 1 4 12M4 5v3.5h3.5" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="6" />
+      <path d="m15 15 4.5 4.5" />
+    </svg>
+  );
+}
+
+function InsightsIcon() {
+  return (
+    <svg viewBox="0 0 24 24">
+      <path d="M4 18V9M10 18V5M16 18v-7M22 18V3M2 21h21" />
     </svg>
   );
 }

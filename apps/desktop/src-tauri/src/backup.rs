@@ -17,11 +17,11 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use zip::{write::SimpleFileOptions, CompressionMethod, ZipArchive, ZipWriter};
 
-use crate::db;
+use crate::{batch_import, db, mobi};
 
 pub const BACKUP_PROGRESS_EVENT: &str = "data-operation-progress";
 const BACKUP_FORMAT_IDENTIFIER: &str = "ebook-reader-backup";
-const BACKUP_FORMAT_VERSION: u8 = 1;
+const BACKUP_FORMAT_VERSION: u8 = 2;
 const MAX_ARCHIVE_ENTRIES: usize = 20_000;
 const MAX_ENTRY_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 const MAX_TOTAL_UNCOMPRESSED_BYTES: u64 = 25 * 1024 * 1024 * 1024;
@@ -226,6 +226,49 @@ struct PortableBackupData {
     bookmarks: Vec<PortableBookmark>,
     annotations: Vec<PortableAnnotation>,
     settings: Vec<PortableSetting>,
+    #[serde(default)]
+    custom_fonts: Vec<PortableCustomFont>,
+    #[serde(default)]
+    reading_sessions: Vec<PortableReadingSession>,
+    #[serde(default)]
+    reading_history_preferences: Option<PortableReadingHistoryPreferences>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableReadingSession {
+    id: String,
+    book_id: String,
+    started_at: String,
+    ended_at: Option<String>,
+    last_heartbeat_at: String,
+    active_seconds: i64,
+    final_progress: Option<f64>,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableReadingHistoryPreferences {
+    enabled: bool,
+    updated_at: String,
+    cleared_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PortableCustomFont {
+    id: String,
+    family_name: String,
+    style_name: String,
+    file_name: String,
+    file_hash: String,
+    file_size: u64,
+    family_alias: String,
+    enabled: bool,
+    imported_at: String,
+    updated_at: String,
+    archive_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +282,16 @@ struct PortableBook {
     cover_status: String,
     cover_archive_path: Option<String>,
     book_archive_path: Option<String>,
+    #[serde(default)]
+    reader_format: Option<String>,
+    #[serde(default)]
+    reader_hash: Option<String>,
+    #[serde(default)]
+    reader_archive_path: Option<String>,
+    #[serde(default)]
+    converter_id: Option<String>,
+    #[serde(default)]
+    converter_version: Option<String>,
     created_at: String,
     updated_at: String,
     last_opened_at: Option<String>,
@@ -462,21 +515,37 @@ pub fn inspect_backup(
     let mut matched_books = 0_u64;
     let mut missing_files = 0_u64;
     for book in &inspected.data.books {
-        let local: Option<String> = conn
+        let local: Option<(String, Option<String>)> = conn
             .query_row(
-                "SELECT library_path FROM books WHERE file_hash = ?1",
+                "SELECT books.library_path, derivatives.path
+                 FROM books LEFT JOIN book_derivatives derivatives ON derivatives.book_id = books.id
+                 WHERE books.file_hash = ?1",
                 params![&book.file_hash],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
-        if let Some(local_path) = local {
+        if let Some((local_path, local_reader_path)) = local {
             matched_books += 1;
-            if !Path::new(&local_path).is_file() && book.book_archive_path.is_none() {
+            let local_available = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                local_reader_path
+                    .as_deref()
+                    .is_some_and(|path| Path::new(path).is_file())
+            } else {
+                Path::new(&local_path).is_file()
+            };
+            let backup_can_supply =
+                book.reader_archive_path.is_some() || book.book_archive_path.is_some();
+            if !local_available && !backup_can_supply {
                 missing_files += 1;
             }
         } else {
             new_books += 1;
-            if book.book_archive_path.is_none() {
+            let backup_can_supply = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                book.reader_archive_path.is_some() || book.book_archive_path.is_some()
+            } else {
+                book.book_archive_path.is_some()
+            };
+            if !backup_can_supply {
                 missing_files += 1;
             }
         }
@@ -535,7 +604,7 @@ pub fn restore_backup(
         1,
         "Rechecking backup safety",
     );
-    let inspected = inspect_archive(backup_path, &canceled)?;
+    let mut inspected = inspect_archive(backup_path, &canceled)?;
     ensure_not_canceled(&canceled)?;
 
     let storage = db::init_app_storage(app)?;
@@ -566,6 +635,16 @@ pub fn restore_backup(
             &storage.library_dir,
             &staging_dir,
             &inspected.manifest,
+            &mut created_files,
+        )?;
+        rebuild_missing_mobi_derivatives(
+            app,
+            operation_id,
+            &mut inspected.data,
+            &moved_files,
+            &storage.library_dir,
+            &staging_dir,
+            &canceled,
             &mut created_files,
         )?;
         ensure_not_canceled(&canceled)?;
@@ -735,6 +814,9 @@ fn inspect_archive(backup_path: &Path, canceled: &AtomicBool) -> anyhow::Result<
             bookmarks: Vec::new(),
             annotations: Vec::new(),
             settings: Vec::new(),
+            custom_fonts: Vec::new(),
+            reading_sessions: Vec::new(),
+            reading_history_preferences: None,
         }
     };
     validate_portable_data(&data, &manifest)?;
@@ -749,7 +831,7 @@ fn validate_manifest(manifest: &BackupManifest) -> anyhow::Result<()> {
     if manifest.format_identifier != BACKUP_FORMAT_IDENTIFIER {
         bail!("[format-identifier-unsupported] this is not an Ebook Reader backup");
     }
-    if manifest.format_version != BACKUP_FORMAT_VERSION {
+    if !matches!(manifest.format_version, 1 | BACKUP_FORMAT_VERSION) {
         bail!("[format-version-unsupported] backup major format version is unsupported");
     }
     if manifest
@@ -781,7 +863,10 @@ fn validate_portable_data(
     for book in &data.books {
         if book.id.trim().is_empty()
             || book.title.trim().is_empty()
-            || !matches!(book.format.as_str(), "epub" | "txt" | "pdf")
+            || !matches!(
+                book.format.as_str(),
+                "epub" | "txt" | "pdf" | "mobi" | "azw3"
+            )
             || book.file_hash.len() != 64
             || !book.file_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
@@ -800,6 +885,19 @@ fn validate_portable_data(
                 bail!("[book-hash-mismatch] included book does not match its file hash");
             }
         }
+        if let Some(path) = &book.reader_archive_path {
+            if !path.starts_with("books/") {
+                bail!("[reader-payload-invalid] reader archive path is invalid");
+            }
+            let descriptor = manifest
+                .payloads
+                .iter()
+                .find(|payload| &payload.path == path)
+                .context("[reader-payload-missing] reader payload is not declared")?;
+            if book.reader_hash.as_deref() != Some(descriptor.sha256.as_str()) {
+                bail!("[reader-hash-mismatch] included reader file does not match its hash");
+            }
+        }
         if let Some(path) = &book.cover_archive_path {
             if !path.starts_with("covers/")
                 || !manifest
@@ -809,6 +907,41 @@ fn validate_portable_data(
             {
                 bail!("[cover-payload-invalid] cover payload is invalid");
             }
+        }
+    }
+    let font_ids: HashSet<&str> = data
+        .custom_fonts
+        .iter()
+        .map(|font| font.id.as_str())
+        .collect();
+    if font_ids.len() != data.custom_fonts.len() {
+        bail!("[duplicate-font-id] data contains duplicate font IDs");
+    }
+    for font in &data.custom_fonts {
+        if font.id.trim().is_empty()
+            || font.family_name.trim().is_empty()
+            || font.family_alias.trim().is_empty()
+            || font.file_hash.len() != 64
+            || !font.file_hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || font.file_size == 0
+            || font.file_size > 20 * 1024 * 1024
+        {
+            bail!("[font-record-invalid] portable font metadata is invalid");
+        }
+        let path = font
+            .archive_path
+            .as_deref()
+            .context("[font-payload-missing] portable font has no file payload")?;
+        if !path.starts_with("fonts/") {
+            bail!("[font-payload-invalid] font archive path is invalid");
+        }
+        let descriptor = manifest
+            .payloads
+            .iter()
+            .find(|payload| payload.path == path)
+            .context("[font-payload-missing] font payload is not declared")?;
+        if descriptor.sha256 != font.file_hash || descriptor.size != font.file_size {
+            bail!("[font-hash-mismatch] included font does not match its metadata");
         }
     }
     for book_id in data
@@ -821,10 +954,34 @@ fn validate_portable_data(
                 .iter()
                 .map(|record| record.book_id.as_str()),
         )
+        .chain(
+            data.reading_sessions
+                .iter()
+                .map(|record| record.book_id.as_str()),
+        )
     {
         if !book_ids.contains(book_id) {
             bail!("[orphan-record] portable reading record references an unknown book");
         }
+    }
+    let session_ids: HashSet<&str> = data
+        .reading_sessions
+        .iter()
+        .map(|session| session.id.as_str())
+        .collect();
+    if session_ids.len() != data.reading_sessions.len()
+        || data.reading_sessions.iter().any(|session| {
+            session.id.trim().is_empty()
+                || session.active_seconds < 0
+                || session.started_at.trim().is_empty()
+                || session.last_heartbeat_at.trim().is_empty()
+                || session.updated_at.trim().is_empty()
+                || session
+                    .final_progress
+                    .is_some_and(|progress| !(0.0..=1.0).contains(&progress))
+        })
+    {
+        bail!("[reading-history-invalid] portable reading history is invalid");
     }
     Ok(())
 }
@@ -881,7 +1038,11 @@ fn extract_restore_payloads(
         .manifest
         .payloads
         .iter()
-        .filter(|payload| payload.path.starts_with("books/") || payload.path.starts_with("covers/"))
+        .filter(|payload| {
+            payload.path.starts_with("books/")
+                || payload.path.starts_with("covers/")
+                || payload.path.starts_with("fonts/")
+        })
         .collect();
     let total = file_payloads.len() as u64;
     for (index, payload) in file_payloads.into_iter().enumerate() {
@@ -927,18 +1088,25 @@ fn commit_restore_files(
 ) -> anyhow::Result<HashMap<String, String>> {
     fs::create_dir_all(library_dir)?;
     fs::create_dir_all(library_dir.join("covers"))?;
+    let font_dir = library_dir
+        .parent()
+        .context("[storage-path-invalid] library has no app-data parent")?
+        .join("fonts");
+    fs::create_dir_all(&font_dir)?;
     let mut moved = HashMap::new();
-    for payload in manifest
-        .payloads
-        .iter()
-        .filter(|payload| payload.path.starts_with("books/") || payload.path.starts_with("covers/"))
-    {
+    for payload in manifest.payloads.iter().filter(|payload| {
+        payload.path.starts_with("books/")
+            || payload.path.starts_with("covers/")
+            || payload.path.starts_with("fonts/")
+    }) {
         let staged = staging_dir.join(Path::new(&payload.path));
         let file_name = Path::new(&payload.path)
             .file_name()
             .context("[payload-path-invalid] payload has no file name")?;
         let destination = if payload.path.starts_with("covers/") {
             library_dir.join("covers").join(file_name)
+        } else if payload.path.starts_with("fonts/") {
+            font_dir.join(file_name)
         } else {
             library_dir.join(file_name)
         };
@@ -980,6 +1148,11 @@ fn merge_restore_data(
             .cloned();
         let restored_cover_path = book
             .cover_archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path))
+            .cloned();
+        let restored_reader_path = book
+            .reader_archive_path
             .as_ref()
             .and_then(|path| moved_files.get(path))
             .cloned();
@@ -1064,6 +1237,13 @@ fn merge_restore_data(
                     None
                 },
             )?;
+            merge_book_derivative(
+                transaction,
+                book,
+                &local_id,
+                restored_reader_path.as_deref(),
+                library_dir,
+            )?;
         } else {
             let local_id = if is_uuid_like(&book.id) {
                 book.id.clone()
@@ -1110,7 +1290,20 @@ fn merge_restore_data(
                 "INSERT INTO book_cover_state (book_id, status, updated_at) VALUES (?1, ?2, ?3)",
                 params![&local_id, cover_status, &book.updated_at],
             )?;
-            let available = Path::new(&expected_library_path).is_file();
+            merge_book_derivative(
+                transaction,
+                book,
+                &local_id,
+                restored_reader_path.as_deref(),
+                library_dir,
+            )?;
+            let available = if matches!(book.format.as_str(), "mobi" | "azw3") {
+                restored_reader_path
+                    .as_deref()
+                    .is_some_and(|path| Path::new(path).is_file())
+            } else {
+                Path::new(&expected_library_path).is_file()
+            };
             items.push(restore_item(
                 "book",
                 &local_id,
@@ -1147,8 +1340,247 @@ fn merge_restore_data(
     )?;
     merge_bookmarks(transaction, &data.bookmarks, &book_id_map, &mut items)?;
     merge_annotations(transaction, &data.annotations, &book_id_map, &mut items)?;
-    merge_settings(transaction, &data.settings, &mut items)?;
+    let font_id_map = merge_custom_fonts(transaction, &data.custom_fonts, moved_files, &mut items)?;
+    let remapped_settings = remap_font_settings(&data.settings, &font_id_map);
+    merge_settings(transaction, &remapped_settings, &mut items)?;
+    merge_reading_history(
+        transaction,
+        &data.reading_sessions,
+        data.reading_history_preferences.as_ref(),
+        &book_id_map,
+        &mut items,
+    )?;
     Ok(items)
+}
+
+fn merge_custom_fonts(
+    transaction: &Transaction<'_>,
+    records: &[PortableCustomFont],
+    moved_files: &HashMap<String, String>,
+    items: &mut Vec<RestoreResultItem>,
+) -> anyhow::Result<HashMap<String, String>> {
+    let mut id_map = HashMap::new();
+    for record in records {
+        let restored_path = record
+            .archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path));
+        let existing: Option<(String, String)> = transaction
+            .query_row(
+                "SELECT id, updated_at FROM custom_fonts WHERE file_hash = ?1",
+                params![&record.file_hash],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?;
+        if let Some((local_id, local_updated_at)) = existing {
+            id_map.insert(record.id.clone(), local_id.clone());
+            let newer = record.updated_at > local_updated_at;
+            if newer {
+                transaction.execute(
+                    "UPDATE custom_fonts SET enabled = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![record.enabled, &record.updated_at, &local_id],
+                )?;
+            }
+            items.push(restore_item(
+                "font",
+                &local_id,
+                &record.family_name,
+                if newer {
+                    RestoreItemStatus::Merged
+                } else {
+                    RestoreItemStatus::LocalKept
+                },
+                if newer {
+                    "Font registration merged by file hash"
+                } else {
+                    "Local font registration was newer or equal"
+                },
+            ));
+            continue;
+        }
+        let Some(restored_path) = restored_path else {
+            items.push(restore_item(
+                "font",
+                &record.id,
+                &record.family_name,
+                RestoreItemStatus::Skipped,
+                "Font file was not available",
+            ));
+            continue;
+        };
+        transaction.execute(
+            "INSERT INTO custom_fonts (
+                id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                family_alias, enabled, imported_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                &record.id,
+                &record.family_name,
+                &record.style_name,
+                &record.file_name,
+                restored_path,
+                &record.file_hash,
+                record.file_size as i64,
+                &record.family_alias,
+                record.enabled,
+                &record.imported_at,
+                &record.updated_at,
+            ],
+        )?;
+        id_map.insert(record.id.clone(), record.id.clone());
+        items.push(restore_item(
+            "font",
+            &record.id,
+            &record.family_name,
+            RestoreItemStatus::Restored,
+            "Font and registration restored",
+        ));
+    }
+    Ok(id_map)
+}
+
+fn remap_font_settings(
+    records: &[PortableSetting],
+    font_id_map: &HashMap<String, String>,
+) -> Vec<PortableSetting> {
+    records
+        .iter()
+        .cloned()
+        .map(|mut record| {
+            if record.key == "reader_theme" {
+                if let Some(font_id) = record.value.get("fontId").and_then(Value::as_str) {
+                    if let Some(local_id) = font_id_map.get(font_id) {
+                        record.value["fontId"] = Value::String(local_id.clone());
+                    } else if let Some(object) = record.value.as_object_mut() {
+                        object.remove("fontId");
+                    }
+                }
+            }
+            record
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rebuild_missing_mobi_derivatives(
+    app: &AppHandle,
+    operation_id: &str,
+    data: &mut PortableBackupData,
+    moved_files: &HashMap<String, String>,
+    library_dir: &Path,
+    staging_dir: &Path,
+    canceled: &AtomicBool,
+    created_files: &mut Vec<PathBuf>,
+) -> anyhow::Result<()> {
+    for book in &mut data.books {
+        if !matches!(book.format.as_str(), "mobi" | "azw3") || book.reader_archive_path.is_some() {
+            continue;
+        }
+        let Some(source_path) = book
+            .book_archive_path
+            .as_ref()
+            .and_then(|path| moved_files.get(path))
+            .map(PathBuf::from)
+        else {
+            continue;
+        };
+        ensure_not_canceled(canceled)?;
+        emit_restore_progress(
+            app,
+            operation_id,
+            "converting",
+            0,
+            1,
+            "Rebuilding a missing MOBI reader file locally",
+        );
+        let converter = mobi::MobiConversionService::new(
+            batch_import::resolve_converter_path(app)?,
+            std::time::Duration::from_secs(120),
+        );
+        let artifact = converter.convert(&source_path, staging_dir, operation_id, canceled)?;
+        if let Some(expected_hash) = book.reader_hash.as_deref() {
+            if expected_hash != artifact.epub_hash {
+                let _ = artifact.cleanup();
+                bail!("[reader-hash-mismatch] rebuilt derivative differs from backup metadata");
+            }
+        }
+        let destination = library_dir.join(format!("{}.reader.epub", book.file_hash));
+        if destination.exists() {
+            let existing = descriptor_for_file("reader", &destination)?;
+            if existing.sha256 != artifact.epub_hash {
+                let _ = artifact.cleanup();
+                bail!("[content-address-conflict] existing reader file has different content");
+            }
+        } else {
+            fs::rename(&artifact.epub_path, &destination)?;
+            created_files.push(destination);
+        }
+        book.reader_format = Some("epub".to_string());
+        book.reader_hash = Some(artifact.epub_hash.clone());
+        book.converter_id = Some(artifact.converter_id.to_string());
+        book.converter_version = Some(artifact.converter_version.to_string());
+        artifact.cleanup()?;
+    }
+    Ok(())
+}
+
+fn merge_book_derivative(
+    transaction: &Transaction<'_>,
+    book: &PortableBook,
+    local_book_id: &str,
+    restored_reader_path: Option<&str>,
+    library_dir: &Path,
+) -> anyhow::Result<()> {
+    let Some(reader_hash) = book.reader_hash.as_deref() else {
+        return Ok(());
+    };
+    let existing_derivative = transaction
+        .query_row(
+            "SELECT path, file_hash FROM book_derivatives WHERE book_id = ?1",
+            params![local_book_id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()?;
+    if let Some((existing_path, existing_hash)) = existing_derivative {
+        let existing_path = Path::new(&existing_path);
+        if existing_path.is_file()
+            && descriptor_for_file("reader", existing_path)
+                .is_ok_and(|descriptor| descriptor.sha256 == existing_hash)
+        {
+            // A matching source book may already have a valid derivative produced by an
+            // earlier converter. Keep that local reader identity so restore cannot move EPUB
+            // locators, bookmarks, annotations, or progress merely because converter output
+            // changed between app versions.
+            return Ok(());
+        }
+    }
+    let reader_path = restored_reader_path
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| {
+            library_dir
+                .join(format!("{}.reader.epub", book.file_hash))
+                .display()
+                .to_string()
+        });
+    transaction.execute(
+        "INSERT INTO book_derivatives (book_id, format, path, file_hash, converter_id, converter_version, created_at, updated_at)
+         VALUES (?1, 'epub', ?2, ?3, ?4, ?5, ?6, ?6)
+         ON CONFLICT(book_id) DO UPDATE SET
+           path = CASE WHEN excluded.path != '' THEN excluded.path ELSE path END,
+           file_hash = excluded.file_hash,
+           converter_id = excluded.converter_id,
+           converter_version = excluded.converter_version,
+           updated_at = excluded.updated_at",
+        params![
+            local_book_id,
+            reader_path,
+            reader_hash,
+            book.converter_id.as_deref().unwrap_or("libmobi"),
+            book.converter_version.as_deref().unwrap_or("0.12"),
+            &book.updated_at,
+        ],
+    )?;
+    Ok(())
 }
 
 fn merge_book_overrides(
@@ -1400,6 +1832,153 @@ fn merge_settings(
     Ok(())
 }
 
+fn merge_reading_history(
+    transaction: &Transaction<'_>,
+    sessions: &[PortableReadingSession],
+    incoming_preferences: Option<&PortableReadingHistoryPreferences>,
+    book_id_map: &HashMap<String, String>,
+    items: &mut Vec<RestoreResultItem>,
+) -> anyhow::Result<()> {
+    let local_preferences: (bool, String, Option<String>) = transaction.query_row(
+        "SELECT enabled, updated_at, cleared_at
+         FROM reading_history_preferences WHERE id = 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let incoming_cleared_at = incoming_preferences.and_then(|value| value.cleared_at.as_deref());
+    let effective_cleared_at =
+        max_optional_timestamp(local_preferences.2.as_deref(), incoming_cleared_at)
+            .map(str::to_string);
+
+    if incoming_cleared_at.is_some_and(|incoming| {
+        local_preferences
+            .2
+            .as_deref()
+            .is_none_or(|local| incoming > local)
+    }) {
+        let incoming = incoming_cleared_at.expect("checked incoming clear timestamp");
+        transaction.execute(
+            "DELETE FROM reading_sessions WHERE updated_at <= ?1",
+            [incoming],
+        )?;
+    }
+
+    for session in sessions {
+        let Some(local_book_id) = book_id_map.get(&session.book_id) else {
+            items.push(restore_item(
+                "history",
+                &session.id,
+                "Reading session",
+                RestoreItemStatus::Skipped,
+                "The related book was not available in this backup",
+            ));
+            continue;
+        };
+        if effective_cleared_at
+            .as_deref()
+            .is_some_and(|cleared_at| session.updated_at.as_str() <= cleared_at)
+        {
+            items.push(restore_item(
+                "history",
+                &session.id,
+                "Reading session",
+                RestoreItemStatus::LocalKept,
+                "A newer clear-history action was kept",
+            ));
+            continue;
+        }
+        let local_updated_at: Option<String> = transaction
+            .query_row(
+                "SELECT updated_at FROM reading_sessions WHERE id = ?1",
+                [&session.id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let incoming_newer = local_updated_at
+            .as_deref()
+            .is_none_or(|local| session.updated_at.as_str() > local);
+        if incoming_newer {
+            let safe_ended_at = session.ended_at.as_deref().unwrap_or(&session.updated_at);
+            transaction.execute(
+                "INSERT INTO reading_sessions (
+                   id, book_id, started_at, ended_at, last_heartbeat_at,
+                   active_seconds, final_progress, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 ON CONFLICT(id) DO UPDATE SET
+                   book_id=excluded.book_id,
+                   started_at=excluded.started_at,
+                   ended_at=excluded.ended_at,
+                   last_heartbeat_at=excluded.last_heartbeat_at,
+                   active_seconds=excluded.active_seconds,
+                   final_progress=excluded.final_progress,
+                   updated_at=excluded.updated_at",
+                params![
+                    &session.id,
+                    local_book_id,
+                    &session.started_at,
+                    safe_ended_at,
+                    &session.last_heartbeat_at,
+                    session.active_seconds.max(0),
+                    session.final_progress,
+                    &session.updated_at,
+                ],
+            )?;
+        }
+        items.push(restore_item(
+            "history",
+            &session.id,
+            "Reading session",
+            if local_updated_at.is_none() {
+                RestoreItemStatus::Restored
+            } else if incoming_newer {
+                RestoreItemStatus::Merged
+            } else {
+                RestoreItemStatus::LocalKept
+            },
+            if incoming_newer {
+                "Reading session merged by UUID and update time"
+            } else {
+                "Local reading session was newer or equal"
+            },
+        ));
+    }
+
+    if let Some(incoming) = incoming_preferences {
+        let incoming_newer = incoming.updated_at > local_preferences.1;
+        if incoming_newer || incoming_cleared_at == effective_cleared_at.as_deref() {
+            transaction.execute(
+                "UPDATE reading_history_preferences
+                 SET enabled = CASE WHEN ?1 THEN ?2 ELSE enabled END,
+                     updated_at = CASE WHEN ?1 THEN ?3 ELSE updated_at END,
+                     cleared_at = ?4
+                 WHERE id = 1",
+                params![
+                    incoming_newer,
+                    incoming.enabled,
+                    &incoming.updated_at,
+                    effective_cleared_at.as_deref(),
+                ],
+            )?;
+        }
+        items.push(restore_item(
+            "history",
+            "preferences",
+            "History & Privacy",
+            if incoming_newer {
+                RestoreItemStatus::Merged
+            } else {
+                RestoreItemStatus::LocalKept
+            },
+            if incoming_newer {
+                "History preference merged by update time"
+            } else {
+                "Local history preference was newer or equal"
+            },
+        ));
+    }
+    Ok(())
+}
+
 fn count_conflicts(conn: &Connection, data: &PortableBackupData) -> anyhow::Result<u64> {
     let mut conflicts = 0_u64;
     for bookmark in &data.bookmarks {
@@ -1420,6 +1999,13 @@ fn count_conflicts(conn: &Connection, data: &PortableBackupData) -> anyhow::Resu
         conflicts += conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM app_settings WHERE key = ?1)",
             params![&setting.key],
+            |row| row.get::<_, bool>(0),
+        )? as u64;
+    }
+    for session in &data.reading_sessions {
+        conflicts += conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM reading_sessions WHERE id = ?1)",
+            params![&session.id],
             |row| row.get::<_, bool>(0),
         )? as u64;
     }
@@ -1531,17 +2117,20 @@ fn collect_portable_data(
                        WHEN books.format = 'txt' THEN 'fallback' ELSE 'pending' END)
                 , metadata.user_title, metadata.title_updated_at,
                   metadata.user_author, metadata.author_updated_at,
-                  metadata.user_cover_path IS NOT NULL, metadata.cover_updated_at
+                  metadata.user_cover_path IS NOT NULL, metadata.cover_updated_at,
+                  derivatives.format, derivatives.path, derivatives.file_hash,
+                  derivatives.converter_id, derivatives.converter_version
          FROM books
          LEFT JOIN book_cover_state ON book_cover_state.book_id = books.id
          LEFT JOIN book_user_metadata metadata ON metadata.book_id = books.id
+         LEFT JOIN book_derivatives derivatives ON derivatives.book_id = books.id
          ORDER BY books.id",
     )?;
     let books = statement
         .query_map([], |row| portable_book_from_row(row))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut portable_books = Vec::with_capacity(books.len());
-    for (mut book, library_path, cover_path) in books {
+    for (mut book, library_path, cover_path, reader_path) in books {
         if options.include_books {
             if let Some(payload) = file_payload(
                 &canonical_library,
@@ -1550,6 +2139,21 @@ fn collect_portable_data(
             )? {
                 book.book_archive_path = Some(payload.archive_path.clone());
                 file_payloads.push(payload);
+            }
+            if let (Some(reader_path), Some(reader_hash)) =
+                (reader_path.as_deref(), book.reader_hash.as_deref())
+            {
+                if let Some(payload) = file_payload(
+                    &canonical_library,
+                    reader_path,
+                    format!("books/{}.reader.epub", book.file_hash),
+                )? {
+                    if payload.descriptor.sha256 != reader_hash {
+                        bail!("[reader-hash-mismatch] managed derivative hash changed");
+                    }
+                    book.reader_archive_path = Some(payload.archive_path.clone());
+                    file_payloads.push(payload);
+                }
             }
         }
         if options.include_covers {
@@ -1572,6 +2176,63 @@ fn collect_portable_data(
         portable_books.push(book);
     }
 
+    let mut custom_fonts = Vec::new();
+    if options.include_data {
+        let font_dir = library_dir
+            .parent()
+            .context("[storage-path-invalid] library has no app-data parent")?
+            .join("fonts");
+        let mut statement = conn.prepare(
+            "SELECT id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                    family_alias, enabled, imported_at, updated_at
+             FROM custom_fonts ORDER BY id",
+        )?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    PortableCustomFont {
+                        id: row.get(0)?,
+                        family_name: row.get(1)?,
+                        style_name: row.get(2)?,
+                        file_name: row.get(3)?,
+                        file_hash: row.get(5)?,
+                        file_size: row.get::<_, i64>(6)? as u64,
+                        family_alias: row.get(7)?,
+                        enabled: row.get(8)?,
+                        imported_at: row.get(9)?,
+                        updated_at: row.get(10)?,
+                        archive_path: None,
+                    },
+                    row.get::<_, String>(4)?,
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        if !rows.is_empty() {
+            let canonical_fonts = font_dir
+                .canonicalize()
+                .context("[font-storage-unavailable] failed to resolve managed fonts")?;
+            for row in rows {
+                let (mut font, file_path) = row;
+                let extension = Path::new(&file_path)
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("ttf")
+                    .to_ascii_lowercase();
+                let archive_path = format!("fonts/{}.{}", font.file_hash, extension);
+                let payload = file_payload(&canonical_fonts, &file_path, archive_path)?
+                    .context("[font-payload-missing] managed font file is unavailable")?;
+                if payload.descriptor.sha256 != font.file_hash
+                    || payload.descriptor.size != font.file_size
+                {
+                    bail!("[font-hash-mismatch] managed font changed after import");
+                }
+                font.archive_path = Some(payload.archive_path.clone());
+                file_payloads.push(payload);
+                custom_fonts.push(font);
+            }
+        }
+    }
+
     Ok((
         PortableBackupData {
             books: portable_books,
@@ -1579,6 +2240,9 @@ fn collect_portable_data(
             bookmarks: query_bookmarks(conn)?,
             annotations: query_annotations(conn)?,
             settings: query_settings(conn)?,
+            custom_fonts,
+            reading_sessions: query_reading_sessions(conn)?,
+            reading_history_preferences: query_reading_history_preferences(conn)?,
         },
         file_payloads,
     ))
@@ -1586,7 +2250,7 @@ fn collect_portable_data(
 
 fn portable_book_from_row(
     row: &Row<'_>,
-) -> rusqlite::Result<(PortableBook, String, Option<String>)> {
+) -> rusqlite::Result<(PortableBook, String, Option<String>, Option<String>)> {
     let format: String = row.get(3)?;
     Ok((
         PortableBook {
@@ -1598,6 +2262,11 @@ fn portable_book_from_row(
             cover_status: row.get(10)?,
             cover_archive_path: None,
             book_archive_path: None,
+            reader_format: row.get(17)?,
+            reader_archive_path: None,
+            reader_hash: row.get(19)?,
+            converter_id: row.get(20)?,
+            converter_version: row.get(21)?,
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             last_opened_at: row.get(9)?,
@@ -1610,6 +2279,7 @@ fn portable_book_from_row(
         },
         row.get(4)?,
         row.get(6)?,
+        row.get(18)?,
     ))
 }
 
@@ -1695,6 +2365,49 @@ fn query_settings(conn: &Connection) -> anyhow::Result<Vec<PortableSetting>> {
     Ok(rows)
 }
 
+fn query_reading_sessions(conn: &Connection) -> anyhow::Result<Vec<PortableReadingSession>> {
+    let mut statement = conn.prepare(
+        "SELECT id, book_id, started_at, ended_at, last_heartbeat_at,
+                active_seconds, final_progress, updated_at
+         FROM reading_sessions ORDER BY started_at, id",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(PortableReadingSession {
+                id: row.get(0)?,
+                book_id: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                last_heartbeat_at: row.get(4)?,
+                active_seconds: row.get(5)?,
+                final_progress: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(anyhow::Error::from)?;
+    Ok(rows)
+}
+
+fn query_reading_history_preferences(
+    conn: &Connection,
+) -> anyhow::Result<Option<PortableReadingHistoryPreferences>> {
+    conn.query_row(
+        "SELECT enabled, updated_at, cleared_at
+         FROM reading_history_preferences WHERE id = 1",
+        [],
+        |row| {
+            Ok(PortableReadingHistoryPreferences {
+                enabled: row.get(0)?,
+                updated_at: row.get(1)?,
+                cleared_at: row.get(2)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(anyhow::Error::from)
+}
+
 fn json_column(row: &Row<'_>, index: usize) -> rusqlite::Result<Value> {
     let raw: String = row.get(index)?;
     serde_json::from_str(&raw).map_err(|error| {
@@ -1770,6 +2483,11 @@ fn record_counts(data: &PortableBackupData, files: &[FilePayload]) -> BTreeMap<S
     counts.insert("bookmarks".to_string(), data.bookmarks.len() as u64);
     counts.insert("annotations".to_string(), data.annotations.len() as u64);
     counts.insert("settings".to_string(), data.settings.len() as u64);
+    counts.insert("customFonts".to_string(), data.custom_fonts.len() as u64);
+    counts.insert(
+        "readingSessions".to_string(),
+        data.reading_sessions.len() as u64,
+    );
     counts.insert(
         "covers".to_string(),
         files
@@ -1782,6 +2500,13 @@ fn record_counts(data: &PortableBackupData, files: &[FilePayload]) -> BTreeMap<S
         files
             .iter()
             .filter(|payload| payload.archive_path.starts_with("books/"))
+            .count() as u64,
+    );
+    counts.insert(
+        "fontFiles".to_string(),
+        files
+            .iter()
+            .filter(|payload| payload.archive_path.starts_with("fonts/"))
             .count() as u64,
     );
     counts
@@ -1936,9 +2661,9 @@ fn canceled_result(operation_id: &str) -> BackupResult {
 mod tests {
     use super::*;
     use crate::db::{
-        create_bookmark_at, get_reading_progress_at, import_book_at, init_database_at,
-        list_books_at, save_reader_cache_at, save_reading_progress_at, ImportBookStatus, Locator,
-        TxtLocator,
+        create_bookmark_at, get_reading_progress_at, hash_file, import_book_at,
+        import_converted_book_at, init_database_at, list_books_at, save_reader_cache_at,
+        save_reading_progress_at, ImportBookStatus, Locator, TxtLocator,
     };
     use std::io::Read;
     use tempfile::tempdir;
@@ -2054,7 +2779,7 @@ mod tests {
             restored_manifest.format_identifier,
             BACKUP_FORMAT_IDENTIFIER
         );
-        assert_eq!(restored_manifest.format_version, 1);
+        assert_eq!(restored_manifest.format_version, 2);
         assert!(restored_manifest
             .payloads
             .iter()
@@ -2066,6 +2791,196 @@ mod tests {
             .read_to_string(&mut restored_data)
             .expect("read data");
         assert_eq!(restored_data, data_text);
+    }
+
+    #[test]
+    fn backup_v2_includes_and_restores_app_local_fonts_by_hash() {
+        let directory = tempdir().expect("tempdir");
+        let source_db = directory.path().join("source.sqlite3");
+        let source_library = directory.path().join("source-data").join("library");
+        let source_fonts = source_library.parent().expect("source data").join("fonts");
+        fs::create_dir_all(&source_library).expect("source library");
+        fs::create_dir_all(&source_fonts).expect("source fonts");
+        init_database_at(&source_db).expect("source database");
+        let font_bytes = b"portable app-local font fixture";
+        let font_hash = hex::encode(Sha256::digest(font_bytes));
+        let source_font = source_fonts.join(format!("{font_hash}.ttf"));
+        fs::write(&source_font, font_bytes).expect("font file");
+        let font_id = format!("font-{}", &font_hash[..32]);
+        let source_conn = Connection::open(&source_db).expect("source connection");
+        source_conn
+            .execute(
+                "INSERT INTO custom_fonts (
+                    id, family_name, style_name, file_name, file_path, file_hash, file_size,
+                    family_alias, enabled, imported_at, updated_at
+                 ) VALUES (?1, 'Portable Serif', 'Regular', 'Portable.ttf', ?2, ?3, ?4,
+                           ?5, 1, '2026-07-22T00:00:00Z', '2026-07-22T00:00:00Z')",
+                params![
+                    &font_id,
+                    source_font.display().to_string(),
+                    &font_hash,
+                    font_bytes.len() as i64,
+                    format!("EbookReaderFont_{}", &font_hash[..16]),
+                ],
+            )
+            .expect("font registration");
+        drop(source_conn);
+        let mut theme = crate::db::get_reader_theme_at(&source_db).expect("source theme");
+        theme.font_id = Some(font_id.clone());
+        theme.font_family = format!("\"EbookReaderFont_{}\"", &font_hash[..16]);
+        crate::db::save_reader_theme_at(&source_db, &theme).expect("select font");
+
+        let source_conn = Connection::open(&source_db).expect("source connection");
+        let (data, files) =
+            collect_portable_data(&source_conn, &source_library, BackupOptions::default())
+                .expect("portable font data");
+        assert_eq!(data.custom_fonts.len(), 1);
+        assert_eq!(files.len(), 1);
+        assert!(files[0].archive_path.starts_with("fonts/"));
+        let manifest = BackupManifest {
+            format_identifier: BACKUP_FORMAT_IDENTIFIER.to_string(),
+            format_version: BACKUP_FORMAT_VERSION,
+            app_version: "0.2.0".to_string(),
+            schema_version: 7,
+            exported_at: "2026-07-22T00:00:00Z".to_string(),
+            options: BackupOptions::default(),
+            record_counts: record_counts(&data, &files),
+            payloads: files.iter().map(|file| file.descriptor.clone()).collect(),
+        };
+        validate_portable_data(&data, &manifest).expect("validate font payload");
+
+        let target_db = directory.path().join("target.sqlite3");
+        let target_library = directory.path().join("target-data").join("library");
+        let target_font_dir = target_library.parent().expect("target data").join("fonts");
+        fs::create_dir_all(&target_library).expect("target library");
+        fs::create_dir_all(&target_font_dir).expect("target fonts");
+        init_database_at(&target_db).expect("target database");
+        let target_font = target_font_dir.join(format!("{font_hash}.ttf"));
+        fs::copy(&source_font, &target_font).expect("restore font payload");
+        let moved = HashMap::from([(
+            data.custom_fonts[0]
+                .archive_path
+                .clone()
+                .expect("archive path"),
+            target_font.display().to_string(),
+        )]);
+        let mut target_conn = Connection::open(&target_db).expect("target connection");
+        let transaction = target_conn.transaction().expect("transaction");
+        let items =
+            merge_restore_data(&transaction, &data, &moved, &target_library).expect("restore font");
+        transaction.commit().expect("commit");
+
+        assert!(items
+            .iter()
+            .any(|item| { item.category == "font" && item.status == RestoreItemStatus::Restored }));
+        let restored: (String, String) = Connection::open(&target_db)
+            .expect("restored connection")
+            .query_row("SELECT id, file_hash FROM custom_fonts", [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .expect("restored font row");
+        assert_eq!(restored, (font_id.clone(), font_hash));
+        assert_eq!(
+            crate::db::get_reader_theme_at(&target_db)
+                .expect("restored theme")
+                .font_id,
+            Some(font_id)
+        );
+    }
+
+    #[test]
+    fn backup_v2_history_merge_keeps_newer_clear_tombstone() {
+        let directory = tempdir().expect("tempdir");
+        let database = directory.path().join("history.sqlite3");
+        let library = directory.path().join("library");
+        fs::create_dir_all(&library).expect("library");
+        init_database_at(&database).expect("database");
+        let mut conn = Connection::open(&database).expect("connection");
+        conn.execute(
+            "UPDATE reading_history_preferences
+             SET cleared_at = '2026-07-22T10:00:00Z',
+                 updated_at = '2026-07-22T10:00:00Z'
+             WHERE id = 1",
+            [],
+        )
+        .expect("local clear");
+
+        let mut data = empty_portable_data();
+        data.books.push(PortableBook {
+            id: "backup-book".to_string(),
+            title: "History backup".to_string(),
+            author: None,
+            format: "txt".to_string(),
+            file_hash: "a".repeat(64),
+            cover_status: "fallback".to_string(),
+            cover_archive_path: None,
+            book_archive_path: None,
+            reader_format: Some("txt".to_string()),
+            reader_hash: Some("a".repeat(64)),
+            reader_archive_path: None,
+            converter_id: None,
+            converter_version: None,
+            created_at: "2026-07-20T00:00:00Z".to_string(),
+            updated_at: "2026-07-20T00:00:00Z".to_string(),
+            last_opened_at: None,
+            user_title: None,
+            title_override_updated_at: None,
+            user_author: None,
+            author_override_updated_at: None,
+            user_cover: false,
+            cover_override_updated_at: None,
+        });
+        data.reading_sessions.push(PortableReadingSession {
+            id: "old-session".to_string(),
+            book_id: "backup-book".to_string(),
+            started_at: "2026-07-20T00:00:00Z".to_string(),
+            ended_at: Some("2026-07-20T00:30:00Z".to_string()),
+            last_heartbeat_at: "2026-07-20T00:30:00Z".to_string(),
+            active_seconds: 1_800,
+            final_progress: Some(0.25),
+            updated_at: "2026-07-20T00:30:00Z".to_string(),
+        });
+        data.reading_sessions.push(PortableReadingSession {
+            id: "new-session".to_string(),
+            book_id: "backup-book".to_string(),
+            started_at: "2026-07-22T11:00:00Z".to_string(),
+            ended_at: Some("2026-07-22T11:30:00Z".to_string()),
+            last_heartbeat_at: "2026-07-22T11:30:00Z".to_string(),
+            active_seconds: 1_800,
+            final_progress: Some(0.5),
+            updated_at: "2026-07-22T11:30:00Z".to_string(),
+        });
+        data.reading_history_preferences = Some(PortableReadingHistoryPreferences {
+            enabled: true,
+            updated_at: "2026-07-21T00:00:00Z".to_string(),
+            cleared_at: None,
+        });
+
+        let transaction = conn.transaction().expect("transaction");
+        let items = merge_restore_data(&transaction, &data, &HashMap::new(), &library)
+            .expect("merge history");
+        transaction.commit().expect("commit");
+        let session_ids = Connection::open(&database)
+            .expect("restored connection")
+            .prepare("SELECT id FROM reading_sessions ORDER BY id")
+            .expect("statement")
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("rows")
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .expect("session ids");
+        assert_eq!(session_ids, vec!["new-session"]);
+        assert!(items.iter().any(|item| {
+            item.id == "old-session" && item.status == RestoreItemStatus::LocalKept
+        }));
+        let cleared_at: Option<String> = Connection::open(&database)
+            .expect("preferences connection")
+            .query_row(
+                "SELECT cleared_at FROM reading_history_preferences WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("cleared timestamp");
+        assert_eq!(cleared_at.as_deref(), Some("2026-07-22T10:00:00Z"));
     }
 
     #[test]
@@ -2085,6 +3000,9 @@ mod tests {
             bookmarks: Vec::new(),
             annotations: Vec::new(),
             settings: Vec::new(),
+            custom_fonts: Vec::new(),
+            reading_sessions: Vec::new(),
+            reading_history_preferences: None,
         }
     }
 
@@ -2092,7 +3010,7 @@ mod tests {
         let data_bytes = serde_json::to_vec(&empty_portable_data()).expect("data json");
         let manifest = BackupManifest {
             format_identifier: BACKUP_FORMAT_IDENTIFIER.to_string(),
-            format_version: BACKUP_FORMAT_VERSION,
+            format_version: 1,
             app_version: "0.1.0".to_string(),
             schema_version: 4,
             exported_at: "2026-07-16T00:00:00Z".to_string(),
@@ -2300,5 +3218,60 @@ mod tests {
                 .progress,
             Some(0.8)
         );
+    }
+
+    #[test]
+    fn restore_keeps_a_valid_local_reader_derivative_for_the_same_source() {
+        let directory = tempdir().expect("tempdir");
+        let database_path = directory.path().join("reader.sqlite3");
+        let library_dir = directory.path().join("library");
+        let source_path = directory.path().join("local.mobi");
+        let reader_path = directory.path().join("local.epub");
+        fs::write(&source_path, b"local mobi source").expect("source");
+        fs::write(&reader_path, b"stable local reader identity").expect("reader");
+        let source_hash = hash_file(&source_path).expect("source hash");
+        let reader_hash = hash_file(&reader_path).expect("reader hash");
+        let imported = import_converted_book_at(
+            &database_path,
+            &library_dir,
+            &source_path,
+            &source_hash,
+            &reader_path,
+            &reader_hash,
+            "libmobi",
+            "0.12",
+        )
+        .expect("converted import");
+
+        let conn = Connection::open(&database_path).expect("database");
+        let (mut data, _) = collect_portable_data(
+            &conn,
+            &library_dir,
+            BackupOptions {
+                include_books: false,
+                ..BackupOptions::default()
+            },
+        )
+        .expect("portable data");
+        drop(conn);
+        data.books[0].reader_hash = Some("different-converter-output".to_string());
+        data.books[0].converter_version = Some("future-version".to_string());
+
+        let mut conn = Connection::open(&database_path).expect("database");
+        let transaction = conn.transaction().expect("transaction");
+        merge_restore_data(&transaction, &data, &HashMap::new(), &library_dir)
+            .expect("restore merge");
+        transaction.commit().expect("commit");
+
+        let conn = Connection::open(&database_path).expect("database");
+        let (stored_hash, converter_version): (String, String) = conn
+            .query_row(
+                "SELECT file_hash, converter_version FROM book_derivatives WHERE book_id = ?1",
+                params![imported.book.id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("derivative row");
+        assert_eq!(stored_hash, reader_hash);
+        assert_eq!(converter_version, "0.12");
     }
 }

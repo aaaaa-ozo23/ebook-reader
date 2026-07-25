@@ -19,6 +19,7 @@ import {
   type EpubCfiComparator,
   type PublicationPageBoundary,
 } from "./EpubPageList";
+import { findDomSearchTextMatches } from "../reader/searchText";
 
 export type EpubSpreadMode = "single" | "double";
 
@@ -56,6 +57,7 @@ interface EpubReaderAdapterOptions {
   cachedPublicationPageList?: string;
   sourceUrl: string;
   container: HTMLElement;
+  customFontSources?: Readonly<Record<string, string>>;
   initialLocator?: EpubLocator;
   theme: ReaderTheme;
   onRelocated?: (position: EpubPosition) => void;
@@ -95,6 +97,8 @@ interface EpubLocationLike {
 }
 
 interface EpubSearchSection {
+  cfiFromRange?: (range: Range) => string;
+  document?: Document;
   href?: string;
   load?: (loader?: unknown) => Promise<unknown> | unknown;
   find?: (query: string) => Array<{ cfi?: string; excerpt?: string }>;
@@ -111,12 +115,14 @@ interface EpubSearchableBook {
 
 const EPUB_THEME_NAME = "reader-theme";
 const EPUB_LOCATION_CHARS = 1500;
-const EPUB_MIN_SPREAD_WIDTH = 860;
+const EPUB_MIN_SPREAD_WIDTH = 820;
 const SELECTION_CONTEXT_LENGTH = 80;
 
 type RenderedRendition = Rendition & {
   manager?: {
     resize?: (width: number, height: number) => void;
+    settings?: { gap?: number };
+    updateLayout?: () => void;
   };
 };
 
@@ -137,6 +143,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private readonly cachedPublicationPageList?: string;
   private readonly sourceUrl: string;
   private readonly container: HTMLElement;
+  private customFontSources: Readonly<Record<string, string>>;
   private readonly initialLocator?: EpubLocator;
   private readonly onRelocated?: (position: EpubPosition) => void;
   private readonly onKeyDown?: (event: globalThis.KeyboardEvent) => void;
@@ -161,6 +168,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private reflowPromise: Promise<void> | null = null;
   private selectionCleanupCallbacks: Array<() => void> = [];
   private selectionDocuments = new WeakSet<Document>();
+  private contentDocuments = new Set<Document>();
   private spreadMode: EpubSpreadMode = "single";
   private spreadState: EpubSpreadState = {
     requested: "single",
@@ -176,6 +184,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.cachedPublicationPageList = options.cachedPublicationPageList;
     this.sourceUrl = options.sourceUrl;
     this.container = options.container;
+    this.customFontSources = options.customFontSources ?? {};
     this.initialLocator = options.initialLocator;
     this.theme = options.theme;
     this.onRelocated = options.onRelocated;
@@ -199,6 +208,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     await this.close();
     this.locationsReady = false;
     this.lastPosition = null;
+    this.contentDocuments.clear();
     this.reflowPromise = null;
 
     const { default: createEpub, EpubCFI } = await import("epubjs");
@@ -389,8 +399,25 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.onLayoutInvalidated?.("theme");
     this.rendition.themes.register(EPUB_THEME_NAME, buildEpubThemeRules(theme));
     this.rendition.themes.select(EPUB_THEME_NAME);
+    // epub.js reuses the named stylesheet while a rendition is mounted. Explicit
+    // body overrides make page-margin changes observable immediately and ensure
+    // newly mounted spine views inherit the same inset after reflow.
+    this.rendition.themes.override("padding-left", `${theme.pageMargin}px`, true);
+    this.rendition.themes.override("padding-right", `${theme.pageMargin}px`, true);
     this.rendition.themes.font(theme.fontFamily);
     this.rendition.themes.fontSize(`${theme.fontSize}px`);
+    for (const contentDocument of this.contentDocuments) {
+      this.injectCustomFont(contentDocument);
+    }
+    const manager = (this.rendition as RenderedRendition).manager;
+    if (manager?.settings !== undefined) {
+      // epub.js owns paginated body padding and rewrites it to half of its
+      // column gap during every layout pass. Keep the layout gap synchronized
+      // with the product margin token so all current and future spine views use
+      // the requested inset instead of snapping back to the library default.
+      manager.settings.gap = theme.pageMargin * 2;
+      manager.updateLayout?.();
+    }
     await this.restoreCurrentPositionAfterReflow();
   }
 
@@ -412,6 +439,35 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
       try {
         await Promise.resolve(section.load?.((book as EpubSearchableBook).load));
+        const href = section.href ?? "";
+        const document = section.document;
+        const cfiFromRange = section.cfiFromRange;
+
+        if (document !== undefined && cfiFromRange !== undefined) {
+          const sectionHits = findDomSearchTextMatches(
+            document,
+            normalizedQuery,
+            100 - hits.length,
+          );
+
+          for (const [index, sectionHit] of sectionHits.entries()) {
+            const cfi = cfiFromRange.call(section, sectionHit.range);
+            hits.push({
+              id: `epub-search-${href}-${index}`,
+              locator: {
+                kind: "epub",
+                href,
+                cfi,
+                selectedText: sectionHit.selectedText,
+              },
+              excerpt: sectionHit.excerpt.text,
+              excerptMatchStart: sectionHit.excerpt.matchStart,
+              excerptMatchEnd: sectionHit.excerpt.matchEnd,
+            });
+          }
+          continue;
+        }
+
         const sectionHits = section.find?.(normalizedQuery) ?? [];
 
         for (const [index, sectionHit] of sectionHits.entries()) {
@@ -419,7 +475,6 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
             break;
           }
 
-          const href = section.href ?? "";
           const excerpt = sectionHit.excerpt?.trim() ?? normalizedQuery;
 
           hits.push({
@@ -507,8 +562,31 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     rendition.on("rendered", (_section: unknown, view: EpubRenderedView) => {
       const contentDocument = view.document ?? view.contents?.document;
       this.labelRenderedFrame(view, contentDocument);
+      if (contentDocument !== undefined) {
+        this.contentDocuments.add(contentDocument);
+        this.injectCustomFont(contentDocument);
+      }
       this.observeSelectionDocument(contentDocument);
     });
+  }
+
+  setCustomFontSources(sources: Readonly<Record<string, string>>): void {
+    this.customFontSources = sources;
+    for (const contentDocument of this.contentDocuments) {
+      this.injectCustomFont(contentDocument);
+    }
+  }
+
+  private injectCustomFont(document: Document): void {
+    const styleId = "ebook-reader-custom-font";
+    document.getElementById(styleId)?.remove();
+    const fontId = this.theme.fontId;
+    const source = fontId === undefined ? undefined : this.customFontSources[fontId];
+    if (source === undefined) return;
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `@font-face { font-family: ${this.theme.fontFamily}; src: url("${source.replaceAll('"', "%22")}"); font-style: normal; font-weight: 100 900; font-display: swap; }`;
+    document.head.append(style);
   }
 
   private labelRenderedFrame(

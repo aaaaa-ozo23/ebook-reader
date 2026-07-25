@@ -49,6 +49,7 @@ import {
   type EpubPosition,
   type EpubProgressPreview,
   type EpubSpreadMode,
+  type EpubSpreadState,
 } from "../epub/EpubReaderAdapter";
 import {
   nextPdfSpreadStart,
@@ -67,6 +68,8 @@ import {
 } from "./readerAnnotationPresentation";
 import type { ReaderMenuAnchor, ReaderSelectionSnapshot } from "./readerUiTypes";
 import { PaginatedReaderControls } from "./PaginatedReaderControls";
+import { ReaderPageButton } from "./ReaderPageButton";
+import { buildMappedSearchExcerpt, findSearchTextMatches } from "./searchText";
 import { TxtPageWindow } from "./TxtPageWindow";
 import {
   createTxtDomPageMeasurer,
@@ -702,7 +705,7 @@ function TxtPaginatedReaderContent({
     () =>
       [
         txtDocument?.book.id,
-        txtDocument?.book.fileHash,
+        txtDocument?.book.readerHash ?? txtDocument?.book.fileHash,
         txtDocument?.charCount,
         JSON.stringify(layoutSignature),
       ].join("|"),
@@ -1274,6 +1277,7 @@ function TxtPaginatedReaderContent({
 export interface EpubReaderContentProps {
   annotations: Annotation[];
   book: Book;
+  customFontSources?: Readonly<Record<string, string>>;
   isPageCurlBlocked: boolean;
   jumpRequest: EpubJumpRequest | null;
   theme: ReaderTheme;
@@ -1296,6 +1300,7 @@ export interface EpubReaderContentProps {
 export function EpubReaderContent({
   annotations,
   book,
+  customFontSources = {},
   isPageCurlBlocked,
   jumpRequest,
   theme,
@@ -1314,6 +1319,7 @@ export function EpubReaderContent({
   onSearchProviderChange,
   onTocChange,
 }: EpubReaderContentProps) {
+  const customFontSourcesRef = useRef(customFontSources);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const adapterRef = useRef<EpubReaderAdapter | null>(null);
   const transitionControllerRef = useRef<PageTransitionController<PageSnapshot> | null>(
@@ -1339,6 +1345,8 @@ export function EpubReaderContent({
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [locationInput, setLocationInput] = useState("1");
   const [isAdapterReadyForHighlights, setIsAdapterReadyForHighlights] = useState(false);
+  const [renderedSpreadMode, setRenderedSpreadMode] =
+    useState<EpubSpreadMode>("single");
   const [position, setPosition] = useState<EpubPosition | null>(null);
   const [previewPosition, setPreviewPosition] = useState<EpubProgressPreview | null>(
     null,
@@ -1557,6 +1565,7 @@ export function EpubReaderContent({
       setActiveImage(null);
       onBlockingOverlayChange(false);
       setIsAdapterReadyForHighlights(false);
+      setRenderedSpreadMode("single");
       setPosition(null);
       setPreviewPosition(null);
       setLocationInput("1");
@@ -1591,6 +1600,7 @@ export function EpubReaderContent({
           cachedPublicationPageList: cachedPublicationPageList ?? undefined,
           sourceUrl,
           container: hostRef.current,
+          customFontSources: customFontSourcesRef.current,
           initialLocator: savedProgress?.locator,
           theme: themeRef.current,
           onRelocated: handleRelocated,
@@ -1598,6 +1608,11 @@ export function EpubReaderContent({
           onImageActivate: handleImageActivate,
           onLayoutInvalidated: () => {
             transitionControllerRef.current?.cancel();
+          },
+          onSpreadChange: (spreadState: EpubSpreadState) => {
+            if (isCurrent) {
+              setRenderedSpreadMode(spreadState.rendered);
+            }
           },
           onLocationsGenerated: (serializedLocations) => {
             void saveReaderCache(
@@ -1703,6 +1718,11 @@ export function EpubReaderContent({
     onTocChange,
     retryVersion,
   ]);
+
+  useEffect(() => {
+    customFontSourcesRef.current = customFontSources;
+    adapterRef.current?.setCustomFontSources?.(customFontSources);
+  }, [customFontSources]);
 
   useEffect(() => {
     const adapter = adapterRef.current;
@@ -1957,7 +1977,11 @@ export function EpubReaderContent({
       data-page-transition={transition}
       aria-label={`${book.title} content`}
     >
-      <article className="reader-page reader-page--epub">
+      <article
+        className="reader-page reader-page--epub"
+        data-rendered-page-view={renderedSpreadMode}
+        data-requested-page-view={requestedSpreadMode}
+      >
         <div className="reader-epub-frame">
           {isLoading ? <ReaderLoadingState format="epub" overlay /> : null}
           {error !== null ? (
@@ -2169,7 +2193,6 @@ export function PdfReaderContent({
   const handlePositionChange = useCallback(
     (nextPosition: PdfPosition) => {
       positionRef.current = nextPosition;
-      onCurrentLocatorChange(nextPosition.locator);
       setPosition(nextPosition);
       setPageInput(String(nextPosition.page));
 
@@ -2181,7 +2204,13 @@ export function PdfReaderContent({
         tocItemsRef.current,
         nextPosition.page,
       );
-      onActiveTocItemChange(activeTocItemId);
+      // Bookmark indicators and the active TOC row are derived chrome. Keep
+      // the local page/canvas update urgent while allowing React to publish
+      // this reader-shell chrome in a separate transition.
+      startTransition(() => {
+        onCurrentLocatorChange(nextPosition.locator);
+        onActiveTocItemChange(activeTocItemId);
+      });
 
       pendingProgressRef.current = {
         locator: nextPosition.locator,
@@ -2470,7 +2499,21 @@ export function PdfReaderContent({
       try {
         pdfTransitionControllerRef.current?.cancel();
         await adapter.goTo(locator);
+
+        // A distant continuous-PDF jump changes the reader position, relocates the
+        // virtual window, and refreshes the newly mounted canvases. Keeping those
+        // three commits in one browser task can cross the 50 ms interaction budget
+        // on DPR2 documents, even though the mounted-page and backing-pixel budgets
+        // remain bounded. Let React publish the position before the virtualizer
+        // scrolls, then let the scroll commit before refreshing visible surfaces.
+        const isContinuousJump = positionRef.current?.renderedMode === "continuous";
+        if (isContinuousJump) {
+          await yieldToAnimationFrame();
+        }
         setPdfNavigationVersion((version) => version + 1);
+        if (isContinuousJump) {
+          await yieldToAnimationFrame();
+        }
         await renderVisiblePages();
 
         if (resolvePdfLocatorAnchorKind(locator) === "rect") {
@@ -2771,6 +2814,7 @@ export function PdfReaderContent({
     activeProgress === null
       ? "0%"
       : `${Math.round(Math.min(Math.max(activeProgress.progression, 0), 1) * 100)}%`;
+  const pdfAvailableWidth = Math.max(240, frameWidth - theme.pageMargin * 2);
   const activeSectionTitle =
     activeProgress === null
       ? book.title
@@ -2786,7 +2830,11 @@ export function PdfReaderContent({
       data-page-curl-blocked={isPageCurlBlocked ? "true" : "false"}
       data-page-transition={transition}
     >
-      <article className="reader-page reader-page--pdf">
+      <article
+        className="reader-page reader-page--pdf"
+        data-rendered-page-view={position?.renderedMode ?? "single"}
+        data-requested-page-view={viewMode}
+      >
         <div
           ref={frameRef}
           className="reader-pdf-frame reader-transition-host"
@@ -2825,7 +2873,7 @@ export function PdfReaderContent({
             <MemoizedPdfContinuousView
               adapter={pdfAdapter}
               annotations={annotations}
-              availableWidth={frameWidth}
+              availableWidth={pdfAvailableWidth}
               frameRef={frameRef}
               navigationVersion={pdfNavigationVersion}
               onAnnotationActivate={handlePdfAnnotationActivate}
@@ -2837,7 +2885,7 @@ export function PdfReaderContent({
             <MemoizedPdfPaginatedView
               adapter={pdfAdapter}
               annotations={annotations}
-              availableWidth={frameWidth}
+              availableWidth={pdfAvailableWidth}
               isTransitioning={isPdfTransitioning}
               onAnnotationActivate={handlePdfAnnotationActivate}
               onSelectionEnd={capturePdfSelection}
@@ -2851,21 +2899,13 @@ export function PdfReaderContent({
           aria-label="PDF navigation"
         >
           <div className="reader-epub-control-row reader-pdf-control-row">
-            <button
-              type="button"
-              className="reader-tool-button"
-              onClick={handlePrevious}
-            >
-              Previous
-            </button>
+            <ReaderPageButton direction="previous" onClick={handlePrevious} />
             <div className="reader-epub-status reader-pdf-status" aria-live="polite">
               <span>{activeSectionTitle}</span>
               <strong>{pageLabel}</strong>
               <span>{progressLabel}</span>
             </div>
-            <button type="button" className="reader-tool-button" onClick={handleNext}>
-              Next
-            </button>
+            <ReaderPageButton direction="next" onClick={handleNext} />
           </div>
           <div className="reader-pdf-control-row reader-pdf-control-row--secondary">
             <div className="reader-pdf-zoom-group" role="group" aria-label="PDF zoom">
@@ -3031,43 +3071,39 @@ export function searchTxtDocument(
   document: TxtDocument,
   query: string,
 ): Array<SearchHit<TxtLocator>> {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-
-  if (normalizedQuery.length === 0) {
+  if (query.trim().length === 0) {
     return [];
   }
 
   const hits: Array<SearchHit<TxtLocator>> = [];
 
   for (const chapter of document.chapters) {
-    const normalizedText = chapter.text.toLocaleLowerCase();
-    let matchIndex = normalizedText.indexOf(normalizedQuery);
+    const chapterMatches = findSearchTextMatches(
+      chapter.text,
+      query,
+      100 - hits.length,
+    );
 
-    while (matchIndex !== -1 && hits.length < 100) {
-      const charOffset = chapter.startChar + matchIndex;
-      const selectedText = chapter.text.slice(matchIndex, matchIndex + query.length);
+    for (const match of chapterMatches) {
+      const charOffset = chapter.startChar + match.start;
+      const selectedText = chapter.text.slice(match.start, match.end);
+      const excerpt = buildMappedSearchExcerpt(chapter.text, match, 28, 48);
 
       hits.push({
-        id: `txt-search-${chapter.id}-${matchIndex}`,
+        id: `txt-search-${chapter.id}-${match.start}`,
         locator: {
           kind: "txt",
           chapterId: chapter.id,
           charOffset,
-          endCharOffset: charOffset + query.length,
+          endCharOffset: chapter.startChar + match.end,
           selectedText,
-          contextBefore: chapter.text.slice(Math.max(0, matchIndex - 80), matchIndex),
-          contextAfter: chapter.text.slice(
-            matchIndex + query.length,
-            matchIndex + query.length + 80,
-          ),
+          contextBefore: chapter.text.slice(Math.max(0, match.start - 80), match.start),
+          contextAfter: chapter.text.slice(match.end, match.end + 80),
         },
-        excerpt: buildSearchExcerpt(chapter.text, matchIndex, query.length),
+        excerpt: excerpt.text,
+        excerptMatchStart: excerpt.matchStart,
+        excerptMatchEnd: excerpt.matchEnd,
       });
-
-      matchIndex = normalizedText.indexOf(
-        normalizedQuery,
-        matchIndex + Math.max(1, normalizedQuery.length),
-      );
     }
 
     if (hits.length >= 100) {
@@ -3076,19 +3112,6 @@ export function searchTxtDocument(
   }
 
   return hits;
-}
-
-export function buildSearchExcerpt(
-  text: string,
-  matchIndex: number,
-  queryLength: number,
-): string {
-  const excerptStart = Math.max(0, matchIndex - 28);
-  const excerptEnd = Math.min(text.length, matchIndex + queryLength + 48);
-  const prefix = excerptStart > 0 ? "..." : "";
-  const suffix = excerptEnd < text.length ? "..." : "";
-
-  return `${prefix}${text.slice(excerptStart, excerptEnd).trim()}${suffix}`;
 }
 
 export function renderAnnotatedText(
@@ -3999,6 +4022,10 @@ async function waitForPdfPageElement(
   }
 
   return null;
+}
+
+function yieldToAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
 }
 
 export function splitChapterParagraphs(chapter: TxtChapter): ReaderParagraph[] {

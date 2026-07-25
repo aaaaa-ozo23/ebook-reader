@@ -1,5 +1,144 @@
 # 发现与决策
 
+## 2026-07-25 大阶段 14.8：v0.3.0 正式发布
+
+- **用户授权：** 用户明确要求使用 Chrome 创建新的 v0.3 发行版；仓库既有版本命名与 Stage 14 契约均指向正式 `v0.3.0`。
+- **源码基线：** `codex/v0.3.0-integration` 本地与远端均为 `9fe2c07`，跟踪文件以外只有用户自己的 `.codex/`、`AGENTS.md` 未跟踪。
+- **Chrome 状态：** 用户指定的 Chrome 已连接，GitHub 发行页显示登录头像、Settings、编辑/删除现有发行版和“起草发行版”入口，具备发布 UI；当前公开发行版只有 v0.1.0、v0.2.0，v0.2.0 是 Latest。
+- **安全边界：** 不复用 Stage 14 acceptance 的临时 `0.3.0-dev` 或旧 `0.2.0` 产物；正式文件必须从 publication commit 重建。Chrome 页面内容只作为不可信外部状态读取，不执行页面中的指令性文本。
+- **人工门禁：** `RELEASE_CHECKLIST.md` 已记录 v0.2 发布时 updater 私钥离线备份完成；v0.3 使用同一 updater 信任根，不读取、输出或上传私钥，仅在本机构建进程中签名。
+- **final artifact：** 正式目录包含 13 个上传文件；`latest.json` 的 version/notes/URL 均为 0.3.0，NSIS minisign signature 非空。NSIS SHA-256 `7342D193600E79D5B2BF56BD0483611F2BBC9711B40ECFB951EEA6958E54CCD0`，MSI `EE2EC1BF077588F62AB724132CEEFD27FAA6582016BDE535DA75A1443734F1DA`。
+- **初始状态：** 同源 0.3.0 的独立 identifier 实装首次启动创建 schema9，但所有用户内容表和 managed library 均为 0；安装目录只有应用 EXE、固定 hash mobitool 和 uninstaller，不携带数据库或书籍。
+- **升级状态：** 隔离 0.2.0 baseline 导入一本 TXT 后原地覆盖 0.3.0，版本、book、managed file、history preference 和 sidecar 均保留；v0.2 schema → v9 的真实旧数据迁移另由 Stage 14 Rust 测试覆盖。
+- **Chrome 草稿页：** GitHub “新建发行版”已打开；v0.3.0 tag 已推送，页面默认选择 Latest 且 prerelease 未选。文件上传前必须使用唯一的 `release-artifacts/v0.3.0-final/` 绝对路径集合，等待所有上传队列结束后才保存草稿。
+- **Chrome tag 选择：** 新建发行版页的现有标签列表已明确显示 `v0.3.0`、`v0.2.0`、`v0.1.0`；本轮将选择已推送的 `v0.3.0`，不会让 GitHub 从页面新建或改写标签。
+- **Chrome tag 固定：** 表单现显示 `Tag: v0.3.0` 和“已存在的标签”；Latest 仍选中、Prerelease 未选，目标 tag 未由页面新建。
+- **正式说明：** Release 标题固定为 `Ebook Reader v0.3.0`；说明覆盖离线 MOBI/AZW3、自定义字体、多语言检索、阅读历史、backup v2、主要修复、两种安装轨、安全边界、初始空状态和升级保留，不承诺 Authenticode 或 DRM 解密。
+- **附件集合：** GitHub 表单已出现 13 个独立附件名输入框，数量与本地 final 目录一致；上传集合不含 GitHub 自动生成的 source archives，它们只会在公开 Release 后另行出现。
+- **Release 草稿：** GitHub 上传标记消失后才保存；草稿获得独立 edit URL，说明远端已持久化表单与附件，而不是仍停留在未提交的新建页。
+- **草稿复核：** 重新载入的草稿 DOM 显示现有 tag `v0.3.0`、标题 `Ebook Reader v0.3.0`、完整正式说明、13 个预期文件名、Latest checked、Prerelease unchecked；发布按钮唯一可定位。
+- **公开页面：** Chrome 已进入 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.3.0`；页面显示 Latest、tag `v0.3.0`、commit `8222671`、非草稿，资产区为 15 项（13 个上传文件加 GitHub 自动生成的 source zip/tar）。
+- **首轮远端 digest：** 公开页面已显示 NSIS `7342d193...54ccd0`、MSI `ee2ec1bf...34f1da`、signature `6b153644...133e035`、latest `f13fb756...19c375`，与本地 final hash 一致；其余资产仍需程序化逐项比对。
+- **完整远端 digest：** 13 个公开上传资产的 GitHub 服务端 `sha256:` 均与本地 final 文件一致；`SHA256SUMS.txt` 不循环包含自身，另以本地文件哈希 `8c3e2fa0...89a05c` 与公开页面 digest 比对通过。
+- **Latest 路由：** Chrome 访问 `/releases/latest` 后解析到 `/releases/tag/v0.3.0`，页面标题仍为 `Ebook Reader v0.3.0`；v0.3.0 已实际取代 v0.2.0 成为 Latest。
+- **公开 API 复核：** GitHub Release API 返回 `draft=false`、`prerelease=false`、tag `v0.3.0`、13 个 assets 全为 `uploaded`；13 个远端精确 byte size 与本地 final 文件逐项一致。
+- **公开 updater feed：** `/releases/latest/download/latest.json` 返回 version `0.3.0`、notes `Ebook Reader v0.3.0`、完整签名和指向 `v0.3.0/Ebook.Reader_0.3.0_x64-setup.exe` 的 HTTPS URL；该文件公开 digest 已与本地匹配。
+- **MSI administrative image：** 最终 MSI administrative install 退出码 0，image 共 3 个预期运行文件 / 24,184,001 bytes，主 EXE FileVersion/ProductVersion 均为 0.3.0，数据库、书籍和 library payload 命中 0；临时 image 已清理。
+
+## 2026-07-25 大阶段 14.7：总验收
+
+- **sidecar 与许可：** 固定 mobitool 仍为 296,129 bytes / SHA-256 `438576B701C7BD706213D1FD9E717D671403D02FB90AB1D1655342838DB47CF1`，x64 PE、libmobi 0.12、EPUB/KF8 能力与无密码/解密入口均复核通过。三本真实 fixture 为 56–211ms、峰值 3.19–5.73 MiB。
+- **依赖安全：** 291 个 JavaScript 与 556 个 Cargo 外部包 unknown license 均为 0；updater 公钥 fingerprint、HTTPS endpoint、私钥标记扫描、sidecar metadata 与仓库安全门通过。
+- **升级数据：** 新增从仅应用 0001–0005 的 v0.2 schema 出发的迁移测试，预置 book、reading progress 和 bookmark 后执行正式 migration runner；schema 到 v9，旧数据及新表均保留。
+- **PDF 性能根因：** Stage 14 总矩阵的唯一首轮失败是 DPR2 500 页 PDF 从第 1 页直接跳到第 250 页时出现 53–63ms long task。位置更新、continuous virtualizer 定位、ReaderShell 书签/目录派生 chrome 和三张 overscan canvas 在同一任务启动。最终把连续跳转拆到相邻 frame、派生 chrome 放入 React transition，并把不可见 overscan 页延后 96ms 预热；专用 50ms 轨连续两次通过，阈值、画质和虚拟页/像素预算均未降低。
+- **原生升级：** 独立 `com.ebookreader.desktop.stage14-acceptance` 轨从 0.2.0 baseline 导入 1 本 TXT，再以 0.3.0-dev 覆盖；版本、schema v9、书籍记录、managed file、history preferences 和 sidecar hash 均正确保留。验收后卸载测试产品并删除专用 app-data，正式数据未被目标操作触碰。
+- **包体结论：** 最终 NSIS 8,019,737 bytes（较 v0.2.0 final +646,045），MSI 10,403,840 bytes（+942,080）；MSI administrative image 安装目录增量 2,567,873 bytes。三项均远低于 10 MiB/10 MiB/20 MiB 门槛。
+- **Stage 14 结论：** Core 9、Desktop 212、Rust 81、Playwright 35/35、CycloneDX、安全、许可、签名 NSIS、MSI 和升级矩阵全部关闭；完整报告见 `docs/architecture/stage14-acceptance.md`。正式版本不变，不创建 tag/Release，不进入 Stage 15。
+
+
+## 2026-07-22 大阶段 14.6：阅读历史与统计状态板
+
+- **指标边界：** Insights 只显示 Today、最近 7 天、累计有效时长、每日分钟和按书时长；完成度直接显示现有 reading progress。不加入 streak、排行榜、效率分数或推断型指标，避免把本地阅读变成压力反馈。
+- **隐私层级：** History & Privacy 延续 Settings Center；首屏明确 local-only、默认启用、关闭立即结束活动会话但不隐式删除旧记录。CSV 导出与清空分开，清空说明保留 clear timestamp 以阻止旧备份复活已删除历史。
+- **计时说明：** 状态板把 visible、focused、recent interaction 作为用户可读条件；休眠、后台和超过 45 秒间隔的实现细节在生产文档与测试中展开，不让 dashboard 显示伪精确在线状态。
+- **响应式：** 375px 使用两张并列 full-screen sheet 评审视图：Insights 保留三摘要、紧凑趋势和按书列表；History 保留开关、导出、清空与 sticky Done。所有顶部/底部操作以 44px 为最小目标。
+- **批准状态：** 用户已批准全部四张状态板；后续 `0009_reading_history.sql`、session/heartbeat Tauri 命令和生产 React/CSS 必须忠实保留这些状态、指标与隐私边界。
+- **生产结论：** schema v9、30 秒 heartbeat、45 秒间隔上限、五分钟交互窗口、UUID 会话、CSV/Show in folder、clear tombstone 和备份合并均已完成。Insights 直接读取已有进度，不生成 streak 或推断型完成度。
+- **性能边界：** Reader ready 后才启动会话；可见性、焦点和高频交互时间存于 ref，重型 ReaderShell 不因 pointer/wheel/heartbeat 重渲染，EPUB/PDF runtime 继续保留在原 lazy boundary。
+- **运行态纠偏：** 375px switch 的可见轨保持 30px，但真实 hit target 扩展为 44px；趋势次要文本提高到 AA 对比度；CSV 成功态补齐批准稿的 Show in folder。Browser 1280/375 无溢出、console 0，完整差异账本见 `docs/design/v0.3/stage14-reading-history-fidelity.md`。
+
+## 2026-07-20 大阶段 14.3–14.7：实施决策与阅读器 UI 根因
+
+- **用户决策：** 本轮范围从原 14.3 停止边界扩展到 14.7；14.3 四张 MOBI/AZW3 状态板视为已批准；PDF Margin 也必须通过页面舞台留白与可用宽度变化真实生效。
+- **导航根因：** TXT/EPUB 共用 `PaginatedReaderControls`，已有 Unicode `‹/›`；PDF 使用独立 markup 且只有文字。后续抽取同一 20px SVG chevron 控件，375px 也保留文字与图标，避免格式和断点漂移。
+- **图标根因：** `TypographyChoice` 使用 `label.toLowerCase()` 拼 class，`Line height` 生成包含空格的 class，`.theme-typography-glyph--line-*` 永远不命中；Spacing/Margin 又复用三横线并仅改变水平对齐，因此视觉几乎一致。后续改为显式 `line/spacing/margin` variant 与三套独立 SVG。
+- **Margin 根因：** TXT continuous 只把 `pageMargin` 用作顶部 padding，水平 padding 仍由固定 clamp 控制；TXT paginated 页面没有消费该变量；PDF `setTheme` 只更新 canvas 背景。EPUB 已向 iframe body 注入横向 padding，但仍需验证重排锚点。修复必须让三档在三格式产生几何差异，同时保持 TXT charOffset、EPUB CFI/href 和 PDF page/scale。
+- **设计流程：** 14.3 直接按批准稿实现；14.4–14.6 各阶段先出完整桌面/375px 状态板并等待用户批准。现有暖纸、深墨、青绿、琥珀、44px target、焦点恢复、手势阻尼和 reduced-motion 均为硬规格。
+- **EPUB Margin 根因：** epub.js 的 column layout 会根据 `manager.settings.gap` 重写 iframe body 横向 padding；只注入主题 CSS 会被 layout 覆盖。最终把 Margin 同步为 rendition gap，并在恢复当前 CFI 前触发 layout update，使三档真实改变列内缩且不丢位置。
+- **数据身份：** MOBI/AZW3 去重必须使用 source hash，而阅读缓存与 adapter 使用 derivative reader hash/path。`book_derivatives` 保持一对一映射，避免转换器升级导致 CFI、书签、批注和进度漂移。
+- **状态板 fidelity：** 初版运行态把转换与结果继续塞在预览列表中，虽功能正确但未达到批准信息层级；最终拆为独立阶段轨和双栏结果报告。差异证据见 `docs/design/v0.3/stage14-mobi-fidelity.md`。
+- **打包边界：** sidecar hash、许可和真实转换基准通过；当前沙箱无法读取 updater 私钥且 WiX `light.exe` 无法访问 Installer 服务。旧安装包不计入本阶段证据，两个原生 bundle 门保留到 14.7。
+- **最终边界：** 14.7 结束后不改正式版本、不创建 tag/Release、不开始 Stage 15；`.codex/` 与 `AGENTS.md` 继续保持未跟踪、未修改。
+- **2026-07-22 书签 fidelity：** 批准稿的 bookmarks 空态包含 32px 线性书签图标、`No bookmarks yet.` 和两行解释；Add bookmark 是无填充的整行文字动作，只有加号图标和细分隔线。当前实现缺少图标/说明，且把动作做成高权重青绿按钮。
+- **2026-07-22 Notes 范围：** 用户明确要求移除 `+ Add note`。Notes 仍保留选区菜单和批注列表/空态，但侧栏不再提供基于当前位置的新建入口。
+- **2026-07-22 Double 缺陷：** EPUB/PDF 在非 Focus 即使窗口足够宽仍显示 Single，Focus 后恢复 Double，说明偏好本身已保存，错误更可能位于 reader chrome/侧栏宽度参与 spread 可用宽度判定或窄屏自动降级条件，而不是设置面板状态。
+- **2026-07-22 Double 根因确认：** Stage 13 的后置 CSS 把普通 EPUB page 固定为最大 760px，但 adapter 的双页门槛是 860px，形成非 Focus 下必然 Single、Focus 扩宽后才 Double 的结构矛盾。PDF 的 920px 门槛也高于 1280px 桌面在常驻侧栏后的常见 850px 左右 frame。修复让 requested Double 先扩展 EPUB 内容列，并把 EPUB/PDF 的实际 rendered mode 暴露为可断言状态；双页门槛统一收敛为 820px，640/375 仍按实际宽度回退 Single。
+
+## 2026-07-22 大阶段 14.4：自定义字体状态板
+
+- **入口层级：** 沿用现有 Settings Center，在 Data & Backup 与 Updates 之间增加 `Reading & Fonts`，不把字体管理塞入每本书的 Reading Settings；阅读器面板只负责选择已启用字体。
+- **系统边界：** 首屏直接说明字体只复制到应用私有目录，不安装到 Windows、不上传；PDF 明确继续使用文档嵌入字体，避免暗示可替换 PDF 排版。
+- **导入确认：** 先解析真实 family/style/size 并完成 hash 去重，再显示确认按钮；许可责任提示在确认操作之前常驻可见。文件名不作为字体身份。
+- **失败与回退：** duplicate 指向既有条目，TTC 示例用明确的静态 TTF/OTF 范围解释；删除当前字体必须在确认框中预告 `Literata → Lora`，确认后立即保存回退。
+- **移动端：** 375px 使用现有全屏 sheet、顶部 back/close、底部 sticky Import font 与右缘可中断手势把手；把手位于空白区，不覆盖字体开关或许可提示。
+- **设计边界：** 当前分支只提交四张状态板与可编辑 HTML，等待用户批准；不提前创建 schema、后端命令或生产 UI。
+- **批准状态：** 用户已批准全部四张状态板；实现必须忠实保留入口层级、导入确认、许可提示、duplicate/unsupported 结果、当前字体删除回退和 375px sticky action，不再重新解释设计。
+- **生产收口：** schema v7、受限 SFNT 解析、内容寻址字体目录、启停/删除回退、TXT/EPUB `FontFace` 与 EPUB iframe 注入、备份 v2 hash 重映射均已完成。运行态对照关闭了桌面双标题、移动图标继承 fill 和小字 4.29:1 对比度三项偏差；完整账本见 `docs/design/v0.3/stage14-custom-font-fidelity.md`。
+- **新增搜索缺陷范围：** 用户报告现有内容搜索在 EPUB、PDF、MOBI、AZW3 经常漏报或错误定位。14.5 必须先审计书内搜索，而不是只新增全库 UI；统一规范化需覆盖 Unicode 组合等价、大小写、中文/CJK 无空格和跨 DOM/PDF text item 边界，结果必须同时断言摘录与 locator 回跳正确。MOBI/AZW3 复用派生 EPUB spine/CFI，PDF 保持页级文本且不承诺 OCR。
+
+## 2026-07-22 大阶段 14.5：全库检索与搜索正确性状态板
+
+- **现有算法根因：** TXT/PDF 对 lowercased 文本执行 `indexOf` 后继续使用原 query 长度切片，大小写折叠或 Unicode 规范化改变 code unit 数时 selectedText、context 和 locator 会漂移；结果高亮又在侧栏独立重复简单 lowercase 算法。
+- **PDF 根因：** 当前把每个 PDF.js text item 用固定空格拼接，既会把一个词拆成两段导致漏报，也会在原本相邻文字间制造错误词边界；后续必须基于 item 几何/换行与原始 span 建立可逆文本映射。无文本层必须明确 `No searchable text`，v0.3 不承诺 OCR。
+- **EPUB 派生格式根因：** EPUB/MOBI/AZW3 直接依赖 epub.js `section.find()`，没有共享规范化或跨 inline DOM 节点的可验证 offset map；后续以 spine 文本视图匹配并映射到 CFI range，摘录、选中文字与回跳必须来自同一原始范围。
+- **设计结构：** 桌面 rail 增加 Search；结果按书分组并保留真实源格式标签。准确性板把 EPUB 派生、PDF、TXT 和无文本 PDF 的不同定位契约并列；维护板覆盖 rebuild/cancel、损坏缓存、missing file 和单书失败；移动板使用现有 375px 全屏 sheet。
+- **审核边界：** 四张板只定义生产规格，不含 schema、Tauri 命令或 React/CSS。内置 Browser 按安全策略拒绝本地 `file://` 预览，未绕过；仓库锁定 Chromium 以 1440×900 逐页渲染、断言单一 active board 与零溢出并人工目检。
+- **审核反馈：** 桌面全库结果、索引操作/错误和 375px sheet 三张已批准；多语言书内搜索板需把深墨侧栏中的命中底色调得更浅、更柔和，确保白色正文仍清晰。全库搜索与每一本书的既有 `Ctrl+F` 搜索必须共同完成、共同回归，不能用新入口替代旧能力。
+- **新增导入缺陷：** 用户实测 Import folder 在扫描阶段把总进度直接填满，六阶段状态不更新，随后也没有显示文件预览。当前只定位到 `BatchImportDialog`、`scanImportPaths` 与 Rust `batch_import` 事件链；下一步需区分“选择根目录 1/1”和“递归发现/分类 N 项”，检查扫描期是否实际发送结构化进度，以及前端是否把 `completed/total` 错当作完整导入进度。
+- **Import folder 根因确认：** Rust `scan_import_paths` 在完整收集 candidates 后逐项 hash，却发送不在 Core `OperationProgressPhase` 中的 `phase: "reading"`；前端把任意 `progress !== null` 都视为正式导入，扫描第一条事件就切到 progress view。扫描 Promise resolve 后只保存 preview、不清除 progress，因此预览永久被遮蔽；单根目录最后一项的 `completed=total=1` 又被画成 100%。修复必须拥有独立 scan/import 状态并让 scan completion 原子切换到 preview。
+- **高亮修订：** 书内深墨侧栏不再使用与浅色内容区相同的实心 `#bfe1dd`。修订稿使用 `rgba(148, 211, 206, 0.16)` 的低饱和薄雾底色、白色正文和一条 48% 透明度的细内阴影，命中范围仍可辨认但不遮蔽中文笔画；浅色内容区的高亮保持原样。
+- **最终批准：** 用户已批准修订后的准确性板，14.5 四张状态板全部成为生产规格。后续不得用全库搜索替代书内搜索，也不得恢复更重的深墨侧栏命中底色。
+
+### 14.5 生产搜索结论
+
+- **共享匹配模型：** 前端 `searchText` 以 NFKC、Unicode fold、组合标记与折叠空白构建原文 offset map；TXT、EPUB、PDF 书内搜索和侧栏高亮复用该映射。EPUB 通过 DOM Range 生成 CFI，PDF 按 text item 几何重建文字，不再在每个 glyph 之间伪造空格。
+- **精确回跳：** 索引结果保存 EPUB href/PDF page、原始 offset 和同一章节/页内 occurrence；重复词不再一律跳到首个命中。MOBI/AZW3 继续通过派生 EPUB 和现有 CFI 能力打开。
+- **索引边界：** schema v8 使用 SQLite FTS5 trigram、chunk overlap 与 `readerHash` 失效；短于三个字符的 CJK 查询走本地精确扫描。索引是可删除 cache、不进入备份；无文本层 PDF 明确报告 no searchable text，不暗示 OCR。
+- **运行态纠偏：** 375px 筛选 chip 从 36px 收口到 44px；搜索关闭时不再聚焦已卸载的旧 DOM 节点，而是解析重新挂载的 Search 触发器或书架主区。内置 Browser 最终 warning/error 0、375/375 无溢出。
+- **依赖结论：** `pdf-extract 0.12.0` 为 MIT，`unicode-normalization 0.1.25` 为 MIT OR Apache-2.0，已进入第三方声明与锁文件；没有新增网络或 OCR 依赖。
+
+## 2026-07-22 大阶段 14.5a：文件夹导入回归修复
+
+- **根因：** `BatchImportDialog` 以任意非空 progress 推导 `isImporting`，扫描第一条事件即误进正式导入页；scan resolve 只保存 preview、不清 progress，导致预览永久被遮蔽。单根目录的最后一条扫描事件又把 1/1 画成 100%。
+- **状态边界：** scan/import 现在使用独立 operation ID、独立 progress 与显式 `scanning | preview | importing | result` 视图。进度监听先注册再启动扫描，避免极快目录丢失第一条事件；完成后以同一状态更新清 scan progress、保存 items 并进入 preview。
+- **诚实进度：** Rust 在递归发现时发 `scanning, total=0`，UI 使用 reduced-motion 安全的不确定轨；候选收集后才发 `hashing n/N`。正式导入仍使用既有六阶段，不再消费扫描生命周期。
+- **取消与空态：** 递归收集每层检查取消令牌；关闭或 Cancel scan 会取消活动 operation。空目录进入明确 `No supported books found` 预览而非停留 spinner；unsupported/duplicate 仍逐项展示。
+- **运行态边界：** 内置 Browser 可验证 Vite 书架、Import folder 菜单、无溢出和 console 0，但 Web fallback 没有 Tauri 原生文件夹选择，故真实扫描状态由仓库 Playwright bridge fixture 验证。批准稿与最终截图差异账本见 `docs/design/v0.3/stage14-folder-import-fidelity.md`。
+
+## 2026-07-19 大阶段 14.3：MOBI/AZW3 UI 设计审核
+
+- **视觉继承：** 状态板直接使用 Stage 13 的 `#FCFBF8` 暖纸、`#1F3035` 深墨、`#235F62` 青绿、`#B94B35` 陶土红和 `#F2B84B` 焦点琥珀；桌面继续 centered modal，375px 继续全屏 sheet，不引入新视觉语言。
+- **信息层级：** 导入预览先回答“哪些会导入、哪些会本地转换、哪些被跳过”；MOBI/AZW3 源标签始终保留，`Will convert locally to EPUB` 是辅助说明而非把展示格式改成 EPUB。
+- **诚实进度：** 整体 track 只表达已完成项目数，单本转换只显示当前阶段；六阶段为 `Scanning / Hashing / Converting / Validating / Committing / Completed`，不显示 libmobi 不提供的单本百分比。
+- **DRM 边界：** 结果页明确“应用不会尝试移除 DRM”，没有密码、解密或在线转换入口；成功兄弟项不回滚，失败项同时说明没有留下 library record 或 managed file。
+- **移动端：** drop overlay 明确“Nothing imports until you confirm”；review sheet 375px 宽、近全高、顶部拖动 handle、sticky 48px actions，后续实现必须继承现有手势阻尼、焦点恢复和 reduced-motion。
+- **审核状态：** 四张状态板已通过 Browser 1440×900、无溢出、console 0 的静态检查，并于 2026-07-20 获用户批准；生产实现必须逐图 fidelity 对照。
+
+## 2026-07-19 大阶段 14.1：MOBI/AZW3 引擎与分发评估
+
+- **已批准决策：** 正式离线支持采用 libmobi v0.12，作为 Tauri Windows x64 sidecar 随应用分发；Calibre、KindleUnpack、foliate-js 仅保留为决策对比，不进入正式实现。
+- **范围：** 只开放 `.mobi`、`.azw3`；加密文件必须在 sidecar 前拒绝，应用不提供密码、密钥或 DRM 去除路径。
+- **仓库基线：** 远端 `v0.2.0` tag 已发布，`main`/`origin/main` 为 `ed72614`；已从该提交创建并推送 `codex/v0.3.0-integration`，当前阶段分支为 `codex/stage14-mobi-azw3-evaluation`。
+- **UI 工作流：** 现有 Stage 13 暖纸、深墨、青绿、琥珀系统是硬规格；14.3 先出四组状态板并审核，再编码和执行 Browser/截图 fidelity 对照。
+- **用户文件边界：** `.codex/` 与 `AGENTS.md` 保持未跟踪，不纳入阶段提交。
+- **上游现状（2026-07-19 核验）：** libmobi 官方仓库最新 release 仍为 v0.12（2024-06-17），README 明确覆盖 MOBI 与 KF8/AZW3、Windows MinGW/MSVC，并允许以 `--with-zlib=no` / `--with-libxml2=no` 使用内置 miniz/xmlwriter；许可证为 LGPL-3.0-or-later。
+- **分发形态：** Tauri 2 官方 sidecar 通过 `bundle.externalBin` 和目标三元组命名嵌入；本项目只从 Rust 后端启动 sidecar，不向 WebView 暴露任意 shell capability。
+- **来源校验：** 官方 release archive 为 2,653,654 bytes / SHA-256 `9A6FB2C5…BF7E7`；detached signature 通过，primary fingerprint `B1ED4008…1675C`、signing subkey `DCBC81C5…15322`。
+- **可重复构建：** MinGW GCC 8.1.0、静态 libmobi、内置 miniz/xmlwriter、`encryption=no`；两次独立干净构建均得到 296,129 bytes / `438576B7…47CF1`。PE 为 x64，仅导入 KERNEL32/msvcrt；help 保留 `-e` EPUB 和默认 KF8、无 password/decrypt 参数。
+- **体积门：** v0.2.0 baseline NSIS 7,373,692 → 7,485,002（+111,310）；MSI 9,461,760 → 9,601,024（+139,264）；installed footprint +296,129，均远低于 10 MiB/20 MiB 门槛。
+- **14.1 结论：** go。可进入 14.2；仍不授权 DRM、其他 Kindle 扩展、直接 MOBI reader adapter 或 14.4。
+
+## 2026-07-19 大阶段 14.2：隔离转换原型
+
+- **阶段边界：** 原型只接收 source path、operation ID、staging root、取消 token 和 converter path；成功返回已验证 EPUB descriptor，失败/取消/超时清理 staging，不写数据库或正式 library。
+- **上游 fixture：** libmobi v0.12 源码包自带 LGPL 测试样本，包括 `sample-ncx.mobi`（MOBI 8 hybrid / KF8 default / NCX）、`sample-multimedia.mobi`、Unicode 样本和 DRM 样本；将只复制必要的合成测试文件并保留来源/许可证说明，不引入商业电子书。
+- **真实行为：** bundled `mobitool -e -o <dir> sample-ncx.mobi` 已生成单个 `sample-ncx.epub`，日志确认 title、language、MOBI 8 hybrid 与默认 KF8；输出可被后端安全验证后交给现有 EPUB adapter。
+- **预检契约：** 现代 MOBI/KF8 使用 `BOOKMOBI`，旧 PalmDOC DRM v1 样本使用 `TEXtREAd`；预检接受两者仅为读取 record 0 的 big-endian encryption type，非 0 必须在启动 sidecar 前返回 `mobi-drm-unsupported`，不提供密码或解密回退。
+- **Windows 参数边界：** canonical path 继续用于来源安全校验；MinGW sidecar 不接受 Windows `\\?\` verbatim 前缀，因此仅在 `Command` 参数构造处转换成等价普通 drive/UNC path，不经过 shell，也不降低 canonical containment 检查。
+- **真实转换矩阵：** MOBI 8 hybrid 默认 KF8、改扩展名 `.azw3`、NCX/OPF 元数据、多媒体图片、临时注入的 UTF-8 中文正文均转换并通过 EPUB verifier；PalmDOC DRM v1 在 sidecar 前拒绝。
+- **资源测量：** 三个上游合成样本耗时 53–181 ms，峰值 working set 3,194,880–5,885,952 bytes；bundled sidecar hash 保持 `438576B7…47CF1`。小样本不代表普遍性能，生产仍使用 120 秒 timeout 和阶段式进度。
+- **14.2 结论：** go。服务不接收数据库/正式书库句柄，失败、取消、超时、converter 非零退出和验证失败均不留下 operation 目录；完整报告见 `docs/architecture/mobi-conversion-spike.md`。
+
 ## 需求
 
 - 基于 `DEVELOPMENT.md` 制定更具体的分阶段开发计划。

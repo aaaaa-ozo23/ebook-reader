@@ -14,6 +14,7 @@ import {
   type ReaderExperiencePreferences,
   type ReaderLayoutPreferences,
   type ReaderTheme,
+  readerFormatForBookFormat,
   type TxtDocument,
   type TxtLocator,
 } from "@reader/core";
@@ -58,8 +59,8 @@ export async function openTxtBook(bookId: string): Promise<TxtDocument> {
 }
 
 export async function getEpubBookSource(book: Book): Promise<string> {
-  if (book.format !== "epub") {
-    throw new Error("EPUB source can only be created for epub books.");
+  if ((book.readerFormat ?? readerFormatForBookFormat(book.format)) !== "epub") {
+    throw new Error("EPUB source can only be created for EPUB-backed books.");
   }
 
   if (!hasTauriRuntime()) {
@@ -69,16 +70,16 @@ export async function getEpubBookSource(book: Book): Promise<string> {
       return fallbackSource;
     }
 
-    return book.libraryPath;
+    return book.readerPath ?? book.libraryPath;
   }
 
   const { convertFileSrc } = await import("@tauri-apps/api/core");
 
-  return convertFileSrc(book.libraryPath);
+  return convertFileSrc(book.readerPath ?? book.libraryPath);
 }
 
 export async function getPdfBookSource(book: Book): Promise<string> {
-  if (book.format !== "pdf") {
+  if ((book.readerFormat ?? readerFormatForBookFormat(book.format)) !== "pdf") {
     throw new Error("PDF source can only be created for pdf books.");
   }
 
@@ -89,12 +90,12 @@ export async function getPdfBookSource(book: Book): Promise<string> {
       return fallbackSource;
     }
 
-    return book.libraryPath;
+    return book.readerPath ?? book.libraryPath;
   }
 
   const { convertFileSrc } = await import("@tauri-apps/api/core");
 
-  return convertFileSrc(book.libraryPath);
+  return convertFileSrc(book.readerPath ?? book.libraryPath);
 }
 
 export async function getReaderTheme(): Promise<ReaderTheme> {
@@ -174,7 +175,9 @@ export async function getReaderCache(
     const cache = getFallbackReaderCache();
     const entry = cache[`${book.id}:${cacheKey}`];
 
-    return entry?.sourceHash === book.fileHash ? entry.valueJson : null;
+    return entry?.sourceHash === (book.readerHash ?? book.fileHash)
+      ? entry.valueJson
+      : null;
   }
 
   return invokeCommand<string | null>("get_reader_cache", {
@@ -191,7 +194,7 @@ export async function saveReaderCache(
   if (!hasTauriRuntime()) {
     const cache = getFallbackReaderCache();
     cache[`${book.id}:${cacheKey}`] = {
-      sourceHash: book.fileHash,
+      sourceHash: book.readerHash ?? book.fileHash,
       valueJson,
     };
     window.localStorage.setItem(FALLBACK_READER_CACHE_KEY, JSON.stringify(cache));

@@ -1,4 +1,5 @@
-export type BookFormat = "epub" | "txt" | "pdf";
+export type BookFormat = "epub" | "txt" | "pdf" | "mobi" | "azw3";
+export type ReaderFormat = "epub" | "txt" | "pdf";
 export type BookCoverStatus = "pending" | "ready" | "fallback";
 export type BookAvailability = "available" | "missing";
 
@@ -46,6 +47,9 @@ export interface Book {
   sourcePath?: string;
   libraryPath: string;
   fileHash: string;
+  readerFormat: ReaderFormat;
+  readerPath: string;
+  readerHash: string;
   coverPath?: string;
   coverStatus: BookCoverStatus;
   availability?: BookAvailability;
@@ -151,6 +155,7 @@ export interface TocItem {
 
 export interface ReaderTheme {
   mode: ReaderThemeMode;
+  fontId?: string;
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
@@ -158,6 +163,33 @@ export interface ReaderTheme {
   pageMargin: number;
   backgroundColor: string;
   textColor: string;
+}
+
+export interface CustomFont {
+  id: string;
+  familyName: string;
+  styleName: string;
+  fileName: string;
+  filePath: string;
+  fileHash: string;
+  fileSize: number;
+  familyAlias: string;
+  enabled: boolean;
+  importedAt: string;
+  updatedAt: string;
+}
+
+export interface ImportCustomFontResult {
+  status: "imported" | "duplicate";
+  font: CustomFont;
+}
+
+export interface CustomFontPreview {
+  familyName: string;
+  styleName: string;
+  fileName: string;
+  fileSize: number;
+  duplicateFont?: CustomFont;
 }
 
 export interface ReaderLayoutPreferences {
@@ -226,9 +258,17 @@ export interface BackupOptions {
   includeBooks: boolean;
 }
 
-export type DataOperationKind = "backup-export" | "backup-restore" | "batch-import";
+export type DataOperationKind =
+  | "backup-export"
+  | "backup-restore"
+  | "batch-import"
+  | "library-search-index";
 export type OperationProgressPhase =
   | "preparing"
+  | "scanning"
+  | "hashing"
+  | "converting"
+  | "validating"
   | "reading"
   | "writing"
   | "verifying"
@@ -253,7 +293,7 @@ export interface BackupPayloadDescriptor {
 
 export interface BackupManifest {
   formatIdentifier: "ebook-reader-backup";
-  formatVersion: 1;
+  formatVersion: 1 | 2;
   appVersion: string;
   schemaVersion: number;
   exportedAt: string;
@@ -327,6 +367,109 @@ export interface SearchHit<TLocator extends Locator = Locator> {
   id: string;
   locator: TLocator;
   excerpt: string;
+  excerptMatchStart?: number;
+  excerptMatchEnd?: number;
+}
+
+export type LibrarySearchIndexState =
+  | "empty"
+  | "ready"
+  | "needs-index"
+  | "indexing"
+  | "partial";
+
+export interface LibrarySearchStatus {
+  state: LibrarySearchIndexState;
+  totalBooks: number;
+  indexedBooks: number;
+  pendingBooks: number;
+  failedBooks: number;
+  noTextBooks: number;
+}
+
+export type LibrarySearchTarget =
+  | { kind: "metadata" }
+  | { kind: "txt"; charOffset: number }
+  | { kind: "epub"; href: string; charOffset?: number; matchIndex?: number }
+  | { kind: "pdf"; page: number; charOffset?: number; matchIndex?: number };
+
+export interface LibrarySearchHit {
+  id: string;
+  bookId: string;
+  title: string;
+  author?: string;
+  format: BookFormat;
+  readerFormat: ReaderFormat;
+  availability: BookAvailability;
+  excerpt: string;
+  excerptMatchStart: number;
+  excerptMatchEnd: number;
+  locationLabel: string;
+  target: LibrarySearchTarget;
+}
+
+export interface LibrarySearchResult {
+  query: string;
+  hits: LibrarySearchHit[];
+  truncated: boolean;
+}
+
+export interface LibrarySearchRebuildResult {
+  operationId: string;
+  status: "completed" | "canceled";
+  indexedBooks: number;
+  failedBooks: number;
+  noTextBooks: number;
+}
+
+export interface ReadingHistoryPreferences {
+  enabled: boolean;
+  updatedAt: string;
+  clearedAt?: string;
+}
+
+export interface ReadingSession {
+  id: string;
+  bookId: string;
+  startedAt: string;
+  endedAt?: string;
+  lastHeartbeatAt: string;
+  activeSeconds: number;
+  finalProgress?: number;
+  updatedAt: string;
+}
+
+export interface ReadingDailyStatistic {
+  date: string;
+  activeSeconds: number;
+}
+
+export interface ReadingBookStatistic {
+  bookId: string;
+  title: string;
+  author?: string;
+  format: BookFormat;
+  activeSeconds: number;
+  sessionCount: number;
+  progress?: number;
+  lastReadAt?: string;
+}
+
+export interface ReadingStatistics {
+  enabled: boolean;
+  activeSession: boolean;
+  todaySeconds: number;
+  last7DaysSeconds: number;
+  totalSeconds: number;
+  daily: ReadingDailyStatistic[];
+  books: ReadingBookStatistic[];
+  clearedAt?: string;
+}
+
+export interface ReadingHistoryExportResult {
+  outputPath: string;
+  sessionCount: number;
+  bytesWritten: number;
 }
 
 export interface ReaderAdapter<TLocator extends Locator = Locator> {
@@ -396,7 +539,7 @@ export const defaultReaderTheme: ReaderTheme = {
 const EPUB_PAGE_TRANSITIONS = ["none", "page-curl", "cover", "slide"] as const;
 
 export const readerCapabilitiesByFormat: Readonly<
-  Record<BookFormat, ReaderCapabilities>
+  Record<ReaderFormat, ReaderCapabilities>
 > = {
   epub: {
     viewModes: ["paginated"],
@@ -488,7 +631,11 @@ export function resolveEffectivePageTransition(
     return "none";
   }
 
-  return preferences[format].transition;
+  return preferences[readerFormatForBookFormat(format)].transition;
+}
+
+export function readerFormatForBookFormat(format: BookFormat): ReaderFormat {
+  return format === "mobi" || format === "azw3" ? "epub" : format;
 }
 
 export function normalizePdfLocator(locator: PdfLocator): PdfLocator {

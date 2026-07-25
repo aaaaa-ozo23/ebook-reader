@@ -12,11 +12,21 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "pnpm.cmd dev --host 127.0.0.1",
+    command: "node node_modules/vite/bin/vite.js --host 127.0.0.1",
     url: "http://127.0.0.1:1420",
     reuseExistingServer: !process.env.CI,
   },
   projects: [
+    {
+      name: "chromium-dpr2-pdf",
+      grep: /500-page PDF/,
+      testMatch: "smoke.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        deviceScaleFactor: 2,
+        viewport: { width: 1280, height: 800 },
+      },
+    },
     {
       name: "chromium",
       grepInvert: /500-page PDF/,
@@ -39,16 +49,6 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         deviceScaleFactor: 2,
         viewport: { width: 1280, height: 720 },
-      },
-    },
-    {
-      name: "chromium-dpr2-pdf",
-      grep: /500-page PDF/,
-      testMatch: "smoke.spec.ts",
-      use: {
-        ...devices["Desktop Chrome"],
-        deviceScaleFactor: 2,
-        viewport: { width: 1280, height: 800 },
       },
     },
   ],

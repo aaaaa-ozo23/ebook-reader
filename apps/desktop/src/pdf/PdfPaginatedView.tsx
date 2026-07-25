@@ -31,7 +31,7 @@ export function PdfPaginatedView({
   const spreadSize = position.renderedMode === "double" ? 2 : 1;
   const pageWidth = Math.max(
     240,
-    (availableWidth - 28 - pageGap * (spreadSize - 1)) / spreadSize,
+    (availableWidth - pageGap * (spreadSize - 1)) / spreadSize,
   );
 
   return (

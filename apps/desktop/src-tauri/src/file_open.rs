@@ -61,7 +61,7 @@ where
             .is_some_and(|extension| {
                 matches!(
                     extension.to_ascii_lowercase().as_str(),
-                    "epub" | "txt" | "pdf"
+                    "epub" | "txt" | "pdf" | "mobi" | "azw3"
                 )
             });
 
@@ -86,6 +86,8 @@ mod tests {
             OsString::from(r"D:\Books\second.txt"),
             OsString::from("--flag"),
             OsString::from(r"D:\Books\third.pdf"),
+            OsString::from(r"D:\Books\fourth.mobi"),
+            OsString::from(r"D:\Books\fifth.AZW3"),
         ]);
 
         assert_eq!(
@@ -93,7 +95,9 @@ mod tests {
             vec![
                 r"D:\Books\first.EPUB",
                 r"D:\Books\second.txt",
-                r"D:\Books\third.pdf"
+                r"D:\Books\third.pdf",
+                r"D:\Books\fourth.mobi",
+                r"D:\Books\fifth.AZW3"
             ]
         );
     }

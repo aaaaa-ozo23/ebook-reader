@@ -10,12 +10,14 @@ import {
 import {
   type Annotation,
   type Bookmark,
+  type CustomFont,
   defaultReaderLayoutPreferences,
   defaultReaderExperiencePreferences,
   defaultReaderTheme,
   type Book,
   type EpubLocator,
   type Locator,
+  type LibrarySearchHit,
   type PdfLocator,
   type PdfPaginatedViewMode,
   type PageTransitionMode,
@@ -28,6 +30,7 @@ import {
   type TxtDocument,
   type TxtLocator,
   type TxtPaginatedViewMode,
+  readerFormatForBookFormat,
 } from "@reader/core";
 import "../components/ReaderShell.css";
 import "../components/ReaderStage13.css";
@@ -50,6 +53,7 @@ import {
   saveReaderLayoutPreferences,
   updateAnnotation,
 } from "../tauri/reader";
+import { getCustomFontAssetUrl, listCustomFonts } from "../tauri/fonts";
 import {
   findMatchingHighlightAnnotations,
   findMatchingNoteAnnotations,
@@ -72,6 +76,7 @@ import {
 } from "./ReaderFormatContents";
 import { ReaderIcon } from "./ReaderIcons";
 import { NoteEditor, NotePopover, SelectionMenu } from "./ReaderOverlays";
+import { findLibrarySearchTargetHit } from "./ReaderSearchTarget";
 import {
   clampSidebarWidth,
   MemoizedReaderSidebar,
@@ -94,6 +99,7 @@ import type {
 } from "./readerUiTypes";
 import type { EpubSpreadMode } from "../epub/EpubReaderAdapter";
 import { useReaderNavigationController } from "./useReaderNavigationController";
+import { useReadingHistorySession } from "./useReadingHistorySession";
 
 function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
   const isDark = theme.mode === "dark";
@@ -118,6 +124,7 @@ function getReaderThemeTokens(theme: ReaderTheme): Record<string, string> {
 
 export interface ReaderShellProps {
   book: Book;
+  librarySearchRequest?: LibrarySearchHit | null;
   onBackToLibrary: () => void;
 }
 
@@ -138,12 +145,18 @@ interface PdfJumpRequest {
   requestId: number;
 }
 
-export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
+export function ReaderShell({
+  book,
+  librarySearchRequest = null,
+  onBackToLibrary,
+}: ReaderShellProps) {
+  const readerFormat = book.readerFormat ?? readerFormatForBookFormat(book.format);
   const searchProviderRef = useRef<ReaderSearchProvider | null>(null);
+  const processedLibrarySearchRequestRef = useRef<string | null>(null);
   const readerExperienceDirtyBookIdRef = useRef<string | null>(null);
   const [document, setDocument] = useState<TxtDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(book.format === "txt");
+  const [isLoading, setIsLoading] = useState(readerFormat === "txt");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isChromeHidden, setIsChromeHidden] = useState(false);
   const [isThemePanelOpen, setIsThemePanelOpen] = useState(false);
@@ -151,6 +164,10 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [epubSpreadMode, setEpubSpreadMode] = useState<EpubSpreadMode>("single");
   const [isFormatOverlayOpen, setIsFormatOverlayOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(defaultReaderTheme);
+  const [customFonts, setCustomFonts] = useState<CustomFont[]>([]);
+  const [customFontSources, setCustomFontSources] = useState<Record<string, string>>(
+    {},
+  );
   const [themeError, setThemeError] = useState<string | null>(null);
   const [readerExperiencePreferences, setReaderExperiencePreferences] =
     useState<ReaderExperiencePreferences>(defaultReaderExperiencePreferences);
@@ -176,6 +193,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<SearchHit<Locator>>>([]);
+  const [searchProviderVersion, setSearchProviderVersion] = useState(0);
   const [currentBookmarkPosition, setCurrentBookmarkPosition] = useState<{
     bookId: string;
     locator: Locator;
@@ -240,13 +258,54 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
   useEffect(() => {
     let isCurrent = true;
+    const faces: FontFace[] = [];
 
     async function loadTheme() {
       try {
-        const savedTheme = await getReaderTheme();
+        const [savedTheme, savedFonts] = await Promise.all([
+          getReaderTheme(),
+          listCustomFonts(),
+        ]);
+        const enabledFonts = savedFonts.filter((font) => font.enabled);
+        const sourceEntries = await Promise.all(
+          enabledFonts.map(async (font) => {
+            try {
+              const source = await getCustomFontAssetUrl(font);
+              const face = new FontFace(font.familyAlias, `url("${source}")`);
+              await face.load();
+              if (isCurrent) {
+                globalThis.document.fonts.add(face);
+                faces.push(face);
+              }
+              return [font.id, source] as const;
+            } catch {
+              return null;
+            }
+          }),
+        );
 
         if (isCurrent) {
-          setTheme(savedTheme);
+          const availableSources = Object.fromEntries(
+            sourceEntries.filter(
+              (entry): entry is readonly [string, string] => entry !== null,
+            ),
+          );
+          const selectedFontUnavailable =
+            savedTheme.fontId !== undefined &&
+            availableSources[savedTheme.fontId] === undefined;
+          const effectiveTheme = selectedFontUnavailable
+            ? {
+                ...savedTheme,
+                fontId: undefined,
+                fontFamily: defaultReaderTheme.fontFamily,
+              }
+            : savedTheme;
+          setTheme(effectiveTheme);
+          setCustomFonts(savedFonts);
+          setCustomFontSources(availableSources);
+          if (selectedFontUnavailable) {
+            void saveReaderTheme(effectiveTheme).catch(() => undefined);
+          }
         }
       } catch (themeLoadError) {
         if (isCurrent) {
@@ -259,6 +318,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
 
     return () => {
       isCurrent = false;
+      for (const face of faces) globalThis.document.fonts.delete(face);
     };
   }, [book.id]);
 
@@ -372,7 +432,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   useEffect(() => {
     let isCurrent = true;
 
-    if (book.format !== "txt") {
+    if (readerFormat !== "txt") {
       return () => {
         isCurrent = false;
       };
@@ -425,7 +485,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     return () => {
       isCurrent = false;
     };
-  }, [book.format, book.id, txtRetryVersion]);
+  }, [book.id, readerFormat, txtRetryVersion]);
 
   const blocks = useMemo(() => {
     if (document === null) {
@@ -456,6 +516,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     currentBookmarkPosition?.bookId === book.id
       ? currentBookmarkPosition.locator
       : null;
+  const isReadingHistoryReady =
+    readerFormat === "txt"
+      ? document !== null && !isLoading && error === null
+      : currentBookmarkPosition?.bookId === book.id;
+  useReadingHistorySession({ bookId: book.id, ready: isReadingHistoryReady });
   const currentLocationBookmark = useMemo(
     () =>
       currentBookmarkLocator === null
@@ -718,7 +783,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "txt") {
+      if (readerFormat === "txt") {
         const chapter = chapterById.get(tocItem.id);
 
         if (chapter !== undefined && document !== null) {
@@ -740,7 +805,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "epub" && tocItem.locator?.kind === "epub") {
+      if (readerFormat === "epub" && tocItem.locator?.kind === "epub") {
         setEpubJumpRequest((currentRequest) => ({
           locator: tocItem.locator as EpubLocator,
           requestId: (currentRequest?.requestId ?? 0) + 1,
@@ -749,7 +814,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "pdf" && tocItem.locator?.kind === "pdf") {
+      if (readerFormat === "pdf" && tocItem.locator?.kind === "pdf") {
         setPdfJumpRequest((currentRequest) => ({
           locator: tocItem.locator as PdfLocator,
           requestId: (currentRequest?.requestId ?? 0) + 1,
@@ -757,7 +822,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         setActiveTocItemId(tocItem.id);
       }
     },
-    [book.format, chapterById, document, handleTxtProgressChange, tocItems],
+    [chapterById, document, handleTxtProgressChange, readerFormat, tocItems],
   );
 
   const handleDocumentTocChange = useCallback((nextTocItems: TocItem[]) => {
@@ -816,6 +881,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
   const handleSearchProviderChange = useCallback(
     (provider: ReaderSearchProvider | null) => {
       searchProviderRef.current = provider;
+      setSearchProviderVersion((version) => version + 1);
     },
     [],
   );
@@ -832,7 +898,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         return;
       }
 
-      if (book.format === "txt") {
+      if (readerFormat === "txt") {
         if (document === null) {
           setSearchResults([]);
           setSearchError("Search is still loading.");
@@ -868,7 +934,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           setIsSearchLoading(false);
         });
     },
-    [book.format, document],
+    [document, readerFormat],
   );
 
   const handleJumpToSearchResult = useCallback(
@@ -878,6 +944,69 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
     },
     [handleJumpToLocator],
   );
+
+  useEffect(() => {
+    if (
+      librarySearchRequest === null ||
+      librarySearchRequest.bookId !== book.id ||
+      processedLibrarySearchRequestRef.current === librarySearchRequest.id
+    ) {
+      return;
+    }
+
+    if (librarySearchRequest.target.kind === "metadata") {
+      processedLibrarySearchRequestRef.current = librarySearchRequest.id;
+      return;
+    }
+
+    if (readerFormat === "txt" && document === null) return;
+    const provider = searchProviderRef.current;
+    if (readerFormat !== "txt" && provider === null) return;
+
+    processedLibrarySearchRequestRef.current = librarySearchRequest.id;
+    setIsChromeHidden(false);
+    setIsThemePanelOpen(false);
+    setSidebarTab("search");
+    setIsSidebarOpen(true);
+    setSearchQuery(
+      librarySearchRequest.excerpt.slice(
+        librarySearchRequest.excerptMatchStart,
+        librarySearchRequest.excerptMatchEnd,
+      ),
+    );
+    setSearchError(null);
+    setIsSearchLoading(true);
+
+    const query = librarySearchRequest.excerpt.slice(
+      librarySearchRequest.excerptMatchStart,
+      librarySearchRequest.excerptMatchEnd,
+    );
+    const searchPromise =
+      readerFormat === "txt"
+        ? Promise.resolve(searchTxtDocument(document!, query))
+        : provider!(query);
+
+    void searchPromise
+      .then((hits) => {
+        const visibleHits = hits.slice(0, 100) as Array<SearchHit<Locator>>;
+        setSearchResults(visibleHits);
+        const targetHit = findLibrarySearchTargetHit(visibleHits, librarySearchRequest);
+        if (targetHit !== undefined) handleJumpToLocator(targetHit.locator);
+        focusElementSoon(searchInputRef);
+      })
+      .catch((searchFailure: unknown) => {
+        setSearchResults([]);
+        setSearchError(getErrorMessage(searchFailure));
+      })
+      .finally(() => setIsSearchLoading(false));
+  }, [
+    book.id,
+    document,
+    handleJumpToLocator,
+    librarySearchRequest,
+    readerFormat,
+    searchProviderVersion,
+  ]);
 
   const handleCreateBookmark = useCallback(() => {
     const locator = currentBookmarkLocator;
@@ -906,44 +1035,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         setBookmarkError(getErrorMessage(bookmarkCreateError));
       });
   }, [activeTocItemId, book, currentBookmarkLocator, tocItems]);
-
-  const handleCreateLocationNote = useCallback(() => {
-    const locator = currentBookmarkLocator;
-
-    if (locator === null) {
-      setAnnotationError("Current reading location is not available yet.");
-      return;
-    }
-
-    const selectedText = getBookmarkLabel(book, tocItems, activeTocItemId, locator);
-    const contentLeft = window.matchMedia("(min-width: 900px)").matches
-      ? layoutPreferences.sidebarWidth
-      : 0;
-
-    setAnnotationError(null);
-    setSelectionSnapshot(null);
-    setNotePopover(null);
-    setNoteEditor({
-      color: DEFAULT_HIGHLIGHT_COLOR,
-      contextAfter: locator.contextAfter,
-      contextBefore: locator.contextBefore,
-      draft: "",
-      locator,
-      menuX: contentLeft + (window.innerWidth - contentLeft) / 2,
-      menuY: 116,
-      selectedText,
-    });
-
-    if (window.matchMedia("(max-width: 520px)").matches) {
-      setIsSidebarOpen(false);
-    }
-  }, [
-    activeTocItemId,
-    book,
-    currentBookmarkLocator,
-    layoutPreferences.sidebarWidth,
-    tocItems,
-  ]);
 
   const handleJumpToBookmark = useCallback(
     (bookmark: Bookmark<Locator>) => {
@@ -1454,7 +1545,6 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
         isSearchLoading={isSearchLoading}
         onBackToLibrary={onBackToLibrary}
         onCreateBookmark={handleCreateBookmark}
-        onCreateNote={handleCreateLocationNote}
         onDeleteAnnotation={handleDeleteAnnotation}
         onDeleteBookmark={handleDeleteBookmark}
         onJumpToAnnotation={handleJumpToAnnotation}
@@ -1615,7 +1705,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             <span>Exit focus</span>
           </button>
         ) : null}
-        {book.format === "txt" ? (
+        {readerFormat === "txt" ? (
           <MemoizedTxtReaderContent
             annotations={visibleAnnotations}
             blocks={blocks}
@@ -1643,10 +1733,11 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onBackToLibrary={onBackToLibrary}
           />
         ) : null}
-        {book.format === "epub" ? (
+        {readerFormat === "epub" ? (
           <MemoizedEpubReaderContent
             annotations={visibleAnnotations}
             book={book}
+            customFontSources={customFontSources}
             isPageCurlBlocked={
               isFormatOverlayOpen ||
               selectionSnapshot !== null ||
@@ -1671,7 +1762,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
             onTocChange={handleDocumentTocChange}
           />
         ) : null}
-        {book.format === "pdf" ? (
+        {readerFormat === "pdf" ? (
           <MemoizedPdfReaderContent
             annotations={visibleAnnotations}
             book={book}
@@ -1697,30 +1788,31 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           />
         ) : null}
         <ReaderThemePanel
+          customFonts={customFonts}
           isOpen={isThemePanelOpen}
           pageViewDisabled={
-            book.format === "txt"
+            readerFormat === "txt"
               ? readerExperiencePreferences.txt.viewMode === "scroll"
-              : book.format === "pdf"
+              : readerFormat === "pdf"
                 ? readerExperiencePreferences.pdf.viewMode === "continuous"
                 : false
           }
           pageViewDisabledMessage={
-            book.format === "txt"
+            readerFormat === "txt"
               ? "Double page view is not available in Continuous reading mode."
-              : book.format === "pdf"
+              : readerFormat === "pdf"
                 ? "Page view is not available in Continuous reading mode."
                 : undefined
           }
           pageViewMode={
-            book.format === "epub"
+            readerFormat === "epub"
               ? epubSpreadMode
-              : book.format === "txt"
+              : readerFormat === "txt"
                 ? readerExperiencePreferences.txt.paginatedViewMode
                 : readerExperiencePreferences.pdf.paginatedViewMode
           }
           pageTransition={
-            book.format === "epub"
+            readerFormat === "epub"
               ? readerExperiencePreferences.epub.transition
               : undefined
           }
@@ -1729,7 +1821,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           theme={theme}
           themeError={themeError}
           pdfReadingMode={
-            book.format === "pdf"
+            readerFormat === "pdf"
               ? readerExperiencePreferences.pdf.viewMode === "continuous"
                 ? "continuous"
                 : readerExperiencePreferences.pdf.transition
@@ -1737,7 +1829,7 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           }
           pdfReadingModeOptions={["continuous", "none", "page-curl", "cover", "slide"]}
           txtReadingMode={
-            book.format === "txt"
+            readerFormat === "txt"
               ? readerExperiencePreferences.txt.viewMode === "scroll"
                 ? "continuous"
                 : readerExperiencePreferences.txt.transition
@@ -1747,9 +1839,9 @@ export function ReaderShell({ book, onBackToLibrary }: ReaderShellProps) {
           onClose={closeThemePanel}
           onPageTransitionChange={handleEpubTransitionChange}
           onPageViewModeChange={
-            book.format === "epub"
+            readerFormat === "epub"
               ? setEpubSpreadMode
-              : book.format === "txt"
+              : readerFormat === "txt"
                 ? handleTxtPaginatedViewModeChange
                 : handlePdfPaginatedViewModeChange
           }

@@ -68,6 +68,55 @@ describe("buildEpubThemeRules", () => {
   });
 });
 
+describe("EPUB multilingual search", () => {
+  it("returns an exact CFI range across inline nodes after Unicode folding", async () => {
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-search",
+      container: document.createElement("div"),
+      sourceUrl: "blob:epub-search",
+      theme: defaultReaderTheme,
+    });
+    const sectionDocument = document.implementation.createHTMLDocument("Chapter");
+    sectionDocument.body.innerHTML =
+      "<p>Un <em>café</em> déjà <strong>vu</strong> dans l’histoire.</p>";
+    const cfiFromRange = vi.fn((range: Range) => {
+      expect(range.toString()).toBe("café déjà vu");
+      return "epubcfi(/6/2!/4/2,/1:3,/3:2)";
+    });
+    const unload = vi.fn();
+    const section = {
+      cfiFromRange,
+      document: sectionDocument,
+      href: "chapter.xhtml",
+      load: vi.fn(),
+      unload,
+    };
+    const internals = adapter as unknown as {
+      book: {
+        load: unknown;
+        spine: { each: (callback: (value: typeof section) => void) => void };
+      };
+    };
+    internals.book = {
+      load: vi.fn(),
+      spine: { each: (callback) => callback(section) },
+    };
+
+    const hits = await adapter.search("CAFE\u0301 DE\u0301JA\u0300 VU");
+
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.locator).toMatchObject({
+      cfi: "epubcfi(/6/2!/4/2,/1:3,/3:2)",
+      href: "chapter.xhtml",
+      selectedText: "café déjà vu",
+    });
+    expect(
+      hits[0]?.excerpt.slice(hits[0].excerptMatchStart, hits[0].excerptMatchEnd),
+    ).toBe("café déjà vu");
+    expect(unload).toHaveBeenCalledOnce();
+  });
+});
+
 describe("EPUB selection annotations", () => {
   function createAdapter(onSelected = vi.fn()) {
     return new EpubReaderAdapter({
@@ -215,6 +264,42 @@ describe("EPUB rendition image lifecycle", () => {
     expect(frame).toHaveAttribute("title", "Chapter One content");
     frame.remove();
   });
+
+  it("injects the selected app-local font only into EPUB content documents", () => {
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-custom-font",
+      container: document.createElement("div"),
+      sourceUrl: "blob:epub-custom-font",
+      theme: {
+        ...defaultReaderTheme,
+        fontId: "font-quiet",
+        fontFamily: '"EbookReaderFont_quiet"',
+      },
+      customFontSources: {
+        "font-quiet": "asset://localhost/fonts/quiet.ttf",
+      },
+    });
+    const frameDocument = document.implementation.createHTMLDocument("Custom font");
+    const renditionHandlers = new Map<string, (...args: unknown[]) => void>();
+    const internals = adapter as unknown as {
+      registerRenditionEvents: (rendition: {
+        on: (event: string, handler: (...args: unknown[]) => void) => void;
+      }) => void;
+    };
+    internals.registerRenditionEvents({
+      on: (event, handler) => renditionHandlers.set(event, handler),
+    });
+
+    renditionHandlers.get("rendered")?.({}, { document: frameDocument });
+
+    expect(
+      frameDocument.getElementById("ebook-reader-custom-font")?.textContent,
+    ).toContain('@font-face { font-family: "EbookReaderFont_quiet"');
+    expect(
+      frameDocument.getElementById("ebook-reader-custom-font")?.textContent,
+    ).toContain('url("asset://localhost/fonts/quiet.ttf")');
+    expect(document.getElementById("ebook-reader-custom-font")).toBeNull();
+  });
 });
 
 describe("EPUB layout invalidation", () => {
@@ -232,15 +317,22 @@ describe("EPUB layout invalidation", () => {
     const select = vi.fn();
     const font = vi.fn();
     const fontSize = vi.fn();
+    const override = vi.fn();
+    const updateLayout = vi.fn();
     const internals = adapter as unknown as {
       lastPosition: {
         locator: { kind: "epub"; href: string; cfi: string };
       } | null;
       rendition: {
         display: typeof display;
+        manager: {
+          settings: { gap?: number };
+          updateLayout: typeof updateLayout;
+        };
         themes: {
           register: typeof register;
           select: typeof select;
+          override: typeof override;
           font: typeof font;
           fontSize: typeof fontSize;
         };
@@ -255,12 +347,17 @@ describe("EPUB layout invalidation", () => {
     };
     internals.rendition = {
       display,
-      themes: { register, select, font, fontSize },
+      manager: { settings: { gap: 64 }, updateLayout },
+      themes: { register, select, override, font, fontSize },
     };
 
     await adapter.setTheme({ ...defaultReaderTheme, fontSize: 24 });
 
     expect(onLayoutInvalidated).toHaveBeenCalledWith("theme");
+    expect(override).toHaveBeenCalledWith("padding-left", "32px", true);
+    expect(override).toHaveBeenCalledWith("padding-right", "32px", true);
+    expect(internals.rendition.manager.settings.gap).toBe(64);
+    expect(updateLayout).toHaveBeenCalledOnce();
     expect(display).toHaveBeenCalledWith("epubcfi(/6/2!/4/2/2:0)");
   });
 });

@@ -57,13 +57,19 @@ describe("prepareBookCover", () => {
 });
 
 function createBook(overrides: Partial<Book> = {}): Book {
+  const format = overrides.format ?? "epub";
+  const libraryPath = overrides.libraryPath ?? "D:\\library\\cover.epub";
+  const fileHash = overrides.fileHash ?? "cover-hash";
   return {
     id: "cover-book",
     title: "Cover Book",
-    format: "epub",
+    format,
     sourcePath: "D:\\books\\cover.epub",
-    libraryPath: "D:\\library\\cover.epub",
-    fileHash: "cover-hash",
+    libraryPath,
+    fileHash,
+    readerFormat: format === "mobi" || format === "azw3" ? "epub" : format,
+    readerPath: overrides.readerPath ?? libraryPath,
+    readerHash: overrides.readerHash ?? fileHash,
     coverStatus: "pending",
     createdAt: "2026-06-29T00:00:00.000Z",
     updatedAt: "2026-06-29T00:00:00.000Z",

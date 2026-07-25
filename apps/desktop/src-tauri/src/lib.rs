@@ -2,6 +2,10 @@ mod backup;
 mod batch_import;
 mod db;
 mod file_open;
+mod fonts;
+mod library_search;
+mod mobi;
+mod reading_history;
 mod updater;
 
 use tauri::{Emitter, Manager};
@@ -135,9 +139,13 @@ fn list_books(app: tauri::AppHandle) -> Result<Vec<db::Book>, String> {
 }
 
 #[tauri::command]
-fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
-    batch_import::import_single(&app, std::path::Path::new(&path))
-        .map_err(|error| error.to_string())
+async fn import_book(app: tauri::AppHandle, path: String) -> Result<db::ImportBookResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        batch_import::import_single(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[import-task-failed] {error}"))?
 }
 
 #[tauri::command]
@@ -168,6 +176,99 @@ async fn import_batch(
     })
     .await
     .map_err(|error| format!("[batch-import-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn get_library_search_status(
+    app: tauri::AppHandle,
+) -> Result<library_search::LibrarySearchStatus, String> {
+    library_search::get_status(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn rebuild_library_search_index(
+    app: tauri::AppHandle,
+    operation_id: String,
+) -> Result<library_search::LibrarySearchRebuildResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let operations = app.state::<backup::DataOperationRegistry>();
+        library_search::rebuild(&app, &operations, &operation_id).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[library-search-index-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn search_library(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<library_search::LibrarySearchResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        library_search::search(&app, &query).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[library-search-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn get_reading_history_preferences(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::get_preferences(&app)
+}
+
+#[tauri::command]
+fn save_reading_history_preferences(
+    app: tauri::AppHandle,
+    enabled: bool,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::save_preferences(&app, enabled)
+}
+
+#[tauri::command]
+fn start_reading_session(
+    app: tauri::AppHandle,
+    book_id: String,
+) -> Result<Option<reading_history::ReadingSession>, reading_history::ReadingHistoryError> {
+    reading_history::start_session(&app, &book_id)
+}
+
+#[tauri::command]
+fn heartbeat_reading_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<reading_history::ReadingSession, reading_history::ReadingHistoryError> {
+    reading_history::heartbeat_session(&app, &session_id)
+}
+
+#[tauri::command]
+fn end_reading_session(
+    app: tauri::AppHandle,
+    session_id: String,
+) -> Result<reading_history::ReadingSession, reading_history::ReadingHistoryError> {
+    reading_history::end_session(&app, &session_id)
+}
+
+#[tauri::command]
+fn get_reading_statistics(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingStatistics, reading_history::ReadingHistoryError> {
+    reading_history::get_statistics(&app)
+}
+
+#[tauri::command]
+fn clear_reading_history(
+    app: tauri::AppHandle,
+) -> Result<reading_history::ReadingHistoryPreferences, reading_history::ReadingHistoryError> {
+    reading_history::clear_history(&app)
+}
+
+#[tauri::command]
+fn export_reading_history(
+    app: tauri::AppHandle,
+    output_path: String,
+) -> Result<reading_history::ReadingHistoryExportResult, reading_history::ReadingHistoryError> {
+    reading_history::export_history(&app, std::path::Path::new(&output_path))
 }
 
 #[tauri::command]
@@ -244,6 +345,51 @@ fn save_reader_theme(
     theme: db::ReaderTheme,
 ) -> Result<db::ReaderTheme, String> {
     db::save_reader_theme(&app, theme).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn list_custom_fonts(app: tauri::AppHandle) -> Result<Vec<fonts::CustomFont>, String> {
+    fonts::list_custom_fonts(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn import_custom_font(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<fonts::ImportCustomFontResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fonts::import_custom_font(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[font-import-task-failed] {error}"))?
+}
+
+#[tauri::command]
+async fn inspect_custom_font(
+    app: tauri::AppHandle,
+    path: String,
+) -> Result<fonts::CustomFontPreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fonts::inspect_custom_font(&app, std::path::Path::new(&path))
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("[font-inspection-task-failed] {error}"))?
+}
+
+#[tauri::command]
+fn set_custom_font_enabled(
+    app: tauri::AppHandle,
+    font_id: String,
+    enabled: bool,
+) -> Result<fonts::CustomFont, String> {
+    fonts::set_custom_font_enabled(&app, &font_id, enabled).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+fn remove_custom_font(app: tauri::AppHandle, font_id: String) -> Result<(), String> {
+    fonts::remove_custom_font(&app, &font_id).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -424,6 +570,17 @@ pub fn run() {
             import_book,
             scan_import_paths,
             import_batch,
+            get_library_search_status,
+            rebuild_library_search_index,
+            search_library,
+            get_reading_history_preferences,
+            save_reading_history_preferences,
+            start_reading_session,
+            heartbeat_reading_session,
+            end_reading_session,
+            get_reading_statistics,
+            clear_reading_history,
+            export_reading_history,
             mark_book_opened,
             remove_book,
             get_book_details,
@@ -435,6 +592,11 @@ pub fn run() {
             open_txt_book,
             get_reader_theme,
             save_reader_theme,
+            list_custom_fonts,
+            inspect_custom_font,
+            import_custom_font,
+            set_custom_font_enabled,
+            remove_custom_font,
             get_reader_layout_preferences,
             save_reader_layout_preferences,
             get_reader_experience_preferences,

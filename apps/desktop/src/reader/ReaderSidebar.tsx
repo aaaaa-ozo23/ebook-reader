@@ -25,6 +25,7 @@ import {
   getLocatorLabel,
 } from "./readerAnnotationPresentation";
 import { ReaderIcon, type ReaderIconName } from "./ReaderIcons";
+import { findSearchTextMatches } from "./searchText";
 
 export type ReaderSidebarTab = "contents" | "bookmarks" | "notes" | "search";
 
@@ -52,7 +53,6 @@ interface ReaderSidebarProps {
   onBackToLibrary: () => void;
   onClose: () => void;
   onCreateBookmark: () => void;
-  onCreateNote: () => void;
   onDeleteAnnotation: (annotationId: string) => void;
   onDeleteBookmark: (bookmarkId: string) => void;
   onJumpToAnnotation: (annotation: Annotation) => void;
@@ -98,7 +98,6 @@ function ReaderSidebar({
   onBackToLibrary,
   onClose,
   onCreateBookmark,
-  onCreateNote,
   onDeleteAnnotation,
   onDeleteBookmark,
   onJumpToAnnotation,
@@ -354,7 +353,13 @@ function ReaderSidebar({
             </p>
           ) : null}
           {bookmarks.length === 0 ? (
-            <p className="reader-sidebar__empty">No bookmarks yet.</p>
+            <div className="reader-sidebar__empty reader-sidebar__empty--illustrated">
+              <ReaderIcon name="bookmark" />
+              <strong>No bookmarks yet.</strong>
+              <span>
+                Add bookmarks while reading to quickly revisit important parts.
+              </span>
+            </div>
           ) : (
             <div className="reader-bookmarks" role="list">
               {bookmarks.map((bookmark) => (
@@ -392,17 +397,7 @@ function ReaderSidebar({
       ) : null}
       {activeTab === "notes" ? (
         <section className="reader-sidebar-panel" aria-label="Notes">
-          <div className="reader-sidebar-panel__header">
-            <h2 className="sr-only">Notes</h2>
-            <button
-              type="button"
-              className="reader-sidebar__action"
-              onClick={onCreateNote}
-            >
-              <ReaderIcon name="plus" />
-              Add note
-            </button>
-          </div>
+          <h2 className="sr-only">Notes</h2>
           {annotationError !== null ? (
             <p className="reader-sidebar__error" role="alert">
               {annotationError}
@@ -502,7 +497,7 @@ function ReaderSidebar({
                   onClick={() => onJumpToSearchResult(hit)}
                 >
                   <small>{getLocatorLabel(hit.locator)}</small>
-                  <span>{highlightSearchExcerpt(hit.excerpt, searchQuery)}</span>
+                  <span>{highlightSearchExcerpt(hit, searchQuery)}</span>
                   <ReaderIcon name="external" />
                 </button>
               ))}
@@ -521,18 +516,19 @@ function getSidebarIcon(tab: ReaderSidebarTab): ReaderIconName {
   return "search";
 }
 
-function highlightSearchExcerpt(excerpt: string, query: string): ReactNode {
-  const normalizedQuery = query.trim();
-  if (normalizedQuery === "") return excerpt;
-  const index = excerpt
-    .toLocaleLowerCase()
-    .indexOf(normalizedQuery.toLocaleLowerCase());
-  if (index < 0) return excerpt;
+function highlightSearchExcerpt(hit: SearchHit<Locator>, query: string): ReactNode {
+  const explicitStart = hit.excerptMatchStart;
+  const explicitEnd = hit.excerptMatchEnd;
+  const fallback = findSearchTextMatches(hit.excerpt, query, 1)[0];
+  const start = explicitStart ?? fallback?.start;
+  const end = explicitEnd ?? fallback?.end;
+
+  if (start === undefined || end === undefined || end <= start) return hit.excerpt;
   return (
     <>
-      {excerpt.slice(0, index)}
-      <mark>{excerpt.slice(index, index + normalizedQuery.length)}</mark>
-      {excerpt.slice(index + normalizedQuery.length)}
+      {hit.excerpt.slice(0, start)}
+      <mark>{hit.excerpt.slice(start, end)}</mark>
+      {hit.excerpt.slice(end)}
     </>
   );
 }

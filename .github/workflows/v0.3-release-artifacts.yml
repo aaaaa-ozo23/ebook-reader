@@ -1,4 +1,4 @@
-name: v0.2 RC draft artifacts
+name: v0.3 release draft artifacts
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       version:
         description: RC version without v prefix
         required: true
-        default: 0.2.0
+        default: 0.3.0
 
 permissions:
   contents: read

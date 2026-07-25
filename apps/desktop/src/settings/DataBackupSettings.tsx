@@ -17,6 +17,8 @@ import {
   restoreBackup,
 } from "../tauri/backup";
 import { UpdatesSettings } from "./UpdatesSettings";
+import { ReadingFontsSettings } from "./ReadingFontsSettings";
+import { ReadingHistorySettings } from "./ReadingHistorySettings";
 
 import "./SettingsCenter.css";
 
@@ -29,11 +31,15 @@ const DEFAULT_OPTIONS: BackupOptions = {
 export function SettingsCenter({
   onClose,
   onLibraryChanged = () => undefined,
+  initialSection = "data",
 }: {
   onClose: () => void;
   onLibraryChanged?: () => void;
+  initialSection?: "data" | "fonts" | "history" | "updates";
 }) {
-  const [section, setSection] = useState<"data" | "updates">("data");
+  const [section, setSection] = useState<"data" | "fonts" | "history" | "updates">(
+    initialSection,
+  );
   const [options, setOptions] = useState(DEFAULT_OPTIONS);
   const [operationId, setOperationId] = useState<string | null>(null);
   const [progress, setProgress] = useState<OperationProgress | null>(null);
@@ -193,7 +199,10 @@ export function SettingsCenter({
     options.includeData || options.includeCovers || options.includeBooks;
 
   return (
-    <main className="settings-shell" aria-labelledby={titleId}>
+    <main
+      className={`settings-shell settings-shell--${section}`}
+      aria-labelledby={titleId}
+    >
       <aside className="settings-sidebar" aria-label="Settings navigation">
         <div className="settings-sidebar__mark" aria-hidden="true">
           ER
@@ -224,6 +233,24 @@ export function SettingsCenter({
           <button
             type="button"
             className="settings-nav-item"
+            aria-current={section === "fonts" ? "page" : undefined}
+            onClick={() => setSection("fonts")}
+          >
+            <FontIcon />
+            <span>Reading &amp; Fonts</span>
+          </button>
+          <button
+            type="button"
+            className="settings-nav-item"
+            aria-current={section === "history" ? "page" : undefined}
+            onClick={() => setSection("history")}
+          >
+            <HistoryIcon />
+            <span>History &amp; Privacy</span>
+          </button>
+          <button
+            type="button"
+            className="settings-nav-item"
             aria-current={section === "updates" ? "page" : undefined}
             onClick={() => setSection("updates")}
           >
@@ -234,14 +261,71 @@ export function SettingsCenter({
       </aside>
 
       <section className="settings-content">
+        {section === "fonts" || section === "history" ? (
+          <header className="settings-mobile-header">
+            <button
+              type="button"
+              aria-label="Back to settings"
+              onClick={() => setSection("data")}
+            >
+              <BackIcon />
+            </button>
+            <strong>
+              {section === "fonts" ? "Reading & Fonts" : "History & Privacy"}
+            </strong>
+            <button type="button" aria-label="Close settings" onClick={onClose}>
+              <CloseIcon />
+            </button>
+          </header>
+        ) : null}
         <header className="settings-content__header">
           <div>
-            <p>{section === "data" ? "Local-first controls" : "Release track"}</p>
-            <h1 id={titleId}>{section === "data" ? "Data & Backup" : "Updates"}</h1>
-            <span>
+            <p>
               {section === "data"
-                ? "Create a portable copy of your library data whenever you choose."
-                : "You decide when the app checks, downloads, and installs."}
+                ? "Local-first controls"
+                : section === "fonts"
+                  ? "Reading preferences"
+                  : section === "history"
+                    ? "Private by design"
+                    : "Release track"}
+            </p>
+            <h1 id={titleId}>
+              {section === "data" ? (
+                "Data & Backup"
+              ) : section === "fonts" ? (
+                <>
+                  <span className="settings-fonts-title--desktop">
+                    Reading &amp; Fonts
+                  </span>
+                  <span className="settings-fonts-title--mobile">
+                    Your type, locally.
+                  </span>
+                </>
+              ) : section === "history" ? (
+                "History & Privacy"
+              ) : (
+                "Updates"
+              )}
+            </h1>
+            <span>
+              {section === "data" ? (
+                "Create a portable copy of your library data whenever you choose."
+              ) : section === "fonts" ? (
+                <>
+                  <span className="settings-fonts-copy--desktop">
+                    Bring your own typeface to TXT and EPUB without installing it into
+                    Windows. PDF continues to use the fonts embedded in each document.
+                  </span>
+                  <span className="settings-fonts-copy--mobile">
+                    Custom fonts apply to TXT and EPUB. PDF keeps its embedded
+                    typefaces.
+                  </span>
+                </>
+              ) : section === "history" ? (
+                "Reading history is stored only on this device. It is never uploaded, compared or used for recommendations."
+              ) : (
+                "You decide when the app checks, downloads, and installs."
+              )}
             </span>
           </div>
           <button
@@ -256,6 +340,10 @@ export function SettingsCenter({
 
         {section === "updates" ? (
           <UpdatesSettings />
+        ) : section === "history" ? (
+          <ReadingHistorySettings />
+        ) : section === "fonts" ? (
+          <ReadingFontsSettings />
         ) : (
           <>
             <div className="backup-notice" role="note">
@@ -304,7 +392,7 @@ export function SettingsCenter({
                 />
                 <BackupOption
                   checked={options.includeBooks}
-                  description="Original EPUB, TXT, and PDF library copies. This can make the backup much larger."
+                  description="Original EPUB, TXT, PDF, MOBI, and AZW3 library copies. MOBI/AZW3 backups also include their verified reader EPUB."
                   label="Original book files"
                   onChange={(checked) =>
                     setOptions((current) => ({ ...current, includeBooks: checked }))
@@ -624,10 +712,22 @@ const DatabaseIcon = () => (
     <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
   </SvgIcon>
 );
+const FontIcon = () => (
+  <SvgIcon>
+    <path d="M5 19 12 4l7 15M8 14h8" />
+  </SvgIcon>
+);
 const UpdateIcon = () => (
   <SvgIcon>
     <path d="M20 7v5h-5" />
     <path d="M19 12a7 7 0 1 0-2 5" />
+  </SvgIcon>
+);
+const HistoryIcon = () => (
+  <SvgIcon>
+    <path d="M12 7v5l3 2" />
+    <circle cx="12" cy="12" r="8" />
+    <path d="M4.5 5.5 3 7M19.5 5.5 21 7" />
   </SvgIcon>
 );
 const ShieldIcon = () => (

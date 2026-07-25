@@ -205,7 +205,7 @@ export async function pickBookFile(): Promise<string | null> {
     filters: [
       {
         name: "Books",
-        extensions: ["epub", "txt", "pdf"],
+        extensions: ["epub", "txt", "pdf", "mobi", "azw3"],
       },
     ],
   });
@@ -236,8 +236,14 @@ function getFallbackBooks(): Book[] {
 }
 
 function normalizeBookState(book: Book): Book {
+  const readerFormat =
+    book.readerFormat ??
+    (book.format === "mobi" || book.format === "azw3" ? "epub" : book.format);
   return {
     ...book,
+    readerFormat,
+    readerPath: book.readerPath ?? book.libraryPath,
+    readerHash: book.readerHash ?? book.fileHash,
     availability: book.availability ?? "available",
     coverStatus:
       book.coverStatus ??
