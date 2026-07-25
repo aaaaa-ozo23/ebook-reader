@@ -1,10 +1,11 @@
 # Stage 14.6 reading history and insights concept review set
 
-Status: `awaiting_user_approval`
+Status: `approved_for_implementation` (all four boards approved on 2026-07-22)
 
 These four boards extend the approved Stage 13/14 warm-paper, deep-ink, teal and amber system.
-They are design specifications only: no `0009_reading_history.sql`, production React/CSS or
-Tauri session command is included on this branch yet.
+They are now the production specifications for `0009_reading_history.sql`, the Tauri session
+contract and the desktop/375px React surfaces. Visible copy, hierarchy, metrics and privacy
+boundaries must not be reinterpreted during implementation.
 
 | Board | File | Review scope |
 | --- | --- | --- |
@@ -16,7 +17,7 @@ Tauri session command is included on this branch yet.
 The editable static source is `index.html`; use `?board=insights`, `privacy`, `states`, or
 `mobile`. No bitmap assets or generated illustrations are required.
 
-## Interaction notes proposed for approval
+## Approved interaction contract
 
 - History is enabled by default and stays completely local. The UI does not imply sync,
   telemetry, social comparison, streak pressure or productivity scoring.
@@ -32,3 +33,6 @@ The editable static source is `index.html`; use `?board=insights`, `privacy`, `s
 - Desktop uses the existing rail/settings center. At 375px both destinations use the existing
   full-screen sheet language, 44px targets, sticky actions, focus restoration, Escape/back,
   interruptible drag and reduced-motion crossfade.
+
+Production fidelity and runtime evidence are recorded in
+[`../stage14-reading-history-fidelity.md`](../stage14-reading-history-fidelity.md).

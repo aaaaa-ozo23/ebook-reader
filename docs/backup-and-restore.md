@@ -29,7 +29,8 @@ Every archive contains:
 - `manifest.json`: format identifier, format version, app/schema versions, UTC export time,
   selected options, record counts, and a path/size/SHA-256 descriptor for every payload.
 - `data.json`: portable book identity and metadata, reader settings/layout/theme, progress,
-  bookmarks, annotations, and annotation deletion tombstones.
+  bookmarks, annotations and their deletion tombstones, reading-history sessions and preferences,
+  and the reading-history clear timestamp.
 - `covers/`: optional managed cover payloads, addressed by the book file hash.
 - `fonts/`: app-local static TTF/OTF payloads, addressed by SHA-256. Restore deduplicates them by
   hash and remaps the selected `fontId` to the local registration.
@@ -74,6 +75,10 @@ Cancellation stops new work and performs the same cleanup.
 - Annotation `deletedAt` tombstones participate in that comparison so deleted notes do not
   reappear.
 - Settings match by key with the same timestamp rule; `lastOpenedAt` keeps the newer value.
+- Reading sessions match by UUID. A strictly newer `updatedAt` wins and equal timestamps keep the
+  local session. Restored active sessions are closed instead of being resumed on another machine.
+- The newer reading-history clear timestamp wins. Sessions at or before that timestamp are not
+  restored, preventing an older backup from reviving history the user already cleared.
 - Custom fonts match by file hash. The newer enabled/disabled state wins, and a selected font ID is
   mapped to the local registration; an unavailable font payload is skipped rather than leaving a
   broken selection.
