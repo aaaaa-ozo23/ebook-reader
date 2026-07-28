@@ -1,4 +1,4 @@
-name: v0.3 release draft artifacts
+name: v0.4 cross-platform RC
 
 on:
   workflow_dispatch:
@@ -6,14 +6,118 @@ on:
       version:
         description: RC version without v prefix
         required: true
-        default: 0.3.0
+        default: 0.4.0
+      build_rc:
+        description: Build signed RC packages after the quality matrix
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
+concurrency:
+  group: v0.4-cross-platform-rc-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  windows-artifacts:
-    runs-on: windows-latest
+  quality:
+    name: Quality (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x86_64
+            runner: windows-2025
+            os: windows
+            arch: x86_64
+          - name: darwin-x86_64
+            runner: macos-15-intel
+            os: macos
+            arch: x86_64
+          - name: darwin-aarch64
+            runner: macos-15
+            os: macos
+            arch: arm64
+          - name: linux-x86_64
+            runner: ubuntu-22.04
+            os: linux
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assert runner architecture
+        if: matrix.os != 'windows'
+        shell: bash
+        run: test "$(uname -m)" = "${{ matrix.arch }}"
+      - name: Install Linux build dependencies
+        if: matrix.os == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl file gpg libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev \
+            unzip xvfb
+      - name: Install macOS build dependencies
+        if: matrix.os == 'macos'
+        run: brew install gnupg
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install macOS Rust targets
+        if: matrix.os == 'macos'
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build and verify macOS sidecar
+        if: matrix.os == 'macos'
+        run: |
+          scripts/deps/build-libmobi-macos.sh
+          scripts/deps/verify-libmobi-unix.sh \
+            apps/desktop/src-tauri/binaries/mobitool-universal-apple-darwin
+      - name: Build and verify Linux sidecar
+        if: matrix.os == 'linux'
+        run: |
+          scripts/deps/build-libmobi-linux.sh
+          scripts/deps/verify-libmobi-unix.sh \
+            apps/desktop/src-tauri/binaries/mobitool-x86_64-unknown-linux-gnu
+      - name: Verify Windows sidecar
+        if: matrix.os == 'windows'
+        run: pnpm.cmd deps:verify-libmobi
+      - name: Shared TypeScript quality gate
+        run: pnpm check
+      - name: Rust format gate
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+      - name: Rust test gate
+        run: cargo test --locked --manifest-path apps/desktop/src-tauri/Cargo.toml
+      - name: License and secret audit
+        run: |
+          node scripts/verify-stage15.mjs
+          node scripts/release/audit-licenses.mjs
+          node scripts/release/verify-release-security.mjs
+      - name: Install and run Playwright WebKit
+        if: matrix.os == 'macos'
+        run: |
+          pnpm --filter @reader/desktop exec playwright install webkit
+          pnpm --filter @reader/desktop exec playwright test \
+            --config playwright.webkit.config.ts
+      - name: Install and run Linux Chromium UI gate
+        if: matrix.os == 'linux'
+        run: |
+          pnpm --filter @reader/desktop exec playwright install chromium
+          xvfb-run -a pnpm --filter @reader/desktop test:e2e --project=chromium
+
+  windows-package:
+    if: inputs.build_rc
+    needs: quality
+    runs-on: windows-2025
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -24,20 +128,204 @@ jobs:
           node-version: 26
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install locked dependencies
-        run: pnpm.cmd install --frozen-lockfile
-      - name: Build verified draft artifacts
+      - run: pnpm.cmd install --frozen-lockfile
+      - name: Build Windows RC
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: >-
           powershell -ExecutionPolicy Bypass -File scripts/release/build-release.ps1
           -Version "${{ inputs.version }}"
-          -OutputDirectory "release-artifacts/v${{ inputs.version }}-rc"
-      - name: Upload workflow artifact only
-        uses: actions/upload-artifact@v4
+          -OutputDirectory "release-artifacts/v${{ inputs.version }}-rc/windows"
+      - name: Native startup smoke
+        run: powershell -ExecutionPolicy Bypass -File scripts/ci/smoke-windows-binary.ps1
+      - uses: actions/upload-artifact@v4
         with:
-          name: ebook-reader-v${{ inputs.version }}-rc-draft
-          path: release-artifacts/v${{ inputs.version }}-rc/
+          name: v${{ inputs.version }}-windows-x86_64
+          path: release-artifacts/v${{ inputs.version }}-rc/windows/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
+
+  macos-package:
+    if: inputs.build_rc
+    needs: quality
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - run: brew install gnupg
+      - run: pnpm install --frozen-lockfile
+      - name: Import temporary Apple credentials
+        run: scripts/ci/import-apple-certificate.sh
+      - name: Build signed and notarized Universal RC
+        run: scripts/release/build-macos.sh
+      - name: Scan macOS bundle for secrets and local paths
+        run: >-
+          node scripts/release/scan-artifacts.mjs
+          apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+      - name: Generate macOS artifact SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: apps/desktop/src-tauri/target/universal-apple-darwin/release/bundle
+          format: cyclonedx-json
+          output-file: sbom-macos-artifacts.cdx.json
+          upload-artifact: false
+          syft-version: v1.44.0
+      - name: Archive bundle without losing executable modes
+        run: |
+          tar -czf v${{ inputs.version }}-macos-universal.tgz \
+            -C apps/desktop/src-tauri/target/universal-apple-darwin/release bundle
+      - name: Remove temporary Apple credentials
+        if: always()
+        run: scripts/ci/remove-apple-certificate.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v${{ inputs.version }}-macos-universal
+          path: |
+            v${{ inputs.version }}-macos-universal.tgz
+            sbom-macos-artifacts.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  macos-acceptance:
+    if: inputs.build_rc
+    needs: macos-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            arch: x86_64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: v${{ inputs.version }}-macos-universal
+          path: rc-download
+      - name: Extract and verify the same Universal bundle
+        run: |
+          mkdir rc-bundle
+          tar -xzf rc-download/v${{ inputs.version }}-macos-universal.tgz \
+            -C rc-bundle
+          scripts/release/verify-macos-bundle.sh rc-bundle/bundle
+          scripts/ci/smoke-macos-app.sh \
+            "rc-bundle/bundle/macos/Ebook Reader.app" "${{ matrix.arch }}"
+
+  linux-package:
+    if: inputs.build_rc
+    needs: quality
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl file gpg libayatana-appindicator3-dev \
+            librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev \
+            unzip xvfb
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pnpm install --frozen-lockfile
+      - name: Build AppImage and deb RC
+        run: scripts/release/build-linux.sh
+      - name: Scan Linux bundles for secrets and local paths
+        run: >-
+          node scripts/release/scan-artifacts.mjs
+          apps/desktop/src-tauri/target/release/bundle
+      - name: Native package smoke
+        run: |
+          scripts/ci/smoke-linux-packages.sh \
+            apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage \
+            apps/desktop/src-tauri/target/release/bundle/deb/*.deb
+      - name: Generate Linux artifact SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: apps/desktop/src-tauri/target/release/bundle
+          format: cyclonedx-json
+          output-file: sbom-linux-artifacts.cdx.json
+          upload-artifact: false
+          syft-version: v1.44.0
+      - name: Archive bundle without losing executable modes
+        run: >-
+          tar -czf v${{ inputs.version }}-linux-x86_64.tgz
+          -C apps/desktop/src-tauri/target/release bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v${{ inputs.version }}-linux-x86_64
+          path: |
+            v${{ inputs.version }}-linux-x86_64.tgz
+            sbom-linux-artifacts.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  linux-acceptance:
+    if: inputs.build_rc
+    needs: linux-package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-24.04
+            runner: ubuntu-24.04
+            container: ubuntu:24.04
+          - name: debian-12
+            runner: ubuntu-24.04
+            container: debian:12
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 45
+    steps:
+      - name: Install acceptance dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            ca-certificates file libayatana-appindicator3-1 libgtk-3-0 \
+            libwebkit2gtk-4.1-0 sudo xdg-utils xvfb
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: v${{ inputs.version }}-linux-x86_64
+          path: rc-download
+      - name: AppImage/deb install, upgrade, and removal acceptance
+        run: |
+          mkdir rc-bundle
+          tar -xzf rc-download/v${{ inputs.version }}-linux-x86_64.tgz \
+            -C rc-bundle
+          scripts/release/verify-linux-bundles.sh rc-bundle/bundle
+          scripts/ci/smoke-linux-packages.sh \
+            rc-bundle/bundle/appimage/*.AppImage \
+            rc-bundle/bundle/deb/*.deb

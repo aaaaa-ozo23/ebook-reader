@@ -85,7 +85,7 @@ for (const path of [
   );
 }
 
-const workflow = readText(".github/workflows/v0.4-cross-platform-rc.yml");
+const workflow = readText(".github/workflows/v0.3-release-artifacts.yml");
 requireCondition(
   /^\s*workflow_dispatch:\s*$/m.test(workflow),
   "Stage 15 workflow must be manually dispatched.",
