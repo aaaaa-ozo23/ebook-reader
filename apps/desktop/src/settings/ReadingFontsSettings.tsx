@@ -101,6 +101,7 @@ export function ReadingFontsSettings() {
       setPendingFont({ path, preview });
     } catch (nextError) {
       setError(errorMessage(nextError));
+      window.setTimeout(() => importButtonRef.current?.focus(), 0);
     }
   }, []);
 

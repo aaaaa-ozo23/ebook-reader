@@ -45,12 +45,12 @@ export function registerEpubImageBridge(
     activateImageTarget(event, onActivate);
   };
 
-  document.addEventListener("click", handleClick);
-  document.addEventListener("keydown", handleKeyDown);
+  document.addEventListener("click", handleClick, true);
+  document.addEventListener("keydown", handleKeyDown, true);
 
   return () => {
-    document.removeEventListener("click", handleClick);
-    document.removeEventListener("keydown", handleKeyDown);
+    document.removeEventListener("click", handleClick, true);
+    document.removeEventListener("keydown", handleKeyDown, true);
 
     for (const [candidate, attributes] of originalAttributes) {
       restoreAttribute(candidate, "aria-haspopup", attributes.ariaHasPopup);
