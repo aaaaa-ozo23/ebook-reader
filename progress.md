@@ -2453,3 +2453,5 @@
 - **15.6 覆盖层验证：** `pnpm.cmd check` 通过 core 9、desktop 219 与 production build；Cargo fmt、Rust 87/87、Stage 15 verifier、diff check 通过；本地 Playwright WebKit 与 Chromium 的 EPUB/MOBI/AZW3 完整用例均为 3/3。WebKit 的 sandbox 内选择合成不再作为浏览器模拟门禁，Chromium 仍完整覆盖选择/标注，原生 WKWebView 留待签名 macOS 验收。
 - **15.6 第八轮：** Actions run `30340391198` 四平台 core 9、desktop 219 全过；Windows、Linux、macOS ARM 质量作业全绿，macOS Intel WebKit 23/24。图片查看器三格式已全部修复，唯一失败是列表切换 View Transition 与 hover 前后高度测量的 runner 时序竞争。
 - **15.6 第八轮修复：** 默认封面标题 popover 用例改用键盘 Enter 切换列表并等待目标 class；该产品路径按现有契约不启动装饰性 View Transition，因此几何断言只测 popover 是否造成布局位移，不再混入异步跨文档 transition。
+- **15.6 第九轮：** Actions run `30342561496` 的 Windows 质量作业全绿。macOS Intel WebKit 23/24 与 Linux Chromium 22/24 均证明图片覆盖层修复稳定；剩余失败为约 `1.5e-5` CSS px 的精确浮点比较、MOBI 滑杆倒数第二项的取整边界，以及 macOS ARM 的 GPG agent socket 偶发超限。
+- **15.6 第九轮修复：** DOMRect 高度改为三位小数近似比较；滑杆直接取倒数第二 location 的归一中心；macOS GPG home 固定为 `/tmp/ebook-reader-gpg.*` 而不信任 runner `TMPDIR`，并继续使用退出 trap 清理。

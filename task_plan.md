@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.6：跨平台 CI，in_progress。第八轮已证明四平台共享测试 9+219 全绿，图片覆盖层令 macOS WebKit 回到 23/24；当前消除 macOS Intel 唯一的书架视图切换动画测量竞争后重跑。
+大阶段 15.6：跨平台 CI，in_progress。第九轮确认父文档图片覆盖层稳定；当前修复跨引擎子像素测量精度、EPUB 倒数第二位置的边界取值，以及 macOS ARM 偶发的 GnuPG socket 路径后重跑。
 
 ## 分支策略
 
@@ -579,7 +579,7 @@
 | 15.3 macOS 打包 | `codex/stage15-macos-packaging` | implementation_complete，等待 Apple credentials/runner | macOS config 经 Tauri `--no-bundle` 解析；4 个 shell script `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
 | 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 | 15.5 Linux 打包 | `codex/stage15-linux-packaging` | implementation_complete，等待 Ubuntu 22.04 runner | AppImage/deb overlay 经 Tauri 分 flavor 编译；shell `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
-| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | in_progress，macOS Intel 视图切换测量修复后重跑 | Actions run `30340391198`；四平台 core 9 + desktop 219；Windows/Linux/macOS ARM 全绿，macOS Intel WebKit 23/24 |
+| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | in_progress，第九轮三项确定性修复后重跑 | Actions run `30342561496`；Windows 全绿；macOS Intel WebKit 23/24；Linux Chromium 22/24；macOS ARM 在 GPG import 偶发失败 |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 

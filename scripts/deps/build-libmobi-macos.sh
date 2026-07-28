@@ -49,7 +49,9 @@ if [[ "$actual_source_sha256" != "$source_sha256" ]]; then
   exit 1
 fi
 
-gnupg_home="$(mktemp -d "${TMPDIR:-/tmp}/ebook-reader-gpg.XXXXXX")"
+# GitHub-hosted macOS runners may point TMPDIR back into the long workspace
+# path. GnuPG agent sockets then intermittently exceed the Unix path limit.
+gnupg_home="$(mktemp -d "/tmp/ebook-reader-gpg.XXXXXX")"
 build_root="$(mktemp -d "$workspace/build.XXXXXX")"
 cleanup() {
   rm -rf "$gnupg_home" "$build_root"
