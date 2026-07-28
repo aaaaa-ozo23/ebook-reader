@@ -923,3 +923,4 @@
 - 首轮 Actions run `30325456546` 证明 Linux libmobi 构建与共享 TypeScript 门禁在 Ubuntu 22.04 可运行；失败来自 Rust test-only `converter()` 仍固定为 Windows sidecar，而不是 Linux ELF 或运行时 resolver。
 - macOS Intel/ARM 首轮都在同一 GPG 步骤退出 2，日志只有 shell 退出码，因为公钥导入 stderr 被完全丢弃且指纹 grep 没有失败说明；跨平台供应链脚本必须保留安全诊断，不能以“安静”牺牲可审计性。
 - macOS hosted runner 的工作区绝对路径足以让 GnuPG 2.5 agent socket 超过 Unix socket 路径上限；即使 key 显示 imported，命令仍会因 IPC connect failed 返回非零。临时 keyring 应放在系统短 temp path，构建缓存仍可留在 workspace。
+- Xcode 16.4 的 `lipo -verify_arch` 要求输入文件位于命令前部；把文件放在架构列表末尾会被解析为额外 architecture flag。Universal 校验必须使用 `lipo "$file" -verify_arch x86_64 arm64`。
