@@ -2421,3 +2421,9 @@
 - **15.2 当前验证：** Windows 上 Rust 87/87、desktop 34 files / 214 tests、lint/build 与 Cargo fmt 通过；macOS runner 的真实构建、WKWebView 五格式和双架构运行仍须在跨平台门禁执行。
 - **15.2 最终本地门禁：** `pnpm.cmd check` 通过（core 9、desktop 35 files / 217 tests）；Cargo fmt、Rust 87/87、macOS 构建脚本 `bash -n` 与 `git diff --check` 通过。阶段状态为 implementation_complete，不能替代后续 macOS runner 证据。
 - **15.2 过程错误：** 一次只读组合 `rg` 命令因 PowerShell 双引号未闭合而退出；一次把完整门禁放入 1 秒工具超时而被提前终止。两次均未修改源码，随后使用正确引用与分项超时重跑。
+- **15.3 配置：** 新增 macOS overlay，目标仅为 Universal app/DMG，启用 updater artifact、macOS 12.0 minimum target 与 hardened runtime，五格式关联继承基础配置。
+- **15.3 凭据边界：** CI 证书脚本从 secrets 导入临时 Developer ID keychain、mask identity，并保存/恢复 runner 默认 keychain；清理脚本删除解码证书和所有临时状态。
+- **15.3 失败即停止：** macOS build 缺少 Developer ID、App Store Connect API 或 updater key 即退出；验收要求 codesign、Gatekeeper、app/DMG stapling、主程序/sidecar 双 slice、updater archive/signature 与无用户数据。
+- **15.3 当前边界：** Windows 只能完成 JSON、shell syntax 和共享代码门禁；签名、公证、stapling、Gatekeeper、Universal 构建及双架构安装证据必须由带 Apple secrets 的 macOS runner 提供。
+- **15.3 本地门禁：** macOS overlay 已由 Tauri CLI `build --no-bundle --config` 完整解析并完成 release 编译；`pnpm.cmd check`（core 9、desktop 217）、Cargo fmt、Rust 87/87、四个 shell script `bash -n` 与 diff check 通过。
+- **15.3 工具错误：** 首次共享 check 只发现 `package.json` Prettier 顺序差异；使用仓库 Prettier 修正后全量重跑通过。该轮未读取任何 Apple/updater secret。

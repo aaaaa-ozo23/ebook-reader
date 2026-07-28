@@ -53,6 +53,12 @@ including EPUB iframe navigation, PDF worker startup, custom fonts, search, prog
 backup/restore, focus, scrolling, Command shortcuts, and reduced motion. Script or Windows
 test success is not a substitute for this WKWebView runtime gate.
 
+The macOS packaging overlay is `apps/desktop/src-tauri/tauri.macos.conf.json`. It replaces
+the Windows bundle targets with `app` and `dmg`, enables updater artifacts, fixes the
+minimum system to 12.0, and requires hardened runtime. Missing signing, notarization,
+stapling, Gatekeeper, updater signature, or Universal-architecture evidence is a hard
+failure rather than a warning.
+
 ## Data safety
 
 Installer and updater acceptance must use an isolated identifier and data root. Tests
