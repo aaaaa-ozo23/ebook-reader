@@ -49,7 +49,7 @@ if [[ "$actual_source_sha256" != "$source_sha256" ]]; then
   exit 1
 fi
 
-gnupg_home="$(mktemp -d "$workspace/gnupg.XXXXXX")"
+gnupg_home="$(mktemp -d "${TMPDIR:-/tmp}/ebook-reader-gpg.XXXXXX")"
 build_root="$(mktemp -d "$workspace/build.XXXXXX")"
 cleanup() {
   rm -rf "$gnupg_home" "$build_root"
