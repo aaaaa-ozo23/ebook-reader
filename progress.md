@@ -2457,3 +2457,4 @@
 - **15.6 第九轮修复：** DOMRect 高度改为三位小数近似比较；滑杆直接取倒数第二 location 的归一中心；macOS GPG home 固定为 `/tmp/ebook-reader-gpg.*` 而不信任 runner `TMPDIR`，并继续使用退出 trap 清理。
 - **15.6 第十轮：** Actions run `30344095387` 的 Windows、macOS Intel 与 macOS ARM 质量作业全绿，证明 GPG 短路径、WebKit 图片覆盖层、焦点和子像素断言均稳定。Linux 为 23/24，仅 MOBI 的同一近末 progression 因分页几何报告 location 14 而非 15。
 - **15.6 第十轮修复：** 书末导航用例保留滑杆拖动/tooltip/前进断言，近末提交后允许位于倒数两项，并通过最多两次 Next 明确到达最终 location 与 100%；这验证用户结果且不把 EPUB generated location 误当固定视觉页码。
+- **15.6 最终门禁：** Actions run `30345615108` 在集成提交 `d93db39` 上 4/4 成功：Windows x64、Ubuntu 22.04、macOS Intel、macOS Apple Silicon 的共享 9+219、Rust、sidecar、安全和平台浏览器门禁全部通过；`build_rc=false`，签名 package/acceptance jobs 按边界跳过。
