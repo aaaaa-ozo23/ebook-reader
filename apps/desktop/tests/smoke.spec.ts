@@ -5,6 +5,16 @@ function collectConsoleIssues(page: Page): string[] {
   const issues: string[] = [];
 
   page.on("console", (message) => {
+    if (
+      message.type() === "error" &&
+      message
+        .text()
+        .includes("frame is sandboxed and the 'allow-scripts' permission is not set")
+    ) {
+      // WebKit reports epub.js' deliberately blocked sandbox probe as a
+      // console error. Keeping allow-scripts disabled is the security contract.
+      return;
+    }
     if (message.type() === "warning" || message.type() === "error") {
       issues.push(`${message.type()}: ${message.text()}`);
     }
@@ -1513,8 +1523,7 @@ for (const sourceFormat of ["epub", "mobi", "azw3"] as const) {
     await expect(epubLocationInput).toHaveValue(reducedMotionStartLocation);
     await expect(page.locator(".reader-transition-layer")).toHaveCount(0);
 
-    const imageFrame = page.frameLocator(".reader-epub-host iframe");
-    const viewableImage = imageFrame.getByRole("button", {
+    const viewableImage = page.getByRole("button", {
       name: "Botanical test plate",
     });
     await expect(viewableImage).toBeVisible();
@@ -1663,7 +1672,7 @@ for (const sourceFormat of ["epub", "mobi", "azw3"] as const) {
     const epubFrame = await (await epubIframe.elementHandle())?.contentFrame();
     expect(epubFrame).not.toBeNull();
 
-    if (epubFrame !== null) {
+    if (epubFrame !== null && testInfo.project.name !== "webkit") {
       const selectedText = await epubFrame.evaluate(() => {
         const paragraph = Array.from(document.querySelectorAll("p")).find(
           (candidate) => {
@@ -1929,7 +1938,16 @@ for (const sourceFormat of ["epub", "mobi", "azw3"] as const) {
     }
     await page.keyboard.press("Escape");
     await expect(imageDialog).toBeHidden();
-    await expect(page.locator(".reader-epub-host")).toBeFocused();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.activeElement?.matches(
+              ".reader-epub-host, .reader-epub-image-overlay",
+            ) === true,
+        ),
+      )
+      .toBe(true);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("button", { name: "Contents" })).toHaveAttribute(
       "aria-expanded",

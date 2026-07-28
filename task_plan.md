@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.6：跨平台 CI，in_progress。第五轮质量矩阵已证明 Linux 和 macOS ARM 的 TypeScript 217/217 通过；当前修复 Windows runner 并行时序波动，以及 macOS 测试辅助程序路径差异后重跑。
+大阶段 15.6：跨平台 CI，in_progress。第七轮质量矩阵的 Windows/Linux 门禁已全绿，macOS 仅剩 WebKit 在禁用脚本的 EPUB sandbox 中无法触发三项图片查看器用例；已改为父文档安全覆盖层并等待第八轮四平台复验。
 
 ## 分支策略
 
@@ -579,7 +579,7 @@
 | 15.3 macOS 打包 | `codex/stage15-macos-packaging` | implementation_complete，等待 Apple credentials/runner | macOS config 经 Tauri `--no-bundle` 解析；4 个 shell script `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
 | 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 | 15.5 Linux 打包 | `codex/stage15-linux-packaging` | implementation_complete，等待 Ubuntu 22.04 runner | AppImage/deb overlay 经 Tauri 分 flavor 编译；shell `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
-| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | in_progress，第五轮 runner 缺陷修复后重跑 | Actions run `30327006813`；Linux TypeScript 217 与 Rust 88 通过；macOS ARM TypeScript 217、Rust 87/88；Windows 为 App 测试默认等待边界波动 |
+| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | in_progress，WebKit sandbox 图片覆盖层修复后重跑 | Actions run `30329711745`；Windows/Linux 全绿；macOS Intel/ARM 各仅剩 EPUB/MOBI/AZW3 图片查看器 3 项失败 |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 

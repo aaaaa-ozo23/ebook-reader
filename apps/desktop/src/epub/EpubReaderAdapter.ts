@@ -9,6 +9,7 @@ import type { Book as EpubBook, Location, NavItem, Rendition } from "epubjs";
 
 import {
   registerEpubImageBridge,
+  resolveEpubImageResource,
   type EpubImageActivateHandler,
 } from "./EpubImageBridge";
 import {
@@ -160,6 +161,12 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private cfiComparator: EpubCfiComparator | null = null;
   private locationsPromise: Promise<void> | null = null;
   private locationsReady = false;
+  private imageOverlayButtons = new Map<
+    string,
+    { button: HTMLButtonElement; candidate: Element }
+  >();
+  private imageOverlayLayer: HTMLDivElement | null = null;
+  private imageOverlaySyncTimer: number | null = null;
   private publicationPageList: PublicationPageBoundary[] = [];
   private publicationPageListPromise: Promise<void> | null = null;
   private lastPosition: EpubPosition | null = null;
@@ -168,6 +175,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   private reflowPromise: Promise<void> | null = null;
   private selectionCleanupCallbacks: Array<() => void> = [];
   private selectionDocuments = new WeakSet<Document>();
+  private selectionFrames = new WeakSet<HTMLIFrameElement>();
   private contentDocuments = new Set<Document>();
   private spreadMode: EpubSpreadMode = "single";
   private spreadState: EpubSpreadState = {
@@ -235,6 +243,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     this.startResizeObserver();
     await this.setTheme(this.theme);
     await rendition.display(this.initialLocator?.cfi ?? this.initialLocator?.href);
+    this.startImageOverlaySync();
     await this.reportCurrentPosition();
     void this.generateLocations(book);
     void this.generatePublicationPageList(book, cfiComparator);
@@ -243,6 +252,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
   async close(): Promise<void> {
     this.stopResizeObserver();
     this.stopSelectionObservers();
+    this.stopImageOverlaySync();
     this.locationsPromise = null;
     this.locationsReady = false;
     this.publicationPageList = [];
@@ -553,6 +563,7 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
       this.lastPosition = position;
       this.onRelocated?.(position);
       this.onSelectionCleared?.();
+      window.requestAnimationFrame(() => this.syncImageOverlays());
     });
 
     rendition.on("selected", (cfiRange: string) => {
@@ -567,6 +578,8 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
         this.injectCustomFont(contentDocument);
       }
       this.observeSelectionDocument(contentDocument);
+      this.observeRenderedFrameLoads(view.iframe);
+      window.requestAnimationFrame(() => this.syncImageOverlays());
     });
   }
 
@@ -676,6 +689,27 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
     });
   }
 
+  private observeRenderedFrameLoads(frame: HTMLIFrameElement | undefined): void {
+    if (frame === undefined || this.selectionFrames.has(frame)) {
+      return;
+    }
+
+    this.selectionFrames.add(frame);
+    const observeCurrentDocument = () => {
+      const contentDocument = frame.contentDocument ?? undefined;
+      this.labelRenderedFrame({ iframe: frame }, contentDocument);
+      if (contentDocument !== undefined) {
+        this.contentDocuments.add(contentDocument);
+        this.injectCustomFont(contentDocument);
+      }
+      this.observeSelectionDocument(contentDocument);
+    };
+    frame.addEventListener("load", observeCurrentDocument);
+    this.selectionCleanupCallbacks.push(() => {
+      frame.removeEventListener("load", observeCurrentDocument);
+    });
+  }
+
   private stopSelectionObservers(): void {
     for (const cleanup of this.selectionCleanupCallbacks) {
       cleanup();
@@ -683,6 +717,128 @@ export class EpubReaderAdapter implements ReaderAdapter<EpubLocator> {
 
     this.selectionCleanupCallbacks = [];
     this.selectionDocuments = new WeakSet<Document>();
+    this.selectionFrames = new WeakSet<HTMLIFrameElement>();
+  }
+
+  private startImageOverlaySync(): void {
+    if (this.onImageActivate === undefined || this.imageOverlaySyncTimer !== null) {
+      return;
+    }
+
+    this.syncImageOverlays();
+    this.imageOverlaySyncTimer = window.setInterval(
+      () => this.syncImageOverlays(),
+      250,
+    );
+  }
+
+  private stopImageOverlaySync(): void {
+    if (this.imageOverlaySyncTimer !== null) {
+      window.clearInterval(this.imageOverlaySyncTimer);
+      this.imageOverlaySyncTimer = null;
+    }
+    this.imageOverlayButtons.clear();
+    this.imageOverlayLayer?.remove();
+    this.imageOverlayLayer = null;
+  }
+
+  private syncImageOverlays(): void {
+    const onImageActivate = this.onImageActivate;
+    if (onImageActivate === undefined || !this.container.isConnected) {
+      return;
+    }
+
+    const overlayHost = this.container.parentElement;
+    if (overlayHost === null) {
+      return;
+    }
+    if (this.imageOverlayLayer === null) {
+      this.imageOverlayLayer = document.createElement("div");
+      this.imageOverlayLayer.className = "reader-epub-image-overlays";
+      overlayHost.append(this.imageOverlayLayer);
+    }
+
+    const hostRect = overlayHost.getBoundingClientRect();
+    const seen = new Set<string>();
+    for (const contentDocument of this.contentDocuments) {
+      const frame = contentDocument.defaultView?.frameElement;
+      if (!(frame instanceof HTMLIFrameElement) || !frame.isConnected) {
+        continue;
+      }
+      const frameRect = frame.getBoundingClientRect();
+      for (const candidate of contentDocument.querySelectorAll("img, svg image")) {
+        const resource = resolveEpubImageResource(candidate);
+        const candidateRect = candidate.getBoundingClientRect();
+        if (
+          resource === null ||
+          candidateRect.width <= 0 ||
+          candidateRect.height <= 0
+        ) {
+          continue;
+        }
+
+        const left = Math.max(
+          frameRect.left + candidateRect.left,
+          frameRect.left,
+          hostRect.left,
+        );
+        const top = Math.max(
+          frameRect.top + candidateRect.top,
+          frameRect.top,
+          hostRect.top,
+        );
+        const right = Math.min(
+          frameRect.left + candidateRect.right,
+          frameRect.right,
+          hostRect.right,
+        );
+        const bottom = Math.min(
+          frameRect.top + candidateRect.bottom,
+          frameRect.bottom,
+          hostRect.bottom,
+        );
+        if (right <= left || bottom <= top) {
+          continue;
+        }
+
+        const overlayKey = `${resource.sourceUrl}\n${resource.accessibleName}`;
+        seen.add(overlayKey);
+        let entry = this.imageOverlayButtons.get(overlayKey);
+        if (entry === undefined) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "reader-epub-image-overlay";
+          button.setAttribute("aria-haspopup", "dialog");
+          button.addEventListener("click", () => {
+            const currentResource = resolveEpubImageResource(
+              entry?.candidate ?? candidate,
+              button,
+            );
+            if (currentResource !== null) {
+              onImageActivate(currentResource);
+            }
+          });
+          entry = { button, candidate };
+          this.imageOverlayButtons.set(overlayKey, entry);
+          this.imageOverlayLayer.append(button);
+        } else {
+          entry.candidate = candidate;
+        }
+        const { button } = entry;
+        button.setAttribute("aria-label", resource.accessibleName);
+        button.style.left = `${left - hostRect.left}px`;
+        button.style.top = `${top - hostRect.top}px`;
+        button.style.width = `${right - left}px`;
+        button.style.height = `${bottom - top}px`;
+      }
+    }
+
+    for (const [overlayKey, entry] of this.imageOverlayButtons) {
+      if (!seen.has(overlayKey)) {
+        entry.button.remove();
+        this.imageOverlayButtons.delete(overlayKey);
+      }
+    }
   }
 
   private async generateLocations(book: EpubBook): Promise<void> {
