@@ -920,3 +920,5 @@
 - 2026 hosted runner label 已明确分架构：`macos-15-intel` 是 x86_64，`macos-15` 是 arm64；CI 仍用 `uname -m` 失败即停止，避免 runner label 漂移后生成伪双架构证据。
 - 跨平台质量门禁与签名 RC 打包需分开 dispatch：默认不读取 secrets 即可持续验证四平台；只有显式 `build_rc=true` 才进入 Windows updater、Apple Developer ID/App Store Connect 与 Linux AppImage 签名路径。
 - AppImage v2 updater 资产是 `.AppImage` + `.AppImage.sig`；macOS 是 `.app.tar.gz` + `.sig`。安全扫描必须跳过二进制文本误判，同时拒绝私钥文件名、secret marker 和小型文本中的 runner-local path。
+- 首轮 Actions run `30325456546` 证明 Linux libmobi 构建与共享 TypeScript 门禁在 Ubuntu 22.04 可运行；失败来自 Rust test-only `converter()` 仍固定为 Windows sidecar，而不是 Linux ELF 或运行时 resolver。
+- macOS Intel/ARM 首轮都在同一 GPG 步骤退出 2，日志只有 shell 退出码，因为公钥导入 stderr 被完全丢弃且指纹 grep 没有失败说明；跨平台供应链脚本必须保留安全诊断，不能以“安静”牺牲可审计性。

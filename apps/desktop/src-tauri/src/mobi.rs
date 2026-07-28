@@ -511,7 +511,14 @@ mod tests {
     }
 
     fn converter() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/mobitool-x86_64-pc-windows-msvc.exe")
+        let executable = if cfg!(target_os = "windows") {
+            format!("mobitool-{}.exe", crate::platform::TARGET_TRIPLE)
+        } else {
+            format!("mobitool-{}", crate::platform::TARGET_TRIPLE)
+        };
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(executable)
     }
 
     fn replace_ascii_with_utf8_fixture(source: &Path, destination: &Path) {
