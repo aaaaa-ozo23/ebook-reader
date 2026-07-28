@@ -49,3 +49,17 @@ notarization, and stapling; the independent verifier then requires strict `codes
 Gatekeeper assessment, stapler validation for both app and DMG, Universal `x86_64` +
 `arm64` slices for the main executable and sidecar, a signed updater archive, and a
 bundle free of books or SQLite data.
+
+## v0.4 cross-platform CI boundary
+
+`.github/workflows/v0.4-cross-platform-rc.yml` is `workflow_dispatch` only, keeps
+`contents: read`, and uploads seven-day workflow artifacts. Its default `build_rc=false`
+runs the Windows x64, macOS Intel, macOS Apple Silicon, and Ubuntu 22.04 quality matrix
+without requesting signing credentials. Signed packaging is an explicit dispatch input;
+it still cannot push commits, create a tag, or create/publish a GitHub Release.
+
+The matrix builds and executes the target libmobi sidecar, runs shared TypeScript and Rust
+gates, uses Playwright WebKit on both macOS architectures and Xvfb on Linux, and performs
+license/secret checks. Package jobs add native startup smoke, platform SBOMs, package
+content scans, dual-architecture Universal verification, and Ubuntu 24.04/Debian 12
+AppImage/deb acceptance. Apple credentials are always removed before artifact upload.

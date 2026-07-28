@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.5：Linux 打包，implementation_complete。AppImage/deb 独立编译、签名/MIME/desktop/no-FUSE/安装升级卸载/数据保留门禁已实现；真实 Ubuntu 22.04 包证据等待 15.6 runner，未取得前 Stage 15 不完成。
+大阶段 15.6：跨平台 CI，implementation_complete。manual-only 四平台质量矩阵、签名 package jobs、macOS 双架构与 Linux 三发行版 acceptance、安全/SBOM/短期 artifact 边界已实现；等待远端 dispatch 证据。
 
 ## 分支策略
 
@@ -579,6 +579,7 @@
 | 15.3 macOS 打包 | `codex/stage15-macos-packaging` | implementation_complete，等待 Apple credentials/runner | macOS config 经 Tauri `--no-bundle` 解析；4 个 shell script `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
 | 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 | 15.5 Linux 打包 | `codex/stage15-linux-packaging` | implementation_complete，等待 Ubuntu 22.04 runner | AppImage/deb overlay 经 Tauri 分 flavor 编译；shell `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
+| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | implementation_complete，等待 workflow dispatch | Stage 15/security verifier；shell/PowerShell parse；core 9；desktop 217；lint/build；Cargo fmt；Rust 87/87 |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 
