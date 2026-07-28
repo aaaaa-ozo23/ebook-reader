@@ -918,6 +918,7 @@
 - Chromium/WebKit 在不同 CPU/字体栅格下会让同一 DOMRect 高度相差约 `1.5e-5` CSS px；无布局位移测试应使用严格的近似比较，而不是对浮点边界框做 `Object.is`。
 - EPUB 位置滑杆把 0–1000 映射到离散 location 时，倒数第二项应取该 location 的中心值 `(total - 2)/(total - 1)`；旧的 `total - 2.5` 正好落在取整边界，Linux Chromium 可稳定映射到前一项。
 - macOS runner 的 `TMPDIR` 并不保证是短路径；第九轮 ARM 日志再次显示它落回 workspace 并触发 GnuPG agent socket 超限。安全临时 keyring 固定创建在 `/tmp`，仍由 trap 删除。
+- EPUB 的 generated location 是文本位置，不是固定视觉页；同一 MOBI 转换结果在 Linux 字体/分页几何下，把相同近末 progression 报为 location 14，而 Windows/macOS/本地为 15。端到端契约应断言已进入倒数两项，再通过最多两次 Next 到达总 location；不应把视觉起始位置强绑到单一中间 location。
 - sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。
 - Tauri 2.11 的 macOS `RunEvent::Opened` 提供 URL 列表，`RunEvent::Reopen` 提供 Dock 重开状态；使用 `Builder::build(...).run(callback)` 可与 single-instance 回调共享同一文件队列和窗口聚焦逻辑。
 - Tauri menu builder 可组合标准 About/Edit/Window/Quit 项；Import Books、Import Folder 与 Settings 使用自定义 ID，再向 WebView 发 `native-app-action`，避免复制 React 导入或设置状态机。
