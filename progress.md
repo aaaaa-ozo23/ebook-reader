@@ -2410,3 +2410,8 @@
 - **发布边界：** 最终仅生成 v0.4.0 RC 资产并停留在集成分支；不创建 tag、公开 Release、`release/v0.4.0` 或 main 合并。
 - **基线：** `pnpm.cmd check` 通过（core 9、desktop 212）；Cargo fmt 与 Rust 81/81 通过。
 - **过程错误：** 首次 `git switch -c codex/v0.4.0-integration` 因沙箱拒绝写 `.git/refs` 失败；在获准的 Git 权限下重试成功，未改变工作区文件。
+- **15.1 完成：** 新增纯类型 `DesktopPlatformCapabilities` 与 Rust `get_desktop_platform_capabilities`；分发轨道扩展为 NSIS/MSI/macOS/AppImage/deb，MSI/deb 保持手动更新。
+- **15.1 sidecar：** build script 固化 Cargo target triple；runtime resolver 按无后缀、目标三元组和 macOS Universal 候选顺序，只在受信目录查找，不再硬编码 Windows x64。
+- **15.1 快捷键：** 书库搜索由 capability 选择 Control/Meta；浏览器预览使用明确的 Windows fallback，不读取 user-agent；新增纯函数单测。
+- **15.1 验证：** core build、desktop 34 files / 214 tests、lint、production build、Cargo fmt、Rust 86/86 与 `git diff --check` 通过。
+- **工具错误：** 一次 `pnpm.cmd exec prettier --check ...` 因该 pnpm 调用形式未解析 workspace binary；改用仓库 `format:write` 脚本与正式 format gate，未影响源码语义。

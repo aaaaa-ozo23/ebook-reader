@@ -1,5 +1,17 @@
 export type BookFormat = "epub" | "txt" | "pdf" | "mobi" | "azw3";
 export type ReaderFormat = "epub" | "txt" | "pdf";
+export type DesktopPlatform = "windows" | "macos" | "linux";
+export type DesktopArchitecture = "x86_64" | "aarch64";
+export type DesktopPrimaryModifier = "control" | "meta";
+export type DistributionTrack = "nsis" | "msi" | "macos" | "appimage" | "deb";
+
+export interface DesktopPlatformCapabilities {
+  platform: DesktopPlatform;
+  architecture: DesktopArchitecture;
+  primaryModifier: DesktopPrimaryModifier;
+  supportedFormats: BookFormat[];
+  distributionTrack: DistributionTrack;
+}
 export type BookCoverStatus = "pending" | "ready" | "fallback";
 export type BookAvailability = "available" | "missing";
 
@@ -496,7 +508,7 @@ export type AppUpdateStatus =
 
 export interface UpdaterCapability {
   enabled: boolean;
-  track: "nsis" | "msi";
+  track: DistributionTrack;
   endpoint: string;
 }
 

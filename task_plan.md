@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.1：v0.4 平台抽象审计，in_progress。`codex/v0.4.0-integration` 已从 `main@b2242fb` 创建并推送；冻结交付为 Windows x64、macOS 12+ Universal、Linux x64，五格式一致，最终只交付 v0.4.0 RC 资产，不创建 tag 或公开 Release。
+大阶段 15.1：v0.4 平台抽象审计，complete。Rust capability 已成为平台/架构/快捷键/格式/分发轨道事实源，sidecar resolver 已改为 target-triple 驱动，updater 覆盖五种轨道；Windows 基线门禁通过，等待合回集成分支后开始 15.2。
 
 ## 分支策略
 
@@ -569,6 +569,12 @@
 - **包与系统：** macOS 最低 12.0，交付签名、公证、stapled DMG；Linux 以 Ubuntu 22.04 构建，交付 AppImage + deb，并在 Ubuntu 22.04/24.04、Debian 12 验收。
 - **更新轨道：** NSIS、macOS、AppImage 自动更新；MSI 与 deb 手动更新。静态 feed 覆盖 Windows x64、Darwin 双架构与 Linux x64。
 - **发布边界：** Stage 15 在 `codex/v0.4.0-integration` 生成并验证 v0.4.0 RC 后停止，不合回 `main`，不创建 tag 或公开 GitHub Release。
+
+### 阶段 15 执行记录
+
+| 小阶段 | 分支 | 状态 | 验证 |
+|--------|------|------|------|
+| 15.1 平台抽象审计 | `codex/stage15-platform-abstraction` | complete | core build；desktop 34 files / 214 tests；lint/build；Cargo fmt；Rust 86/86；`git diff --check` |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 
