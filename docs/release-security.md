@@ -52,7 +52,10 @@ bundle free of books or SQLite data.
 
 ## v0.4 cross-platform CI boundary
 
-`.github/workflows/v0.4-cross-platform-rc.yml` is `workflow_dispatch` only, keeps
+The default-branch-registered `.github/workflows/v0.3-release-artifacts.yml` path now
+hosts the v0.4 cross-platform RC workflow. Reusing the registered path allows a manual
+dispatch against `codex/v0.4.0-integration` without merging into `main`. It is
+`workflow_dispatch` only, keeps
 `contents: read`, and uploads seven-day workflow artifacts. Its default `build_rc=false`
 runs the Windows x64, macOS Intel, macOS Apple Silicon, and Ubuntu 22.04 quality matrix
 without requesting signing credentials. Signed packaging is an explicit dispatch input;

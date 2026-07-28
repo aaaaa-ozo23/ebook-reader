@@ -2438,3 +2438,4 @@
 - **15.6 安全：** macOS/Linux 分别生成 Syft 1.44.0 CycloneDX SBOM并执行跨平台 artifact secret/local-path scan；workflow 默认 `build_rc=false` 不读取签名 secrets，显式 true 才执行 package jobs。
 - **15.6 本地验证：** Stage 15 contract verifier、release security、shell syntax、PowerShell parse、Prettier/ESLint、core 9、desktop 217、production build、Cargo fmt、Windows Rust 87/87 与 diff check 通过；workflow 远端 dispatch 结果待推送后获取。
 - **15.6 过程错误：** 首次 `pnpm.cmd check` 发现两个新增 Node 脚本缺少 ESLint Node globals 声明；补充 file-level globals 后全量通过。尝试使用本地 Ruby/PyYAML/yaml npm parser 均不可用，未安装临时依赖，改由 Stage 15 contract verifier和 GitHub workflow 注册校验。
+- **15.6 dispatch 路径：** 当前机器没有 `gh` CLI；新 workflow 文件在未合入默认分支时无法被 GitHub 注册。为保持“不合 main”边界，v0.4 内容复用默认分支已注册的 `.github/workflows/v0.3-release-artifacts.yml` 路径，dispatch 时选择集成分支即可加载新定义。
