@@ -2402,3 +2402,11 @@
 - **GitHub 草稿：** 已通过内置侧边浏览器创建 `Ebook Reader v0.2.0` draft，目标为 `release/v0.2.0`、标签候选为 `v0.2.0`、Latest 已选中；最终 11 个附件全部上传并保存。维护者已解除离线备份门禁，下一步创建 tag 后公开发布。
 - **公开发布：** 内置侧边浏览器已发布 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面确认 Latest、非草稿、tag `v0.2.0`、commit `b67b2a4`。附件区显示 13 项（11 个上传产物加 GitHub 自动生成的 Source code zip/tar），远程内容校验继续执行。
 - **远程验收：** GitHub Release API 返回 `draft=false`、`prerelease=false`、target `release/v0.2.0` 与 11 个 uploaded assets；每个资产的 SHA-256 digest 和 byte size 均与 `release-artifacts/v0.2.0-final/` 一致。公开 Latest `latest.json` 为 0.2.0、签名长度 424，并与本地 JSON 规范化后完全相同。
+
+## 2026-07-28 大阶段 15：v0.4 macOS/Linux 桌面扩展
+
+- **状态：** 15.1 in_progress；`codex/v0.4.0-integration` 已从 `main@b2242fb` 创建并推送。
+- **冻结范围：** Windows x64 NSIS/MSI、macOS 12+ Universal 公证 DMG、Linux x64 AppImage/deb；三平台保持 EPUB/TXT/PDF/MOBI/AZW3 一致。
+- **发布边界：** 最终仅生成 v0.4.0 RC 资产并停留在集成分支；不创建 tag、公开 Release、`release/v0.4.0` 或 main 合并。
+- **基线：** `pnpm.cmd check` 通过（core 9、desktop 212）；Cargo fmt 与 Rust 81/81 通过。
+- **过程错误：** 首次 `git switch -c codex/v0.4.0-integration` 因沙箱拒绝写 `.git/refs` 失败；在获准的 Git 权限下重试成功，未改变工作区文件。

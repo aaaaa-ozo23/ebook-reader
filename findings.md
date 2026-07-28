@@ -895,3 +895,11 @@
 - **Release 草稿：** 内置侧边浏览器已将正式说明与 11 个最终产物保存到 GitHub draft；页面确认 `Latest` 被选中且提示 tag 将在发布时从 `release/v0.2.0` 创建。维护者确认离线备份后，正式 tag 与 Publish 已获既定计划门禁授权。
 - **公开页面：** Release 已公开为 Latest，URL 为 `https://github.com/aaaaa-ozo23/ebook-reader/releases/tag/v0.2.0`；页面显示 tag `v0.2.0`、commit `b67b2a4`、无 draft 提示。GitHub 资产计数 13 包含 11 个上传资产及自动生成的两份 Source code archive。
 - **远程完整性：** GitHub Release API 的 11 个资产全部为 uploaded；服务端 `sha256:` digest 与 size 逐项匹配本地最终产物。`releases/latest/download/latest.json` 可公开访问，内容与本地 feed 相同，version 为 0.2.0、Windows URL 指向 v0.2.0 NSIS、签名字段为完整 424 字节文本。
+
+## 2026-07-28 大阶段 15 跨平台基线
+
+- 当前 app-data、书库、字体和索引路径已统一经 Tauri `app_data_dir` 解析，跨平台主要风险不在数据库目录，而在 Windows-only sidecar、发布脚本、updater 轨道与快捷键。
+- `tauri.conf.json` 只声明 NSIS/MSI，`mobitool` 只有 `x86_64-pc-windows-msvc.exe`；运行时 resolver、libmobi 构建/校验和 release security 脚本均硬编码 Windows 文件名或 PE 格式。
+- `UpdaterCapability.track` 目前只有 `nsis | msi`；Stage 15 需要扩展 macOS、AppImage、deb，同时保持 MSI/deb 手动更新。
+- 书库全局搜索仍硬编码 `Ctrl+Shift+F`，阅读器部分路径已支持 `Ctrl || Meta`；需要统一由只读平台 capability 提供主修饰键。
+- Tauri v2 sidecar 按 target triple 选择外部二进制；macOS Universal 需要双架构 libmobi 产物及合并验证，Linux AppImage 必须在最低支持 glibc/WebKitGTK 基线构建。
