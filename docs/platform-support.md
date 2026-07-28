@@ -59,6 +59,25 @@ minimum system to 12.0, and requires hardened runtime. Missing signing, notariza
 stapling, Gatekeeper, updater signature, or Universal-architecture evidence is a hard
 failure rather than a warning.
 
+## Linux runtime
+
+- Linux x64 release binaries are built on Ubuntu 22.04 to preserve the glibc baseline;
+  Ubuntu 24.04 and Debian 12 are runtime-acceptance targets, not build hosts.
+- Application state is resolved through Tauri `app_data_dir`, which follows the desktop
+  environment's XDG data location. The application never hard-codes `$HOME/.local/share`
+  or redirects a production profile during tests.
+- The dialog plugin remains the single file/folder picker API so its WebKitGTK portal
+  backend can operate under both X11 and Wayland. File association launches pass all
+  selected files through the existing ordered pending queue.
+- `scripts/deps/build-libmobi-linux.sh` verifies the same pinned libmobi 0.12 source and
+  signer fingerprints as Windows/macOS, produces
+  `mobitool-x86_64-unknown-linux-gnu`, enforces ELF x86-64 and executable permissions,
+  rejects unexpected dynamic libraries, and writes size/SHA-256 build evidence.
+
+The Linux runner must verify WebKitGTK 4.1, system and custom fonts, portal selection,
+X11/Wayland launch, `%F` multi-file opening, single instance behavior, five-format import
+and reading, progress/search/backup restore, and data deletion.
+
 ## Data safety
 
 Installer and updater acceptance must use an isolated identifier and data root. Tests

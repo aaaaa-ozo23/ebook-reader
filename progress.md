@@ -2427,3 +2427,6 @@
 - **15.3 当前边界：** Windows 只能完成 JSON、shell syntax 和共享代码门禁；签名、公证、stapling、Gatekeeper、Universal 构建及双架构安装证据必须由带 Apple secrets 的 macOS runner 提供。
 - **15.3 本地门禁：** macOS overlay 已由 Tauri CLI `build --no-bundle --config` 完整解析并完成 release 编译；`pnpm.cmd check`（core 9、desktop 217）、Cargo fmt、Rust 87/87、四个 shell script `bash -n` 与 diff check 通过。
 - **15.3 工具错误：** 首次共享 check 只发现 `package.json` Prettier 顺序差异；使用仓库 Prettier 修正后全量重跑通过。该轮未读取任何 Apple/updater secret。
+- **15.4 sidecar：** 新增 Ubuntu 22.04 x64 libmobi 0.12 构建脚本，固定 source/GPG trust，校验 ELF x86-64、执行位与动态依赖 allowlist，并输出 target/compiler/size/SHA-256 manifest。
+- **15.4 路径：** app data 继续只由 Tauri `app_data_dir`/XDG 解析；portal 继续复用 dialog plugin；文件关联与 single-instance 进入同一 pending queue。新增 Unix symlink 目录扫描拒绝测试。
+- **15.4 本地门禁：** Linux shell `bash -n`、`pnpm.cmd check`（core 9、desktop 217）、Cargo fmt、Windows Rust 87/87 与 diff check 通过；Linux runner 还需执行第 88 个 Unix-only symlink 测试及真实 ELF/WebKitGTK/X11/Wayland 五格式验收。
