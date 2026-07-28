@@ -914,3 +914,6 @@
 - Ubuntu 22.04 必须是 Linux release 的构建主机而不只是测试容器；在 24.04 上产出的较新 glibc symbol version 会让旧系统在启动前失败，无法由 AppImage 自身修复。
 - Linux libmobi sidecar 审计同时需要 ELF machine、`+x` mode 与 `ldd` allowlist；只验证文件名或哈希不能发现错误架构、丢失执行位或意外引入的非系统动态库。
 - 批量目录扫描使用 `symlink_metadata` 并拒绝 Unix symlink/Windows reparse point，随后才 canonicalize 并校验 root containment；这避免文件夹导入沿链接逃逸到用户未选择的目录。
+- AppImage 与 deb 必须分开编译，而不是一次 Tauri 调用生成两包；否则编译期 `EBOOK_READER_BUILD_FLAVOR` 只能代表一个轨道，deb 可能错误暴露 AppImage 自动安装能力。
+- Tauri v2 `createUpdaterArtifacts: true` 在 Linux 直接复用 `.AppImage` 并生成 `.AppImage.sig`，不是默认生成 tarball；RC manifest 和 verifier 必须按当前 v2 artifact 形态处理。
+- deb 的 payload 只拥有 `/usr` 等 package paths；XDG app-data 不属于 dpkg，重装/升级/卸载保留测试应使用隔离 `XDG_DATA_HOME` sentinel，不能触碰真实 profile。
