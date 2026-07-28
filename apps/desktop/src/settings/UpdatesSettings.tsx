@@ -120,6 +120,7 @@ export function UpdatesSettings() {
       ? Math.min(100, Math.round((progress.downloaded / progress.contentLength) * 100))
       : null;
   const enabled = capability?.enabled !== false;
+  const manualTrack = capability?.enabled === false;
 
   return (
     <>
@@ -145,20 +146,17 @@ export function UpdatesSettings() {
           <div>
             <h2 id="update-card-title">App updates</h2>
             <p>
-              {capability?.track === "msi"
-                ? "This MSI installation stays on the manual upgrade track."
-                : "Check the signed NSIS update track when you choose."}
+              {manualTrack
+                ? `This ${capability?.track.toUpperCase()} installation stays on the manual upgrade track.`
+                : `Check the signed ${automaticTrackName(capability?.track)} update track when you choose.`}
             </p>
           </div>
         </div>
 
-        {capability?.track === "msi" ? (
+        {manualTrack ? (
           <div className="update-state update-state--manual" role="status">
-            <strong>Manual updates for MSI</strong>
-            <span>
-              Download the next MSI from GitHub and install it over this version. Do not
-              mix MSI and NSIS installers.
-            </span>
+            <strong>Manual updates for {capability?.track.toUpperCase()}</strong>
+            <span>{manualUpdateInstructions(capability?.track)}</span>
           </div>
         ) : (
           <UpdateState
@@ -239,6 +237,21 @@ export function UpdatesSettings() {
       </section>
     </>
   );
+}
+
+function automaticTrackName(track: UpdaterCapability["track"] | undefined): string {
+  if (track === "macos") return "macOS";
+  if (track === "appimage") return "AppImage";
+  return "NSIS";
+}
+
+function manualUpdateInstructions(
+  track: UpdaterCapability["track"] | undefined,
+): string {
+  if (track === "deb") {
+    return "Download the next deb package from GitHub and install it over this version.";
+  }
+  return "Download the next MSI from GitHub and install it over this version. Do not mix MSI and NSIS installers.";
 }
 
 function UpdateState({

@@ -6,7 +6,7 @@ use tauri::{ipc::Channel, AppHandle};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio_util::sync::CancellationToken;
 
-use crate::db;
+use crate::{db, platform};
 
 const UPDATE_PREFERENCES_KEY: &str = "update_preferences";
 
@@ -134,10 +134,14 @@ impl UpdaterState {
 }
 
 pub fn capability() -> UpdaterCapability {
-    let enabled = option_env!("EBOOK_READER_BUILD_FLAVOR") != Some("msi");
+    capability_for_track(platform::capabilities().distribution_track)
+}
+
+fn capability_for_track(track: &'static str) -> UpdaterCapability {
+    let enabled = matches!(track, "nsis" | "macos" | "appimage");
     UpdaterCapability {
         enabled,
-        track: if enabled { "nsis" } else { "msi" },
+        track,
         endpoint:
             "https://github.com/aaaaa-ozo23/ebook-reader/releases/latest/download/latest.json",
     }
@@ -317,9 +321,12 @@ fn require_enabled() -> Result<(), UpdaterError> {
     if capability().enabled {
         Ok(())
     } else {
+        let track = capability().track;
         Err(UpdaterError::new(
-            "updater-disabled-msi",
-            "This MSI installation uses manual upgrades to avoid mixing installer tracks.",
+            "updater-disabled-manual-track",
+            format!(
+                "This {track} installation uses manual upgrades to avoid mixing installer tracks."
+            ),
         ))
     }
 }
@@ -329,11 +336,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_build_uses_manual_nsis_track_without_daily_checks() {
+    fn default_build_uses_the_platform_automatic_track_without_daily_checks() {
         let capability = capability();
-        assert_eq!(capability.track, "nsis");
         assert!(capability.enabled);
+        assert!(matches!(capability.track, "nsis" | "macos" | "appimage"));
         assert!(!UpdatePreferences { daily_check: false }.daily_check);
+    }
+
+    #[test]
+    fn manual_package_tracks_disable_in_app_installation() {
+        assert!(!capability_for_track("msi").enabled);
+        assert!(!capability_for_track("deb").enabled);
+        assert!(capability_for_track("macos").enabled);
+        assert!(capability_for_track("appimage").enabled);
     }
 
     #[test]

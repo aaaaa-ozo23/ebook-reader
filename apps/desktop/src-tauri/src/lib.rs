@@ -5,6 +5,7 @@ mod file_open;
 mod fonts;
 mod library_search;
 mod mobi;
+mod platform;
 mod reading_history;
 mod updater;
 
@@ -529,6 +530,11 @@ fn take_pending_open_files(
     pending_files.take_and_mark_ready()
 }
 
+#[tauri::command]
+fn get_desktop_platform_capabilities() -> platform::DesktopPlatformCapabilities {
+    platform::capabilities()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending_open_files = file_open::PendingOpenFiles::from_args(std::env::args_os().skip(1));
@@ -623,7 +629,8 @@ pub fn run() {
             install_downloaded_update,
             get_update_preferences,
             save_update_preferences,
-            take_pending_open_files
+            take_pending_open_files,
+            get_desktop_platform_capabilities
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

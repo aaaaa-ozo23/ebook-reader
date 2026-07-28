@@ -51,6 +51,7 @@ import {
   saveReaderLayoutPreferences,
   updateAnnotation,
 } from "./tauri/reader";
+import { getDesktopPlatformCapabilities } from "./tauri/platform";
 
 const epubAdapterCloseMock = vi.hoisted(() => vi.fn(async () => undefined));
 const epubAdapterGetTocMock = vi.hoisted(() =>
@@ -262,6 +263,10 @@ vi.mock("./tauri/library", () => ({
 vi.mock("./tauri/fileOpen", () => ({
   listenForOpenBookFiles: listenForOpenBookFilesMock,
   takePendingOpenFiles: takePendingOpenFilesMock,
+}));
+vi.mock("./tauri/platform", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./tauri/platform")>()),
+  getDesktopPlatformCapabilities: vi.fn(),
 }));
 
 vi.mock("./tauri/reader", () => ({
@@ -526,6 +531,7 @@ const EpubReaderAdapterMock = vi.mocked(EpubReaderAdapter);
 const PdfReaderAdapterMock = vi.mocked(PdfReaderAdapter);
 const prepareBookCoverMocked = vi.mocked(prepareBookCover);
 const takePendingOpenFilesMocked = vi.mocked(takePendingOpenFiles);
+const getDesktopPlatformCapabilitiesMocked = vi.mocked(getDesktopPlatformCapabilities);
 
 describe("App", () => {
   beforeEach(() => {
@@ -572,6 +578,13 @@ describe("App", () => {
       return () => undefined;
     });
     takePendingOpenFilesMocked.mockResolvedValue([]);
+    getDesktopPlatformCapabilitiesMocked.mockResolvedValue({
+      platform: "windows",
+      architecture: "x86_64",
+      primaryModifier: "control",
+      supportedFormats: ["epub", "txt", "pdf", "mobi", "azw3"],
+      distributionTrack: "nsis",
+    });
     getBookCoverSourceMock.mockResolvedValue(null);
     prepareBookCoverMocked.mockImplementation(async (book) => ({
       ...book,

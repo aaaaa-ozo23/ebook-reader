@@ -903,3 +903,6 @@
 - `UpdaterCapability.track` 目前只有 `nsis | msi`；Stage 15 需要扩展 macOS、AppImage、deb，同时保持 MSI/deb 手动更新。
 - 书库全局搜索仍硬编码 `Ctrl+Shift+F`，阅读器部分路径已支持 `Ctrl || Meta`；需要统一由只读平台 capability 提供主修饰键。
 - Tauri v2 sidecar 按 target triple 选择外部二进制；macOS Universal 需要双架构 libmobi 产物及合并验证，Linux AppImage 必须在最低支持 glibc/WebKitGTK 基线构建。
+- 编译期 `EBOOK_READER_BUILD_FLAVOR` 适合区分同一 OS 的自动/手动更新包；未知 flavor 必须 panic，避免错误拼写静默落入可安装 updater。
+- Tauri capability JSON 中的 `windows: ["main"]` 指 WebView window label，并非 Windows OS 限定；Stage 15 不应错误地复制或删除该配置。
+- sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。

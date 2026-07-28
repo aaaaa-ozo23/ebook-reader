@@ -60,4 +60,15 @@ describe("UpdatesSettings", () => {
     expect(await screen.findByText("Manual updates for MSI")).toBeVisible();
     expect(screen.getByRole("checkbox", { name: /Check once a day/ })).toBeDisabled();
   });
+
+  it("keeps deb packages on a manual track", async () => {
+    updaterMocks.getUpdaterCapability.mockResolvedValue({
+      enabled: false,
+      track: "deb",
+      endpoint: "https://example.test/latest.json",
+    });
+    render(<UpdatesSettings />);
+    expect(await screen.findByText("Manual updates for DEB")).toBeVisible();
+    expect(screen.getByText(/Download the next deb package from GitHub/)).toBeVisible();
+  });
 });

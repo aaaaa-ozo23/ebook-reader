@@ -7,7 +7,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { type Book, type ImportBookResult, type LibrarySearchHit } from "@reader/core";
+import {
+  type Book,
+  type DesktopPrimaryModifier,
+  type ImportBookResult,
+  type LibrarySearchHit,
+} from "@reader/core";
 
 import "./App.css";
 import {
@@ -36,6 +41,11 @@ import {
   pickImportFiles,
   pickImportFolder,
 } from "./tauri/batchImport";
+import {
+  fallbackDesktopPlatformCapabilities,
+  getDesktopPlatformCapabilities,
+  hasPrimaryModifier,
+} from "./tauri/platform";
 
 const LazyReaderShell = lazy(() =>
   import("./components/ReaderShell").then((module) => ({
@@ -81,6 +91,9 @@ function App() {
   >("data");
   const [isLibrarySearchOpen, setIsLibrarySearchOpen] = useState(false);
   const [isReadingInsightsOpen, setIsReadingInsightsOpen] = useState(false);
+  const [primaryModifier, setPrimaryModifier] = useState<DesktopPrimaryModifier>(
+    fallbackDesktopPlatformCapabilities.primaryModifier,
+  );
   const [librarySearchRequest, setLibrarySearchRequest] =
     useState<LibrarySearchHit | null>(null);
   const [bookActionMenu, setBookActionMenu] = useState<BookActionMenuState | null>(
@@ -551,10 +564,24 @@ function App() {
   );
 
   useEffect(() => {
+    let active = true;
+    void getDesktopPlatformCapabilities()
+      .then((capabilities) => {
+        if (active) setPrimaryModifier(capabilities.primaryModifier);
+      })
+      .catch(() => {
+        // Browser-only tests and previews intentionally retain the deterministic fallback.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const handleGlobalSearchShortcut = (event: globalThis.KeyboardEvent) => {
       if (
         readerBook === null &&
-        event.ctrlKey &&
+        hasPrimaryModifier(event, primaryModifier) &&
         event.shiftKey &&
         event.key.toLocaleLowerCase() === "f"
       ) {
@@ -564,7 +591,7 @@ function App() {
     };
     window.addEventListener("keydown", handleGlobalSearchShortcut);
     return () => window.removeEventListener("keydown", handleGlobalSearchShortcut);
-  }, [handleOpenLibrarySearch, readerBook]);
+  }, [handleOpenLibrarySearch, primaryModifier, readerBook]);
 
   const handleSetViewMode = useCallback(
     (mode: ViewMode, animate: boolean) => {

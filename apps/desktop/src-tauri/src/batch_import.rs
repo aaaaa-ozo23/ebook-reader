@@ -335,23 +335,36 @@ fn import_one(
 
 pub(crate) fn resolve_converter_path(app: &AppHandle) -> anyhow::Result<std::path::PathBuf> {
     let mut candidates = Vec::new();
+    let names = converter_file_names();
     if let Ok(resource_dir) = app.path().resource_dir() {
-        candidates.push(resource_dir.join("mobitool.exe"));
-        candidates.push(resource_dir.join("mobitool-x86_64-pc-windows-msvc.exe"));
+        candidates.extend(names.iter().map(|name| resource_dir.join(name)));
     }
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
-            candidates.push(parent.join("mobitool.exe"));
-            candidates.push(parent.join("mobitool-x86_64-pc-windows-msvc.exe"));
+            candidates.extend(names.iter().map(|name| parent.join(name)));
         }
     }
-    candidates.push(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/mobitool-x86_64-pc-windows-msvc.exe"),
-    );
+    candidates.extend(names.iter().map(|name| {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("binaries")
+            .join(name)
+    }));
     candidates
         .into_iter()
         .find(|path| path.is_file())
         .context("[mobi-converter-missing] bundled mobitool sidecar is unavailable")
+}
+
+fn converter_file_names() -> Vec<String> {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let mut names = vec![
+        format!("mobitool{suffix}"),
+        format!("mobitool-{}{suffix}", crate::platform::TARGET_TRIPLE),
+    ];
+    if cfg!(target_os = "macos") {
+        names.push("mobitool-universal-apple-darwin".to_string());
+    }
+    names
 }
 
 fn public_import_error(error: &str) -> String {
@@ -561,6 +574,17 @@ fn emit_progress(
 mod tests {
     use super::*;
     use tempfile::tempdir;
+
+    #[test]
+    fn converter_names_include_the_compiled_target_triple() {
+        let names = converter_file_names();
+        assert!(names
+            .iter()
+            .any(|name| name.contains(crate::platform::TARGET_TRIPLE)));
+        assert!(names
+            .iter()
+            .all(|name| !name.contains("x86_64-pc-windows-msvc.exe.exe")));
+    }
 
     #[test]
     fn recursive_scan_honors_formats_depth_and_item_limit_helpers() {
