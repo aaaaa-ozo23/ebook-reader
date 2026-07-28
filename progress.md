@@ -2405,7 +2405,7 @@
 
 ## 2026-07-28 大阶段 15：v0.4 macOS/Linux 桌面扩展
 
-- **状态：** 15.1 in_progress；`codex/v0.4.0-integration` 已从 `main@b2242fb` 创建并推送。
+- **状态：** 15.2 in_progress；15.1 已以 `--no-ff` 合回并推送 `codex/v0.4.0-integration`。
 - **冻结范围：** Windows x64 NSIS/MSI、macOS 12+ Universal 公证 DMG、Linux x64 AppImage/deb；三平台保持 EPUB/TXT/PDF/MOBI/AZW3 一致。
 - **发布边界：** 最终仅生成 v0.4.0 RC 资产并停留在集成分支；不创建 tag、公开 Release、`release/v0.4.0` 或 main 合并。
 - **基线：** `pnpm.cmd check` 通过（core 9、desktop 212）；Cargo fmt 与 Rust 81/81 通过。
@@ -2415,3 +2415,9 @@
 - **15.1 快捷键：** 书库搜索由 capability 选择 Control/Meta；浏览器预览使用明确的 Windows fallback，不读取 user-agent；新增纯函数单测。
 - **15.1 验证：** core build、desktop 34 files / 214 tests、lint、production build、Cargo fmt、Rust 86/86 与 `git diff --check` 通过。
 - **工具错误：** 一次 `pnpm.cmd exec prettier --check ...` 因该 pnpm 调用形式未解析 workspace binary；改用仓库 `format:write` 脚本与正式 format gate，未影响源码语义。
+- **15.2 运行桥接：** Finder/Open With 的 `Opened`、运行中 single-instance、冷启动参数统一进入 pending queue；Dock `Reopen` 复用 show/unminimize/focus。
+- **15.2 菜单：** macOS 原生 Import Books、Import Folder、Settings 与标准 App/Edit/Window/Quit 菜单已接入，三个产品动作复用现有 React handler。
+- **15.2 sidecar：** 新增 libmobi 0.12 双架构构建、GPG/源码哈希校验、`lipo` Universal 合并、架构验证和逐目标 size/SHA-256 manifest。
+- **15.2 当前验证：** Windows 上 Rust 87/87、desktop 34 files / 214 tests、lint/build 与 Cargo fmt 通过；macOS runner 的真实构建、WKWebView 五格式和双架构运行仍须在跨平台门禁执行。
+- **15.2 最终本地门禁：** `pnpm.cmd check` 通过（core 9、desktop 35 files / 217 tests）；Cargo fmt、Rust 87/87、macOS 构建脚本 `bash -n` 与 `git diff --check` 通过。阶段状态为 implementation_complete，不能替代后续 macOS runner 证据。
+- **15.2 过程错误：** 一次只读组合 `rg` 命令因 PowerShell 双引号未闭合而退出；一次把完整门禁放入 1 秒工具超时而被提前终止。两次均未修改源码，随后使用正确引用与分项超时重跑。

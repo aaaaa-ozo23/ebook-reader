@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.1：v0.4 平台抽象审计，complete。Rust capability 已成为平台/架构/快捷键/格式/分发轨道事实源，sidecar resolver 已改为 target-triple 驱动，updater 覆盖五种轨道；Windows 基线门禁通过，等待合回集成分支后开始 15.2。
+大阶段 15.2：macOS 运行适配，implementation_complete。原生文件打开/应用重开/菜单事件与 libmobi 0.12 Universal 构建契约已实现；Windows 可执行门禁全绿，macOS 双架构/WKWebView 运行门禁将在 15.6 hosted runner 执行，未取得该证据前不标记 Stage 15 完成。
 
 ## 分支策略
 
@@ -575,6 +575,7 @@
 | 小阶段 | 分支 | 状态 | 验证 |
 |--------|------|------|------|
 | 15.1 平台抽象审计 | `codex/stage15-platform-abstraction` | complete | core build；desktop 34 files / 214 tests；lint/build；Cargo fmt；Rust 86/86；`git diff --check` |
+| 15.2 macOS 运行适配 | `codex/stage15-macos-runtime` | implementation_complete，等待 macOS runner | `pnpm.cmd check`（core 9、desktop 217）；Cargo fmt；Rust 87/87；macOS build script `bash -n`；`git diff --check` |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 

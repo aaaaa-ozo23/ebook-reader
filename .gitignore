@@ -22,3 +22,6 @@ target/
 Thumbs.db
 .tools/
 release-artifacts/
+apps/desktop/src-tauri/binaries/mobitool-*-apple-darwin
+apps/desktop/src-tauri/binaries/mobitool-*-unknown-linux-gnu
+apps/desktop/src-tauri/binaries/libmobi-*-build.json

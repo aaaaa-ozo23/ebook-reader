@@ -32,6 +32,27 @@ sidecar.
 - NSIS, macOS, and AppImage consume signed updater artifacts. MSI and deb stay on explicit
   manual-upgrade tracks.
 
+## macOS runtime
+
+- The deployment target is macOS 12.0. The shipped application and `mobitool` sidecar are
+  Universal binaries containing both `x86_64` and `arm64`; Rosetta is not a requirement on
+  Apple Silicon.
+- Finder launch services and a second file-open request enter the same ordered pending-file
+  queue as command-line and single-instance requests. A Dock reopen shows, unminimizes, and
+  focuses the existing main window.
+- The native menu exposes Import Books, Import Folder, Settings, the standard Edit commands,
+  standard Window commands, and Quit. Product actions emit typed events that reuse the same
+  React handlers as toolbar actions.
+- `scripts/deps/build-libmobi-macos.sh` verifies the pinned libmobi 0.12 source hash and
+  maintainer fingerprints, builds both architectures with
+  `MACOSX_DEPLOYMENT_TARGET=12.0`, creates the Universal sidecar with `lipo`, verifies its
+  slices, and writes a build manifest containing target, compiler, byte size, and SHA-256.
+
+The macOS acceptance runner must exercise TXT/EPUB/PDF/MOBI/AZW3 import and reading,
+including EPUB iframe navigation, PDF worker startup, custom fonts, search, progress,
+backup/restore, focus, scrolling, Command shortcuts, and reduced motion. Script or Windows
+test success is not a substitute for this WKWebView runtime gate.
+
 ## Data safety
 
 Installer and updater acceptance must use an isolated identifier and data root. Tests

@@ -103,6 +103,24 @@ mod tests {
     }
 
     #[test]
+    fn preserves_unicode_spaces_and_platform_path_separators() {
+        let paths = collect_book_paths([
+            OsString::from("/Users/李 雷/书架/第一 本.epub"),
+            OsString::from("/home/alex/My Books/second.azw3"),
+            OsString::from(r"D:\Books with spaces\第三本.mobi"),
+        ]);
+
+        assert_eq!(
+            paths,
+            vec![
+                "/Users/李 雷/书架/第一 本.epub",
+                "/home/alex/My Books/second.azw3",
+                r"D:\Books with spaces\第三本.mobi"
+            ]
+        );
+    }
+
+    #[test]
     fn queues_paths_until_the_frontend_listener_is_ready() {
         let state = PendingOpenFiles::from_args([OsString::from(r"D:\Books\cold.txt")]);
 
