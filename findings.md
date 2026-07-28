@@ -914,6 +914,7 @@
 - EPUB iframe 图片激活应在 capture phase 处理。epub.js 或内容脚本可在冒泡阶段停止事件，Chromium 下未触发不代表 WKWebView/WebKit 同样安全。
 - Playwright WebKit 会严格执行 epub.js iframe 的 `sandbox`：未授予 `allow-scripts` 时，不仅动态监听器不运行，同一次 frame evaluate 内调用按钮 `click()` 也不会进入 handler。为了不扩大不受信任书籍内容权限，图片查看器应由父文档透明原生按钮覆盖 iframe 图片，而不是启用 `allow-scripts`。
 - 父文档图片覆盖层必须复用稳定按钮实例并随 iframe 重排同步几何位置；否则 250 ms 同步期间替换节点会让 WebKit 的焦点恢复目标失效。EPUB 选择/标注仍由 Chromium E2E 覆盖，真实 WKWebView 交互留给带 Apple 凭据的原生验收。
+- 书架列表标题 popover 的无布局位移断言不应同时启动 View Transition 再立即测量：macOS Intel 的较慢 runner 会在 transition 更新/伪元素动画注册窗口内取得不同几何值。该用例改用键盘 Enter 切换列表（产品逻辑本就对键盘禁用装饰性 transition），并先等待 `book-shelf--list` 状态，既覆盖键盘路径也隔离 popover 的布局契约。
 - sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。
 - Tauri 2.11 的 macOS `RunEvent::Opened` 提供 URL 列表，`RunEvent::Reopen` 提供 Dock 重开状态；使用 `Builder::build(...).run(callback)` 可与 single-instance 回调共享同一文件队列和窗口聚焦逻辑。
 - Tauri menu builder 可组合标准 About/Edit/Window/Quit 项；Import Books、Import Folder 与 Settings 使用自定义 ID，再向 WebView 发 `native-app-action`，避免复制 React 导入或设置状态机。
