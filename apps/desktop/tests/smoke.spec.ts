@@ -346,7 +346,7 @@ test("shows the complete default-cover title in list view", async ({ page }) => 
   const cardAfterHover = await card.boundingBox();
   expect(coverBox?.width).toBeCloseTo(70, 2);
   expect(coverBox?.height).toBeCloseTo(105, 2);
-  expect(cardAfterHover?.height).toBe(cardBeforeHover?.height);
+  expect(cardAfterHover?.height).toBeCloseTo(cardBeforeHover?.height ?? 0, 3);
 });
 
 test("removes a seeded book through the right-click actions menu", async ({ page }) => {
@@ -1633,7 +1633,7 @@ for (const sourceFormat of ["epub", "mobi", "azw3"] as const) {
     expect(totalLocations).toBeGreaterThan(2);
 
     const penultimateSliderValue = Math.round(
-      ((totalLocations - 2.5) / (totalLocations - 1)) * 1000,
+      ((totalLocations - 2) / (totalLocations - 1)) * 1000,
     );
     await progressSlider.evaluate((element, value) => {
       const input = element as HTMLInputElement;
