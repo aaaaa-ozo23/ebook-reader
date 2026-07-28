@@ -905,6 +905,11 @@
 - Tauri v2 sidecar 按 target triple 选择外部二进制；macOS Universal 需要双架构 libmobi 产物及合并验证，Linux AppImage 必须在最低支持 glibc/WebKitGTK 基线构建。
 - 编译期 `EBOOK_READER_BUILD_FLAVOR` 适合区分同一 OS 的自动/手动更新包；未知 flavor 必须 panic，避免错误拼写静默落入可安装 updater。
 - Tauri capability JSON 中的 `windows: ["main"]` 指 WebView window label，并非 Windows OS 限定；Stage 15 不应错误地复制或删除该配置。
+
+### 第五轮跨平台质量矩阵
+
+- Windows runner 同时执行 35 个 Vitest 文件时，60 项 `App.test.tsx` 中 10 项在默认 1 秒异步等待边界附近失败；同一提交在 Linux/macOS ARM 及本地均为 217/217。CI worker 上限应显式设为 2，降低共享 runner 调度噪声，同时保留所有断言和产品超时。
+- macOS ARM 的 Rust 唯一失败不是 sidecar 或产品逻辑：`/bin/false` 在该 runner 不存在，使“非零 converter”测试走成“converter missing”。macOS 应使用 `/usr/bin/false`，Linux 继续使用 `/bin/false`。
 - sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。
 - Tauri 2.11 的 macOS `RunEvent::Opened` 提供 URL 列表，`RunEvent::Reopen` 提供 Dock 重开状态；使用 `Builder::build(...).run(callback)` 可与 single-instance 回调共享同一文件队列和窗口聚焦逻辑。
 - Tauri menu builder 可组合标准 About/Edit/Window/Quit 项；Import Books、Import Folder 与 Settings 使用自定义 ID，再向 WebView 发 `native-app-action`，避免复制 React 导入或设置状态机。

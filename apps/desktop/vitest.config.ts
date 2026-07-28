@@ -11,6 +11,7 @@ export default defineConfig({
       },
     },
     include: ["src/**/*.test.{ts,tsx}"],
+    maxWorkers: process.env.CI ? 2 : undefined,
     setupFiles: "./src/test/setup.ts",
   },
 });
