@@ -112,7 +112,7 @@ lipo -create \
   "$output_dir/mobitool-aarch64-apple-darwin" \
   -output "$universal"
 chmod 755 "$universal"
-lipo -verify_arch x86_64 arm64 "$universal"
+lipo "$universal" -verify_arch x86_64 arm64
 
 manifest="$output_dir/libmobi-macos-build.json"
 compiler="$(clang --version | head -n 1)"

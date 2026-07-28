@@ -2443,3 +2443,4 @@
 - **15.6 首轮 macOS：** `macos-15-intel` 与 `macos-15` 均在 sidecar GPG 校验阶段无诊断退出 2；修复分支保留 stderr，并对导入、主指纹和签名子指纹分别输出不含敏感信息的失败原因。
 - **15.6 修复：** Rust MOBI fixture 现在根据编译期 `EBOOK_READER_TARGET_TRIPLE` 和 Windows 扩展名选择 sidecar，Linux/macOS 不再触碰 `.exe`。本地 Cargo fmt、Rust 87/87、两个 Unix 脚本 syntax 与 diff check 通过；待提交、合并、推送后重新 dispatch。
 - **15.6 第二轮 macOS 根因：** Actions run `30325936039` 显示 GPG 已成功导入 pinned key，但工作区内 `GNUPGHOME` 的 Unix socket 路径过长，GnuPG 2.5 无法连接 agent 并返回非零。临时 GPG home 改到 `${TMPDIR:-/tmp}` 的短路径，仍由 trap 删除并继续强制两级指纹和 detached signature 校验。
+- **15.6 第三轮 macOS：** Actions run `30326308389` 已越过 GPG 并成功编译 x86_64/arm64 两个 libmobi slice；最终 `lipo -verify_arch` 把文件参数放在架构列表之后，Xcode 16.4 将路径误判为未知架构。已按 `lipo <file> -verify_arch <arch...>` 修正。
