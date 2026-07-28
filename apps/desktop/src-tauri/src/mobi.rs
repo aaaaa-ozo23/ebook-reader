@@ -796,8 +796,13 @@ mod tests {
             .join("System32/WindowsPowerShell/v1.0/powershell.exe")
     }
 
-    #[cfg(not(windows))]
+    #[cfg(all(unix, not(target_os = "macos")))]
     fn failing_converter() -> PathBuf {
         PathBuf::from("/bin/false")
+    }
+
+    #[cfg(target_os = "macos")]
+    fn failing_converter() -> PathBuf {
+        PathBuf::from("/usr/bin/false")
     }
 }
