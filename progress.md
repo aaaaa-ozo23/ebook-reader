@@ -2455,3 +2455,5 @@
 - **15.6 第八轮修复：** 默认封面标题 popover 用例改用键盘 Enter 切换列表并等待目标 class；该产品路径按现有契约不启动装饰性 View Transition，因此几何断言只测 popover 是否造成布局位移，不再混入异步跨文档 transition。
 - **15.6 第九轮：** Actions run `30342561496` 的 Windows 质量作业全绿。macOS Intel WebKit 23/24 与 Linux Chromium 22/24 均证明图片覆盖层修复稳定；剩余失败为约 `1.5e-5` CSS px 的精确浮点比较、MOBI 滑杆倒数第二项的取整边界，以及 macOS ARM 的 GPG agent socket 偶发超限。
 - **15.6 第九轮修复：** DOMRect 高度改为三位小数近似比较；滑杆直接取倒数第二 location 的归一中心；macOS GPG home 固定为 `/tmp/ebook-reader-gpg.*` 而不信任 runner `TMPDIR`，并继续使用退出 trap 清理。
+- **15.6 第十轮：** Actions run `30344095387` 的 Windows、macOS Intel 与 macOS ARM 质量作业全绿，证明 GPG 短路径、WebKit 图片覆盖层、焦点和子像素断言均稳定。Linux 为 23/24，仅 MOBI 的同一近末 progression 因分页几何报告 location 14 而非 15。
+- **15.6 第十轮修复：** 书末导航用例保留滑杆拖动/tooltip/前进断言，近末提交后允许位于倒数两项，并通过最多两次 Next 明确到达最终 location 与 100%；这验证用户结果且不把 EPUB generated location 误当固定视觉页码。
