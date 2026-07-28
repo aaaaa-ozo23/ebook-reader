@@ -911,3 +911,6 @@
 - libmobi 0.12 Universal sidecar 不能只合并未经审计的二进制；构建脚本同时固定源码 SHA-256、GPG 主/签名指纹、macOS 12 deployment target，并为两个 thin slice 和 Universal 输出记录大小与 SHA-256。
 - Tauri 当前配置模型使用 `bundle.macOS.minimumSystemVersion`、`hardenedRuntime` 与 `createUpdaterArtifacts`；Developer ID identity 可由 `APPLE_SIGNING_IDENTITY` 注入，App Store Connect 公证使用 `APPLE_API_ISSUER`、`APPLE_API_KEY`、`APPLE_API_KEY_PATH`。
 - macOS CI 导入证书时不能永久替换 runner 的默认 keychain；脚本先保存原默认值，创建临时 keychain，完成后在 `always()` 路径恢复并删除证书、keychain 与状态文件。
+- Ubuntu 22.04 必须是 Linux release 的构建主机而不只是测试容器；在 24.04 上产出的较新 glibc symbol version 会让旧系统在启动前失败，无法由 AppImage 自身修复。
+- Linux libmobi sidecar 审计同时需要 ELF machine、`+x` mode 与 `ldd` allowlist；只验证文件名或哈希不能发现错误架构、丢失执行位或意外引入的非系统动态库。
+- 批量目录扫描使用 `symlink_metadata` 并拒绝 Unix symlink/Windows reparse point，随后才 canonicalize 并校验 root containment；这避免文件夹导入沿链接逃逸到用户未选择的目录。

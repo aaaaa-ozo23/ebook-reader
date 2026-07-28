@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.3：macOS 打包，implementation_complete。Universal app/DMG overlay、临时 Developer ID/App Store Connect 凭据链与全部失败即停止校验已实现；真实签名、公证、stapling、Gatekeeper 与双架构安装仍等待带 secrets 的 macOS runner，缺失该证据时 Stage 15 保持未完成。
+大阶段 15.4：Linux 运行适配，implementation_complete。Ubuntu 22.04 x64/libmobi ELF 构建与 XDG/portal/X11/Wayland/symlink/文件打开契约已固化；真实 Linux 三发行版运行证据将在 15.6 获取，未取得前 Stage 15 不完成。
 
 ## 分支策略
 
@@ -577,6 +577,7 @@
 | 15.1 平台抽象审计 | `codex/stage15-platform-abstraction` | complete | core build；desktop 34 files / 214 tests；lint/build；Cargo fmt；Rust 86/86；`git diff --check` |
 | 15.2 macOS 运行适配 | `codex/stage15-macos-runtime` | implementation_complete，等待 macOS runner | `pnpm.cmd check`（core 9、desktop 217）；Cargo fmt；Rust 87/87；macOS build script `bash -n`；`git diff --check` |
 | 15.3 macOS 打包 | `codex/stage15-macos-packaging` | implementation_complete，等待 Apple credentials/runner | macOS config 经 Tauri `--no-bundle` 解析；4 个 shell script `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
+| 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 

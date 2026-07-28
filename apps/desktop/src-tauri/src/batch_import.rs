@@ -634,4 +634,28 @@ mod tests {
         assert!(items.is_empty());
         assert!(!truncated);
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn directory_scan_skips_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempdir().expect("dir");
+        let outside = tempdir().expect("outside");
+        let outside_book = outside.path().join("outside.epub");
+        fs::write(&outside_book, b"epub").expect("book");
+        symlink(&outside_book, dir.path().join("linked.epub")).expect("symlink");
+        let mut items = Vec::new();
+        let mut truncated = false;
+        let canceled = AtomicBool::new(false);
+
+        collect_path(dir.path(), 0, None, &mut items, &mut truncated, &canceled).expect("scan");
+
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].status, BatchItemStatus::Unsupported);
+        assert_eq!(
+            items[0].message.as_deref(),
+            Some("Links and reparse paths are skipped")
+        );
+    }
 }
