@@ -2447,3 +2447,4 @@
 - **15.6 第四轮 macOS：** Actions run `30326532769` 已通过 Universal sidecar、core 9、desktop 217、production build 与 Rust fmt；macOS-only 编译发现 Tauri 2.11 `on_menu_event` 按值传递 `MenuEvent`，而 handler 错误声明为借用。handler 已改为 owned event，菜单动作映射不变。
 - **15.6 第五轮 Windows：** Actions run `30327006813` 的 core 9 通过；desktop 仅 `App.test.tsx` 在 Windows runner 并行负载下出现 10 个时序失败，其中多数落在 Testing Library 默认 1 秒边界，Linux/macOS ARM 同一 217 项全过。CI 将 Vitest worker 限制为 2，避免大型 jsdom App 套件与其余 34 个文件争抢 CPU。
 - **15.6 第五轮 macOS ARM：** Universal sidecar、core 9、desktop 217 和 87 个 Rust 产品/转换测试通过；唯一失败是测试辅助程序在 Unix 上统一写死 `/bin/false`，而 macOS runner 使用 `/usr/bin/false`。已按目标 OS 选择失败命令，不改变运行时代码。
+- **15.6 第六轮：** Windows/Linux/macOS ARM 的 core 9 与 desktop 217 全过，macOS ARM Rust 88/88 全过；WebKit 19/24 暴露 macOS 点击不隐式聚焦按钮，以及 epub.js 冒泡监听截断 iframe 图片激活。Modal 现接受显式返回焦点 ref，字体失败路径主动恢复按钮焦点，EPUB 图片桥接改为捕获阶段。

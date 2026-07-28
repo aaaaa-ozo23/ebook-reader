@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import type { PageTransitionMode } from "@reader/core";
 
 import "./DesignSystemFixture.css";
@@ -32,7 +32,11 @@ export function DesignSystemFixture() {
   const [transition, setTransition] = useState<PageTransitionMode>("none");
   const [fontSize, setFontSize] = useState(18);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const openModal = useCallback(() => setIsModalOpen(true), []);
+  const modalReturnFocusRef = useRef<HTMLButtonElement | null>(null);
+  const openModal = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    modalReturnFocusRef.current = event.currentTarget;
+    setIsModalOpen(true);
+  }, []);
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
   return (
@@ -109,6 +113,7 @@ export function DesignSystemFixture() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
+        returnFocusRef={modalReturnFocusRef}
         title="Reading settings"
         variant="sheet"
       >

@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
 
 import "./controls.css";
 import { IconButton } from "./IconButton";
@@ -12,6 +12,7 @@ interface ModalProps {
   headerActions?: ReactNode;
   isOpen: boolean;
   onClose: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
   restoreFocusOnClose?: boolean;
   title: string;
   variant?: "modal" | "sheet";
@@ -35,6 +36,7 @@ export function Modal({
   headerActions,
   isOpen,
   onClose,
+  returnFocusRef,
   restoreFocusOnClose = true,
   title,
   variant = "modal",
@@ -48,7 +50,8 @@ export function Modal({
     }
 
     const restoreTarget =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      returnFocusRef?.current ??
+      (document.activeElement instanceof HTMLElement ? document.activeElement : null);
     const dialog = dialogRef.current;
     const focusable = dialog?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [];
     focusable[0]?.focus();
@@ -89,7 +92,7 @@ export function Modal({
         restoreTarget?.focus();
       }
     };
-  }, [isOpen, onClose, restoreFocusOnClose]);
+  }, [isOpen, onClose, restoreFocusOnClose, returnFocusRef]);
 
   if (!isOpen) {
     return null;

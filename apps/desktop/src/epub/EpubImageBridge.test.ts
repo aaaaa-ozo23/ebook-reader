@@ -37,6 +37,21 @@ describe("EPUB image bridge", () => {
     frame.remove();
   });
 
+  it("activates before an EPUB runtime stops the bubbling click", () => {
+    document.body.innerHTML = `<img src="blob:epub-capture" alt="Captured plate" />`;
+    const image = document.querySelector("img") as HTMLImageElement;
+    markImageLoaded(image, 800, 600);
+    document.body.addEventListener("click", (event) => event.stopPropagation(), {
+      once: true,
+    });
+    const onActivate = vi.fn();
+    registerEpubImageBridge(document, onActivate);
+
+    image.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+
+    expect(onActivate).toHaveBeenCalledTimes(1);
+  });
+
   it("decorates loaded HTML images and activates them by click", () => {
     document.body.innerHTML = `
       <figure>
