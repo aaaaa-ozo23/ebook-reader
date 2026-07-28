@@ -29,6 +29,7 @@ import {
   type BookProgressSummary,
 } from "./library/bookProgress";
 import { listenForOpenBookFiles, takePendingOpenFiles } from "./tauri/fileOpen";
+import { dispatchNativeAppAction, listenForNativeAppActions } from "./tauri/nativeMenu";
 import {
   importBook,
   listBooks,
@@ -527,6 +528,21 @@ function App() {
     },
     [],
   );
+
+  useEffect(() => {
+    let stopListening: (() => void) | undefined;
+    void listenForNativeAppActions((action) => {
+      dispatchNativeAppAction(action, {
+        importFiles: () => void openBatchPicker("files"),
+        importFolder: () => void openBatchPicker("folder"),
+        openSettings: handleOpenSettings,
+      });
+    }).then((unlisten) => {
+      stopListening = unlisten;
+    });
+
+    return () => stopListening?.();
+  }, [handleOpenSettings, openBatchPicker]);
 
   const handleCloseLibrarySearch = useCallback(() => {
     setIsLibrarySearchOpen(false);

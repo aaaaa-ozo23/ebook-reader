@@ -906,3 +906,6 @@
 - 编译期 `EBOOK_READER_BUILD_FLAVOR` 适合区分同一 OS 的自动/手动更新包；未知 flavor 必须 panic，避免错误拼写静默落入可安装 updater。
 - Tauri capability JSON 中的 `windows: ["main"]` 指 WebView window label，并非 Windows OS 限定；Stage 15 不应错误地复制或删除该配置。
 - sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。
+- Tauri 2.11 的 macOS `RunEvent::Opened` 提供 URL 列表，`RunEvent::Reopen` 提供 Dock 重开状态；使用 `Builder::build(...).run(callback)` 可与 single-instance 回调共享同一文件队列和窗口聚焦逻辑。
+- Tauri menu builder 可组合标准 About/Edit/Window/Quit 项；Import Books、Import Folder 与 Settings 使用自定义 ID，再向 WebView 发 `native-app-action`，避免复制 React 导入或设置状态机。
+- libmobi 0.12 Universal sidecar 不能只合并未经审计的二进制；构建脚本同时固定源码 SHA-256、GPG 主/签名指纹、macOS 12 deployment target，并为两个 thin slice 和 Universal 输出记录大小与 SHA-256。

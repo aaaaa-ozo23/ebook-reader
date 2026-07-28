@@ -4,6 +4,7 @@ mod db;
 mod file_open;
 mod fonts;
 mod library_search;
+mod macos;
 mod mobi;
 mod platform;
 mod reading_history;
@@ -535,33 +536,39 @@ fn get_desktop_platform_capabilities() -> platform::DesktopPlatformCapabilities 
     platform::capabilities()
 }
 
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn route_open_paths(app: &tauri::AppHandle, paths: Vec<String>) {
+    if paths.is_empty() {
+        return;
+    }
+
+    focus_main_window(app);
+    if let Some(paths_to_emit) = app
+        .state::<file_open::PendingOpenFiles>()
+        .route_new_paths(paths)
+    {
+        let _ = app.emit(file_open::OPEN_BOOK_FILES_EVENT, paths_to_emit);
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let pending_open_files = file_open::PendingOpenFiles::from_args(std::env::args_os().skip(1));
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(pending_open_files)
         .manage(backup::DataOperationRegistry::default())
         .manage(updater::UpdaterState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             let paths = file_open::collect_book_paths(args);
-
-            if paths.is_empty() {
-                return;
-            }
-
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-
-            if let Some(paths_to_emit) = app
-                .state::<file_open::PendingOpenFiles>()
-                .route_new_paths(paths)
-            {
-                let _ = app.emit(file_open::OPEN_BOOK_FILES_EVENT, paths_to_emit);
-            }
+            route_open_paths(app, paths);
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -631,7 +638,30 @@ pub fn run() {
             save_update_preferences,
             take_pending_open_files,
             get_desktop_platform_capabilities
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        ]);
+
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .menu(macos::menu)
+        .on_menu_event(macos::handle_menu_event);
+
+    let app = builder
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app, _event| {
+        #[cfg(target_os = "macos")]
+        match _event {
+            tauri::RunEvent::Opened { urls } => {
+                let paths = file_open::collect_book_paths(
+                    urls.into_iter()
+                        .filter_map(|url| url.to_file_path().ok())
+                        .map(|path| path.into_os_string()),
+                );
+                route_open_paths(_app, paths);
+            }
+            tauri::RunEvent::Reopen { .. } => focus_main_window(_app),
+            _ => {}
+        }
+    });
 }
