@@ -72,7 +72,7 @@ pub fn menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         .build()
 }
 
-pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: &MenuEvent) {
+pub fn handle_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let action = match event.id().as_ref() {
         IMPORT_BOOKS_MENU_ID => Some("import-files"),
         IMPORT_FOLDER_MENU_ID => Some("import-folder"),
