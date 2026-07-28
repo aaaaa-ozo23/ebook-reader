@@ -4,7 +4,7 @@
 基于 `DEVELOPMENT.md` 的技术路线，按可验证、可合并、可回滚的小阶段推进 Windows-first 桌面 MVP，并为后续跨平台和移动端共享逻辑保留空间。
 
 ## 当前阶段
-大阶段 15.6：跨平台 CI，in_progress。第十轮 Windows 与双架构 macOS 已全绿，Linux 仅剩不同分页几何下“接近书末”的精确 location 断言；已改为允许倒数两项并逐步 Next 到终点，等待最终复验。
+大阶段 15.7：v0.4.0 RC，in_progress。Stage 15.6 已由 Actions run `30345615108` 在 Windows x64、Ubuntu 22.04、macOS Intel 与 macOS Apple Silicon 四平台同提交全绿；当前统一 0.4.0 版本并实现跨平台 RC 汇总、清单和验收文档。
 
 ## 分支策略
 
@@ -579,7 +579,8 @@
 | 15.3 macOS 打包 | `codex/stage15-macos-packaging` | implementation_complete，等待 Apple credentials/runner | macOS config 经 Tauri `--no-bundle` 解析；4 个 shell script `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
 | 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 | 15.5 Linux 打包 | `codex/stage15-linux-packaging` | implementation_complete，等待 Ubuntu 22.04 runner | AppImage/deb overlay 经 Tauri 分 flavor 编译；shell `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
-| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | in_progress，Linux 书末导航断言修复后最终复验 | Actions run `30344095387`；Windows、macOS Intel/ARM 全绿；Linux Chromium 23/24，唯一失败为 MOBI 书末 location 14/15 差异 |
+| 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | complete | Actions run `30345615108`；Windows x64、Ubuntu 22.04、macOS Intel、macOS Apple Silicon 4/4 成功；core 9、desktop 219、Rust/sidecar/安全及 WebKit/Chromium 门禁通过 |
+| 15.7 v0.4.0 RC | `codex/stage15-v0.4-release-candidate` | in_progress | 版本、跨平台汇总器与工作流待实现；签名/公证 RC 仍需用户配置 CI credentials |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 
