@@ -2430,3 +2430,6 @@
 - **15.4 sidecar：** 新增 Ubuntu 22.04 x64 libmobi 0.12 构建脚本，固定 source/GPG trust，校验 ELF x86-64、执行位与动态依赖 allowlist，并输出 target/compiler/size/SHA-256 manifest。
 - **15.4 路径：** app data 继续只由 Tauri `app_data_dir`/XDG 解析；portal 继续复用 dialog plugin；文件关联与 single-instance 进入同一 pending queue。新增 Unix symlink 目录扫描拒绝测试。
 - **15.4 本地门禁：** Linux shell `bash -n`、`pnpm.cmd check`（core 9、desktop 217）、Cargo fmt、Windows Rust 87/87 与 diff check 通过；Linux runner 还需执行第 88 个 Unix-only symlink 测试及真实 ELF/WebKitGTK/X11/Wayland 五格式验收。
+- **15.5 轨道拆分：** AppImage 与 deb 使用独立 Tauri overlay/编译期 flavor；AppImage 生成 `.AppImage.sig` 并启用自动更新，deb 不生成 updater artifact，显示手动升级路径。
+- **15.5 包验证：** 提取 AppImage/deb 后检查 ELF x64 sidecar `+x`、五 MIME、desktop `%F`、WebKitGTK 4.1 依赖与无书籍/数据库；smoke 在隔离 XDG 下覆盖无 FUSE AppImage、deb 安装/重装/卸载和 sentinel 保留。
+- **15.5 本地门禁：** 两个 overlay 均经 Tauri `--no-bundle` 解析并分别以 appimage/deb flavor 完成 release 编译；三个 Linux/mac verifier shell `bash -n`、共享 check、Cargo fmt、Rust 87/87 和 diff check 通过。真实包生成/安装仍等待 Ubuntu 22.04 runner。

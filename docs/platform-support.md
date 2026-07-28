@@ -78,6 +78,20 @@ The Linux runner must verify WebKitGTK 4.1, system and custom fonts, portal sele
 X11/Wayland launch, `%F` multi-file opening, single instance behavior, five-format import
 and reading, progress/search/backup restore, and data deletion.
 
+AppImage and deb are compiled separately with `EBOOK_READER_BUILD_FLAVOR=appimage` and
+`deb`, respectively. The AppImage config creates its mandatory `.AppImage.sig` updater
+signature; deb disables updater artifacts and stays on a documented manual-upgrade path.
+Package verification extracts both formats and requires an executable ELF x86-64 sidecar,
+five MIME types, a desktop entry using `%F`, WebKitGTK 4.1 dependency metadata, and no
+book/database payload. AppImage runtime smoke also runs with `APPIMAGE_EXTRACT_AND_RUN=1`
+so CI does not depend on FUSE.
+
+Installing, upgrading, or uninstalling the deb changes only application package files.
+The XDG application-data directory is intentionally not a dpkg-owned path, so package
+removal preserves the library, annotations, fonts, index, history, and settings. Users on
+the deb track download and install the newer deb manually; the app never presents the
+AppImage in-place installer for that track.
+
 ## Data safety
 
 Installer and updater acceptance must use an isolated identifier and data root. Tests

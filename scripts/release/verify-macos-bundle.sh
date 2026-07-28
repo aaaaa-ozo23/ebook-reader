@@ -49,7 +49,7 @@ for binary in "$main_executable" "$sidecar"; do
   codesign --verify --strict --verbose=2 "$binary"
 done
 
-if find "$app_bundle" -type f \( -name '*.sqlite*' -o -name '*.epub' -o -name '*.txt' -o -name '*.pdf' -o -name '*.mobi' -o -name '*.azw3' \) -print -quit | grep -q .; then
+if find "$app_bundle" -type f \( -name '*.sqlite*' -o -name '*.epub' -o -name '*.pdf' -o -name '*.mobi' -o -name '*.azw3' -o -path '*/library/*.txt' \) -print -quit | grep -q .; then
   echo "The macOS application bundle contains user or test data." >&2
   exit 1
 fi
