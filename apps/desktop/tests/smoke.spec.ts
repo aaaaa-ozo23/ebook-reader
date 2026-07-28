@@ -322,14 +322,10 @@ test("shows the complete default-cover title in list view", async ({ page }) => 
 
   await page.goto("/");
 
-  await page.getByRole("button", { name: "List" }).click();
-  await page.evaluate(async () => {
-    await Promise.all(
-      document
-        .getAnimations()
-        .map((animation) => animation.finished.catch(() => undefined)),
-    );
-  });
+  const listViewButton = page.getByRole("button", { name: "List" });
+  await listViewButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".book-shelf")).toHaveClass(/book-shelf--list/);
   const card = page.getByRole("article", { name: `${title} book` });
   const cover = page.locator(".book-card__cover");
   const coverShell = card.locator(".book-card__cover-shell");

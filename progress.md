@@ -2451,3 +2451,5 @@
 - **15.6 第七轮：** Actions run `30329711745` 的 Windows 与 Linux 质量作业全绿；macOS Intel/ARM 的共享、Rust、Universal sidecar 与 21/24 WebKit 用例通过，仅 EPUB/MOBI/AZW3 三个图片查看器用例失败。
 - **15.6 WebKit sandbox 根因：** epub.js iframe 有意不授予 `allow-scripts`，WebKit 因而阻止 iframe 内动态事件监听器执行；启用脚本会扩大书籍内容权限。改为父文档透明原生按钮映射 iframe 图片几何位置，保持 sandbox 安全边界并提供键盘焦点/对话框返回目标。
 - **15.6 覆盖层验证：** `pnpm.cmd check` 通过 core 9、desktop 219 与 production build；Cargo fmt、Rust 87/87、Stage 15 verifier、diff check 通过；本地 Playwright WebKit 与 Chromium 的 EPUB/MOBI/AZW3 完整用例均为 3/3。WebKit 的 sandbox 内选择合成不再作为浏览器模拟门禁，Chromium 仍完整覆盖选择/标注，原生 WKWebView 留待签名 macOS 验收。
+- **15.6 第八轮：** Actions run `30340391198` 四平台 core 9、desktop 219 全过；Windows、Linux、macOS ARM 质量作业全绿，macOS Intel WebKit 23/24。图片查看器三格式已全部修复，唯一失败是列表切换 View Transition 与 hover 前后高度测量的 runner 时序竞争。
+- **15.6 第八轮修复：** 默认封面标题 popover 用例改用键盘 Enter 切换列表并等待目标 class；该产品路径按现有契约不启动装饰性 View Transition，因此几何断言只测 popover 是否造成布局位移，不再混入异步跨文档 transition。
