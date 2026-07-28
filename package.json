@@ -27,7 +27,8 @@
     "release:security": "node scripts/release/verify-release-security.mjs",
     "release:rc": "powershell -ExecutionPolicy Bypass -File scripts/release/build-release.ps1",
     "verify:release": "node scripts/verify-release.mjs",
-    "verify:stage14": "node scripts/verify-stage14.mjs"
+    "verify:stage14": "node scripts/verify-stage14.mjs",
+    "verify:stage15": "node scripts/verify-stage15.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

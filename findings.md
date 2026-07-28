@@ -917,3 +917,6 @@
 - AppImage 与 deb 必须分开编译，而不是一次 Tauri 调用生成两包；否则编译期 `EBOOK_READER_BUILD_FLAVOR` 只能代表一个轨道，deb 可能错误暴露 AppImage 自动安装能力。
 - Tauri v2 `createUpdaterArtifacts: true` 在 Linux 直接复用 `.AppImage` 并生成 `.AppImage.sig`，不是默认生成 tarball；RC manifest 和 verifier 必须按当前 v2 artifact 形态处理。
 - deb 的 payload 只拥有 `/usr` 等 package paths；XDG app-data 不属于 dpkg，重装/升级/卸载保留测试应使用隔离 `XDG_DATA_HOME` sentinel，不能触碰真实 profile。
+- 2026 hosted runner label 已明确分架构：`macos-15-intel` 是 x86_64，`macos-15` 是 arm64；CI 仍用 `uname -m` 失败即停止，避免 runner label 漂移后生成伪双架构证据。
+- 跨平台质量门禁与签名 RC 打包需分开 dispatch：默认不读取 secrets 即可持续验证四平台；只有显式 `build_rc=true` 才进入 Windows updater、Apple Developer ID/App Store Connect 与 Linux AppImage 签名路径。
+- AppImage v2 updater 资产是 `.AppImage` + `.AppImage.sig`；macOS 是 `.app.tar.gz` + `.sig`。安全扫描必须跳过二进制文本误判，同时拒绝私钥文件名、secret marker 和小型文本中的 runner-local path。

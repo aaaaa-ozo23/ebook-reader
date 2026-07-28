@@ -2433,3 +2433,8 @@
 - **15.5 轨道拆分：** AppImage 与 deb 使用独立 Tauri overlay/编译期 flavor；AppImage 生成 `.AppImage.sig` 并启用自动更新，deb 不生成 updater artifact，显示手动升级路径。
 - **15.5 包验证：** 提取 AppImage/deb 后检查 ELF x64 sidecar `+x`、五 MIME、desktop `%F`、WebKitGTK 4.1 依赖与无书籍/数据库；smoke 在隔离 XDG 下覆盖无 FUSE AppImage、deb 安装/重装/卸载和 sentinel 保留。
 - **15.5 本地门禁：** 两个 overlay 均经 Tauri `--no-bundle` 解析并分别以 appimage/deb flavor 完成 release 编译；三个 Linux/mac verifier shell `bash -n`、共享 check、Cargo fmt、Rust 87/87 和 diff check 通过。真实包生成/安装仍等待 Ubuntu 22.04 runner。
+- **15.6 workflow：** 新增 manual-only、`contents: read`、7 天 artifact 的四平台质量矩阵；macOS 使用 `macos-15-intel`/`macos-15`，Linux build 固定 Ubuntu 22.04，并在 Ubuntu 24.04 与 Debian 12 container 复验。
+- **15.6 原生门禁：** Unix sidecar 对三个真实 fixture 转 EPUB并验 zip；macOS Universal 在两架构 runner 启动；Linux 在 Xvfb/no-FUSE 下运行并验证 deb 生命周期；Windows release binary 执行 startup smoke。
+- **15.6 安全：** macOS/Linux 分别生成 Syft 1.44.0 CycloneDX SBOM并执行跨平台 artifact secret/local-path scan；workflow 默认 `build_rc=false` 不读取签名 secrets，显式 true 才执行 package jobs。
+- **15.6 本地验证：** Stage 15 contract verifier、release security、shell syntax、PowerShell parse、Prettier/ESLint、core 9、desktop 217、production build、Cargo fmt、Windows Rust 87/87 与 diff check 通过；workflow 远端 dispatch 结果待推送后获取。
+- **15.6 过程错误：** 首次 `pnpm.cmd check` 发现两个新增 Node 脚本缺少 ESLint Node globals 声明；补充 file-level globals 后全量通过。尝试使用本地 Ruby/PyYAML/yaml npm parser 均不可用，未安装临时依赖，改由 Stage 15 contract verifier和 GitHub workflow 注册校验。

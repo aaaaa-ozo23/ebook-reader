@@ -17,3 +17,6 @@ fi
 if [[ -n "${EBOOK_READER_DEFAULT_KEYCHAIN_PATH:-}" ]]; then
   rm -f "$EBOOK_READER_DEFAULT_KEYCHAIN_PATH"
 fi
+if [[ -n "${EBOOK_READER_API_KEY_PATH:-}" ]]; then
+  rm -f "$EBOOK_READER_API_KEY_PATH"
+fi
