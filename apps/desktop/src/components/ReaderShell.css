@@ -937,6 +937,29 @@
   background: var(--txt-reader-background, #f7f1e3);
 }
 
+.reader-epub-image-overlays {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.reader-epub-image-overlay {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  pointer-events: auto;
+}
+
+.reader-epub-image-overlay:focus-visible {
+  outline: 3px solid var(--ds-color-focus-ring);
+  outline-offset: -3px;
+}
+
 .reader-epub-note-underline rect {
   stroke: none;
 }

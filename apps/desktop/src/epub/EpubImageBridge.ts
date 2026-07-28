@@ -62,7 +62,10 @@ export function registerEpubImageBridge(
   };
 }
 
-export function resolveEpubImageResource(candidate: Element): EpubImageResource | null {
+export function resolveEpubImageResource(
+  candidate: Element,
+  trigger: Element = candidate,
+): EpubImageResource | null {
   if (!isSupportedImage(candidate) || isDecorativeImage(candidate)) {
     return null;
   }
@@ -87,7 +90,7 @@ export function resolveEpubImageResource(candidate: Element): EpubImageResource 
   return {
     sourceUrl,
     accessibleName,
-    trigger: candidate,
+    trigger,
     ...dimensions,
     ...(description === undefined ? {} : { description }),
   };
@@ -96,7 +99,7 @@ export function resolveEpubImageResource(candidate: Element): EpubImageResource 
 function activateImageTarget(
   event: MouseEvent | KeyboardEvent,
   onActivate: EpubImageActivateHandler,
-) {
+): void {
   const candidate = findImageCandidate(event.target);
 
   if (candidate === null) {
@@ -111,8 +114,8 @@ function activateImageTarget(
 
   event.preventDefault();
   event.stopPropagation();
-  focusImageCandidate(candidate);
   onActivate(resource);
+  focusImageCandidate(candidate);
 }
 
 function decorateImageCandidate(
@@ -287,7 +290,11 @@ function focusImageCandidate(candidate: Element) {
   const focusableCandidate = candidate as Element & {
     focus?: (options?: FocusOptions) => void;
   };
-  focusableCandidate.focus?.({ preventScroll: true });
+  try {
+    focusableCandidate.focus?.({ preventScroll: true });
+  } catch {
+    focusableCandidate.focus?.();
+  }
 }
 
 function restoreAttribute(

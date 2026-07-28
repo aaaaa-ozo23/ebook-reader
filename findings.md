@@ -912,6 +912,8 @@
 - macOS ARM 的 Rust 唯一失败不是 sidecar 或产品逻辑：`/bin/false` 在该 runner 不存在，使“非零 converter”测试走成“converter missing”。macOS 应使用 `/usr/bin/false`，Linux 继续使用 `/bin/false`。
 - Playwright WebKit 证明 macOS 鼠标点击不能作为“按钮自动获得焦点”的跨平台契约；需要由 Modal 调用方显式保存返回目标，异步 picker 失败也应主动恢复焦点。
 - EPUB iframe 图片激活应在 capture phase 处理。epub.js 或内容脚本可在冒泡阶段停止事件，Chromium 下未触发不代表 WKWebView/WebKit 同样安全。
+- Playwright WebKit 会严格执行 epub.js iframe 的 `sandbox`：未授予 `allow-scripts` 时，不仅动态监听器不运行，同一次 frame evaluate 内调用按钮 `click()` 也不会进入 handler。为了不扩大不受信任书籍内容权限，图片查看器应由父文档透明原生按钮覆盖 iframe 图片，而不是启用 `allow-scripts`。
+- 父文档图片覆盖层必须复用稳定按钮实例并随 iframe 重排同步几何位置；否则 250 ms 同步期间替换节点会让 WebKit 的焦点恢复目标失效。EPUB 选择/标注仍由 Chromium E2E 覆盖，真实 WKWebView 交互留给带 Apple 凭据的原生验收。
 - sidecar 运行时同时需要处理 Tauri 打包后去掉 target triple 的基础名和开发目录中的 triple 名；macOS Universal 名作为额外受信候选，不允许回退到 PATH 查找。
 - Tauri 2.11 的 macOS `RunEvent::Opened` 提供 URL 列表，`RunEvent::Reopen` 提供 Dock 重开状态；使用 `Builder::build(...).run(callback)` 可与 single-instance 回调共享同一文件队列和窗口聚焦逻辑。
 - Tauri menu builder 可组合标准 About/Edit/Window/Quit 项；Import Books、Import Folder 与 Settings 使用自定义 ID，再向 WebView 发 `native-app-action`，避免复制 React 导入或设置状态机。

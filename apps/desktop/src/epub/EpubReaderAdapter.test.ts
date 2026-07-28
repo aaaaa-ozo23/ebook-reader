@@ -202,6 +202,65 @@ describe("EPUB selection annotations", () => {
 });
 
 describe("EPUB rendition image lifecycle", () => {
+  it("creates a parent-document image button for script-blocked WebKit frames", () => {
+    const frameHost = document.createElement("div");
+    const container = document.createElement("div");
+    const frame = document.createElement("iframe");
+    frameHost.append(container);
+    container.append(frame);
+    document.body.append(frameHost);
+    const frameDocument = frame.contentDocument;
+    expect(frameDocument).not.toBeNull();
+    if (frameDocument === null) {
+      return;
+    }
+    frameDocument.body.innerHTML = `<img src="blob:plate" alt="Plate" />`;
+    const image = frameDocument.querySelector("img") as HTMLImageElement;
+    Object.defineProperties(image, {
+      complete: { configurable: true, value: true },
+      currentSrc: { configurable: true, value: "blob:plate" },
+      naturalHeight: { configurable: true, value: 600 },
+      naturalWidth: { configurable: true, value: 800 },
+    });
+    frameHost.getBoundingClientRect = () => rect(0, 0, 800, 600);
+    frame.getBoundingClientRect = () => rect(10, 20, 500, 400);
+    image.getBoundingClientRect = () => rect(30, 40, 200, 100);
+    const onImageActivate = vi.fn();
+    const adapter = new EpubReaderAdapter({
+      bookId: "epub-overlay-image",
+      container,
+      onImageActivate,
+      sourceUrl: "blob:epub-overlay-image",
+      theme: defaultReaderTheme,
+    });
+    const internals = adapter as unknown as {
+      contentDocuments: Set<Document>;
+      stopImageOverlaySync: () => void;
+      syncImageOverlays: () => void;
+    };
+    internals.contentDocuments.add(frameDocument);
+
+    internals.syncImageOverlays();
+
+    const button = frameHost.querySelector(
+      "button.reader-epub-image-overlay",
+    ) as HTMLButtonElement;
+    expect(button).toHaveAttribute("aria-label", "Plate");
+    expect(button.style.left).toBe("40px");
+    expect(button.style.top).toBe("60px");
+    button.click();
+    expect(onImageActivate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceUrl: "blob:plate",
+        trigger: button,
+      }),
+    );
+
+    internals.stopImageOverlaySync();
+    expect(button).not.toBeInTheDocument();
+    frameHost.remove();
+  });
+
   it("registers image activation with the content document and cleans it up", () => {
     const onImageActivate = vi.fn();
     const adapter = new EpubReaderAdapter({
@@ -301,6 +360,20 @@ describe("EPUB rendition image lifecycle", () => {
     expect(document.getElementById("ebook-reader-custom-font")).toBeNull();
   });
 });
+
+function rect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    bottom: top + height,
+    height,
+    left,
+    right: left + width,
+    top,
+    width,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  };
+}
 
 describe("EPUB layout invalidation", () => {
   it("cancels animation consumers and restores the current CFI after theme changes", async () => {

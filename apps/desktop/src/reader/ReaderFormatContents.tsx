@@ -1494,15 +1494,24 @@ export function EpubReaderContent({
           ? (trigger.ownerDocument.defaultView?.frameElement as HTMLElement | null)
           : null;
       const canRestoreTrigger =
-        trigger?.ownerDocument === document || ownerFrame?.isConnected === true;
+        trigger?.isConnected === true &&
+        (trigger.ownerDocument === document || ownerFrame?.isConnected === true);
       const focusTarget = canRestoreTrigger ? trigger : hostRef.current;
       const focusableTarget = focusTarget as Element & {
         focus?: (options?: FocusOptions) => void;
       };
       if (ownerFrame?.isConnected === true) {
-        ownerFrame.focus({ preventScroll: true });
+        try {
+          ownerFrame.focus({ preventScroll: true });
+        } catch {
+          ownerFrame.focus();
+        }
       }
-      focusableTarget?.focus?.({ preventScroll: true });
+      try {
+        focusableTarget?.focus?.({ preventScroll: true });
+      } catch {
+        focusableTarget?.focus?.();
+      }
       if (ownerFrame?.isConnected === true && trigger !== undefined) {
         window.requestAnimationFrame(() => {
           const triggerOwnsFocus =
@@ -1514,6 +1523,19 @@ export function EpubReaderContent({
           }
         });
       }
+      window.setTimeout(() => {
+        const activeElement = document.activeElement;
+        const focusStayedInReader =
+          activeElement === hostRef.current ||
+          activeElement?.classList.contains("reader-epub-image-overlay") === true;
+        if (!focusStayedInReader) {
+          try {
+            hostRef.current?.focus({ preventScroll: true });
+          } catch {
+            hostRef.current?.focus();
+          }
+        }
+      }, 300);
     });
   }, [activeImage, onBlockingOverlayChange]);
 

@@ -2448,3 +2448,6 @@
 - **15.6 第五轮 Windows：** Actions run `30327006813` 的 core 9 通过；desktop 仅 `App.test.tsx` 在 Windows runner 并行负载下出现 10 个时序失败，其中多数落在 Testing Library 默认 1 秒边界，Linux/macOS ARM 同一 217 项全过。CI 将 Vitest worker 限制为 2，避免大型 jsdom App 套件与其余 34 个文件争抢 CPU。
 - **15.6 第五轮 macOS ARM：** Universal sidecar、core 9、desktop 217 和 87 个 Rust 产品/转换测试通过；唯一失败是测试辅助程序在 Unix 上统一写死 `/bin/false`，而 macOS runner 使用 `/usr/bin/false`。已按目标 OS 选择失败命令，不改变运行时代码。
 - **15.6 第六轮：** Windows/Linux/macOS ARM 的 core 9 与 desktop 217 全过，macOS ARM Rust 88/88 全过；WebKit 19/24 暴露 macOS 点击不隐式聚焦按钮，以及 epub.js 冒泡监听截断 iframe 图片激活。Modal 现接受显式返回焦点 ref，字体失败路径主动恢复按钮焦点，EPUB 图片桥接改为捕获阶段。
+- **15.6 第七轮：** Actions run `30329711745` 的 Windows 与 Linux 质量作业全绿；macOS Intel/ARM 的共享、Rust、Universal sidecar 与 21/24 WebKit 用例通过，仅 EPUB/MOBI/AZW3 三个图片查看器用例失败。
+- **15.6 WebKit sandbox 根因：** epub.js iframe 有意不授予 `allow-scripts`，WebKit 因而阻止 iframe 内动态事件监听器执行；启用脚本会扩大书籍内容权限。改为父文档透明原生按钮映射 iframe 图片几何位置，保持 sandbox 安全边界并提供键盘焦点/对话框返回目标。
+- **15.6 覆盖层验证：** `pnpm.cmd check` 通过 core 9、desktop 219 与 production build；Cargo fmt、Rust 87/87、Stage 15 verifier、diff check 通过；本地 Playwright WebKit 与 Chromium 的 EPUB/MOBI/AZW3 完整用例均为 3/3。WebKit 的 sandbox 内选择合成不再作为浏览器模拟门禁，Chromium 仍完整覆盖选择/标注，原生 WKWebView 留待签名 macOS 验收。
