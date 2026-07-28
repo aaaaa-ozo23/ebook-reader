@@ -2439,3 +2439,6 @@
 - **15.6 本地验证：** Stage 15 contract verifier、release security、shell syntax、PowerShell parse、Prettier/ESLint、core 9、desktop 217、production build、Cargo fmt、Windows Rust 87/87 与 diff check 通过；workflow 远端 dispatch 结果待推送后获取。
 - **15.6 过程错误：** 首次 `pnpm.cmd check` 发现两个新增 Node 脚本缺少 ESLint Node globals 声明；补充 file-level globals 后全量通过。尝试使用本地 Ruby/PyYAML/yaml npm parser 均不可用，未安装临时依赖，改由 Stage 15 contract verifier和 GitHub workflow 注册校验。
 - **15.6 dispatch 路径：** 当前机器没有 `gh` CLI；新 workflow 文件在未合入默认分支时无法被 GitHub 注册。为保持“不合 main”边界，v0.4 内容复用默认分支已注册的 `.github/workflows/v0.3-release-artifacts.yml` 路径，dispatch 时选择集成分支即可加载新定义。
+- **15.6 首轮实跑：** Actions run `30325456546` 已用 `build_rc=false` 在集成提交 `5d66142` 启动。Ubuntu 22.04 已完成 core 9、desktop 217 与 production build，Linux sidecar 也成功生成；Rust 阶段 3 个转换测试错误执行仓库内 Windows `.exe`，以 `Permission denied` 失败。
+- **15.6 首轮 macOS：** `macos-15-intel` 与 `macos-15` 均在 sidecar GPG 校验阶段无诊断退出 2；修复分支保留 stderr，并对导入、主指纹和签名子指纹分别输出不含敏感信息的失败原因。
+- **15.6 修复：** Rust MOBI fixture 现在根据编译期 `EBOOK_READER_TARGET_TRIPLE` 和 Windows 扩展名选择 sidecar，Linux/macOS 不再触碰 `.exe`。本地 Cargo fmt、Rust 87/87、两个 Unix 脚本 syntax 与 diff check 通过；待提交、合并、推送后重新 dispatch。

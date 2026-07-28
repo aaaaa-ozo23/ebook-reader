@@ -57,10 +57,19 @@ cleanup() {
 trap cleanup EXIT
 chmod 700 "$gnupg_home"
 export GNUPGHOME="$gnupg_home"
-gpg --batch --import "$public_key" >/dev/null 2>&1
+if ! gpg --batch --import "$public_key" >/dev/null; then
+  echo "Could not import the pinned libmobi maintainer key." >&2
+  exit 1
+fi
 fingerprints="$(gpg --batch --with-colons --fingerprint | awk -F: '$1 == "fpr" { print $10 }')"
-grep -qx "$primary_fingerprint" <<<"$fingerprints"
-grep -qx "$signing_fingerprint" <<<"$fingerprints"
+if ! grep -qx "$primary_fingerprint" <<<"$fingerprints"; then
+  echo "The libmobi primary key fingerprint does not match the pinned value." >&2
+  exit 1
+fi
+if ! grep -qx "$signing_fingerprint" <<<"$fingerprints"; then
+  echo "The libmobi signing subkey fingerprint does not match the pinned value." >&2
+  exit 1
+fi
 gpg --batch --verify "$signature" "$archive"
 
 build_arch() {
