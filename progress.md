@@ -2471,3 +2471,6 @@
 - **15.7 外部门禁：** GitHub Actions 未配置 Apple Developer ID/App Store Connect/updater
   secrets，故未 dispatch `build_rc=true`。当前为 `implementation_complete /
   credentials_blocked`；不得宣称已生成可分发 RC，不得把 Stage 15 标记 complete。
+- **15.7 最终远端门禁：** Actions run `30438804562` 在合并提交 `e1868a0` 上 4/4 成功，
+  Windows x64、macOS Intel、macOS Apple Silicon、Ubuntu 22.04 全绿，耗时 17m57s；
+  `build_rc=false` 使 package、native acceptance 与 `assemble-rc` 全部按设计跳过。

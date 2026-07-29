@@ -11,6 +11,10 @@ are not configured. No signed RC package run has been dispatched.
 - GitHub Actions run
   [30345615108](https://github.com/aaaaa-ozo23/ebook-reader/actions/runs/30345615108)
   passed on Windows x64, Ubuntu 22.04, macOS Intel, and macOS Apple Silicon.
+- Final integration commit `e1868a0` was revalidated by
+  [Actions run 30438804562](https://github.com/aaaaa-ozo23/ebook-reader/actions/runs/30438804562):
+  all four quality jobs passed in 17m57s. With `build_rc=false`, every signed package, native
+  acceptance, and final assembly job was skipped as designed.
 - The matrix passed core 9 tests, desktop 219 tests, Rust/platform sidecar conversion gates,
   release security checks, Playwright WebKit on macOS, and Chromium/Xvfb on Linux.
 - macOS uses one Universal libmobi sidecar and a minimum deployment target of 12.0.

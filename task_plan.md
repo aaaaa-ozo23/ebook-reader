@@ -580,7 +580,7 @@
 | 15.4 Linux 运行适配 | `codex/stage15-linux-runtime` | implementation_complete，等待 Linux runners | Linux build script `bash -n`；共享 check；Cargo fmt；Windows Rust 87/87；Unix-only symlink test 等待 Linux |
 | 15.5 Linux 打包 | `codex/stage15-linux-packaging` | implementation_complete，等待 Ubuntu 22.04 runner | AppImage/deb overlay 经 Tauri 分 flavor 编译；shell `bash -n`；共享 check；Cargo fmt；Rust 87/87 |
 | 15.6 跨平台 CI | `codex/stage15-cross-platform-ci` | complete | Actions run `30345615108`；Windows x64、Ubuntu 22.04、macOS Intel、macOS Apple Silicon 4/4 成功；core 9、desktop 219、Rust/sidecar/安全及 WebKit/Chromium 门禁通过 |
-| 15.7 v0.4.0 RC | `codex/stage15-v0.4-release-candidate` | implementation_complete / credentials_blocked | 0.4.0 版本、跨平台汇总器、四平台 feed、安全校验、最终 CI job 与验收文档已实现；签名/公证原生 RC 仍需用户配置 CI credentials |
+| 15.7 v0.4.0 RC | `codex/stage15-v0.4-release-candidate` | implementation_complete / credentials_blocked | Actions run `30438804562` 在最终合并提交上 4/4；0.4.0、跨平台汇总器/feed/安全/CI/文档完成；签名/公证原生 RC 仍需 CI credentials |
 
 ## 大阶段 16：v0.5 移动共享核心与客户端
 
