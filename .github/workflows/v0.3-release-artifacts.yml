@@ -47,6 +47,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Assert requested version matches source
+        shell: bash
+        run: |
+          node -e \
+            "const p=require('./package.json');if(p.version!==process.argv[1])process.exit(1)" \
+            "${{ inputs.version }}"
       - name: Assert runner architecture
         if: matrix.os != 'windows'
         shell: bash
@@ -101,6 +107,7 @@ jobs:
           node scripts/verify-stage15.mjs
           node scripts/release/audit-licenses.mjs
           node scripts/release/verify-release-security.mjs
+          node scripts/release/assemble-cross-platform-rc.test.mjs
       - name: Install and run Playwright WebKit
         if: matrix.os == 'macos'
         run: |
@@ -329,3 +336,57 @@ jobs:
           scripts/ci/smoke-linux-packages.sh \
             rc-bundle/bundle/appimage/*.AppImage \
             rc-bundle/bundle/deb/*.deb
+
+  assemble-rc:
+    if: inputs.build_rc
+    needs:
+      - windows-package
+      - macos-package
+      - macos-acceptance
+      - linux-package
+      - linux-acceptance
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - uses: actions/download-artifact@v4
+        with:
+          name: v${{ inputs.version }}-windows-x86_64
+          path: rc-input/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: v${{ inputs.version }}-macos-universal
+          path: rc-input/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: v${{ inputs.version }}-linux-x86_64
+          path: rc-input/linux
+      - name: Extract platform bundles
+        run: |
+          mkdir -p rc-input/macos/extracted rc-input/linux/extracted
+          tar -xzf rc-input/macos/v${{ inputs.version }}-macos-universal.tgz \
+            -C rc-input/macos/extracted
+          tar -xzf rc-input/linux/v${{ inputs.version }}-linux-x86_64.tgz \
+            -C rc-input/linux/extracted
+      - name: Assemble deterministic cross-platform RC
+        run: |
+          node scripts/release/assemble-cross-platform-rc.mjs \
+            --version "${{ inputs.version }}" \
+            --windows rc-input/windows \
+            --macos rc-input/macos \
+            --linux rc-input/linux \
+            --output "release-artifacts/v${{ inputs.version }}-rc/complete"
+      - name: Verify complete artifact set
+        run: >-
+          node scripts/release/verify-release-security.mjs
+          "release-artifacts/v${{ inputs.version }}-rc/complete"
+          --complete
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v${{ inputs.version }}-cross-platform-rc
+          path: release-artifacts/v${{ inputs.version }}-rc/complete/
+          if-no-files-found: error
+          retention-days: 7

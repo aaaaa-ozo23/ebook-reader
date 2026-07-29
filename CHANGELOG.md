@@ -2,6 +2,37 @@
 
 All notable changes to Ebook Reader are documented in this file.
 
+## [0.4.0] - 2026-07-29
+
+### Added
+
+- macOS 12+ Universal support for Intel and Apple Silicon with a signed/notarized DMG track and
+  one Universal updater asset shared by both Darwin architecture keys.
+- Linux x64 support built on Ubuntu 22.04 with AppImage automatic updates and manual deb upgrades;
+  runtime acceptance covers Ubuntu 22.04/24.04 and Debian 12.
+- A compile-time desktop platform capability contract for platform, architecture, primary
+  modifier, five-format support, and NSIS/MSI/macOS/AppImage/deb distribution tracks.
+- Target-triple libmobi 0.12 sidecars, native macOS menus and file-open handling, Linux MIME
+  integration, cross-platform SBOMs, and deterministic RC assembly.
+
+### Changed
+
+- EPUB, TXT, PDF, MOBI, and AZW3 now share the same supported-format contract on Windows, macOS,
+  and Linux; macOS uses Command while Windows/Linux use Control for primary shortcuts.
+- The manual-only Actions workflow now gates Windows x64, macOS Intel/Apple Silicon, and Ubuntu
+  22.04 quality before signed package jobs and Ubuntu 24.04/Debian 12 runtime acceptance.
+- NSIS, macOS, and AppImage use signed updater artifacts; MSI and deb explicitly remain manual
+  upgrade tracks.
+
+### Security
+
+- Sidecars resolve only from trusted bundled resources and are checked for target architecture,
+  permissions, source provenance, and SHA-256.
+- macOS packaging fails closed unless Developer ID signing, notarization, stapling, Gatekeeper,
+  Universal slices, and updater verification all succeed.
+- Release assembly validates all four CycloneDX SBOMs, updater signatures, secret/path scans,
+  deterministic asset names, the four-platform feed, and SHA-256 inventory.
+
 ## [0.3.0] - 2026-07-25
 
 ### Added

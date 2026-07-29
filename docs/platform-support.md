@@ -98,3 +98,20 @@ Installer and updater acceptance must use an isolated identifier and data root. 
 must never delete, rename, replace, or migrate the production
 `com.ebookreader.desktop` profile. Uninstalling an application package does not remove
 the user's library or settings unless a future flow obtains separate, explicit consent.
+
+## v0.4 RC artifact contract
+
+The final short-lived Actions artifact contains Windows NSIS/signature/MSI, a notarized Universal
+DMG and macOS updater archive/signature, Linux AppImage/signature/deb, source plus per-platform
+CycloneDX SBOMs, libmobi source/signature, `artifact-manifest.json`, `latest.json`,
+`SHA256SUMS.txt`, and an acceptance report.
+
+`latest.json` contains exactly `windows-x86_64`, `darwin-x86_64`, `darwin-aarch64`, and
+`linux-x86_64`. Both Darwin entries reference the same Universal updater archive and signature.
+The workflow only assembles the combined RC after all platform package and native acceptance jobs
+pass. It has `contents: read`, retains artifacts for seven days, and never creates a tag or GitHub
+Release.
+
+Apple Developer ID/App Store Connect credentials and the Tauri updater signing key are external
+hard gates. Without them, repository implementation may be complete, but Stage 15 and a
+distributable v0.4 RC must remain unaccepted.

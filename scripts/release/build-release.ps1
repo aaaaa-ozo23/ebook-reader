@@ -1,5 +1,5 @@
 param(
-  [string]$Version = '0.3.0',
+  [string]$Version = '0.4.0',
   [string]$OutputDirectory = "release-artifacts/v$Version-rc",
   [switch]$SkipQualityGates,
   [switch]$SkipBuild
@@ -11,6 +11,10 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
   [IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$sourceVersion = (Get-Content -Raw (Join-Path $root 'package.json') | ConvertFrom-Json).version
+if ($Version -ne $sourceVersion) {
+  throw "Requested version $Version does not match source version $sourceVersion"
+}
 $output = [IO.Path]::GetFullPath((Join-Path $root $OutputDirectory))
 $allowedRoot = [IO.Path]::GetFullPath((Join-Path $root 'release-artifacts'))
 if (-not $output.StartsWith($allowedRoot, [StringComparison]::OrdinalIgnoreCase)) {
