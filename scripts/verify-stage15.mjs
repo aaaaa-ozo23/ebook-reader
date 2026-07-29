@@ -78,6 +78,8 @@ for (const path of [
   "scripts/ci/smoke-macos-app.sh",
   "scripts/ci/smoke-linux-packages.sh",
   "scripts/ci/smoke-windows-binary.ps1",
+  "scripts/release/assemble-cross-platform-rc.mjs",
+  "scripts/release/assemble-cross-platform-rc.test.mjs",
 ]) {
   requireCondition(
     existsSync(resolve(root, path)),
@@ -106,11 +108,28 @@ for (const required of [
   "debian:12",
   "retention-days: 7",
   "playwright.webkit.config.ts",
+  "assemble-rc:",
+  "v${{ inputs.version }}-cross-platform-rc",
+  "--complete",
+  "assemble-cross-platform-rc.test.mjs",
+  "Assert requested version matches source",
 ]) {
   requireCondition(
     workflow.includes(required),
     `Stage 15 workflow is missing ${required}.`,
   );
+}
+
+for (const [path, version] of [
+  ["package.json", readJson("package.json").version],
+  ["packages/core/package.json", readJson("packages/core/package.json").version],
+  ["apps/desktop/package.json", readJson("apps/desktop/package.json").version],
+  [
+    "apps/desktop/src-tauri/tauri.conf.json",
+    readJson("apps/desktop/src-tauri/tauri.conf.json").version,
+  ],
+]) {
+  requireCondition(version === "0.4.0", `${path} must be version 0.4.0.`);
 }
 for (const forbiddenPublication of [
   "softprops/action-gh-release",

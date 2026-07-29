@@ -1,46 +1,49 @@
 # App updates
 
-Ebook Reader uses Tauri's mandatory updater signature verification on the Windows NSIS track.
-The embedded public key is safe to distribute; the private key stays outside Git at
-`C:\Users\许涵予xhy\.codex\secrets\ebook-reader-updater.key` and is restricted to the current
-Windows user. Back it up offline before producing the release candidate. Losing it prevents future
-updates for installed clients.
+Ebook Reader uses Tauri's mandatory updater signature verification. The embedded public key is
+safe to distribute; the private key exists only in the maintainer's protected local store and CI
+secrets. Never put it in Git, logs, SBOM input, workflow artifacts, or release bundles.
 
 The production feed is fixed to:
 
 `https://github.com/aaaaa-ozo23/ebook-reader/releases/latest/download/latest.json`
 
 Production does not enable insecure transport or an HTTP fallback. Checks are manual by default.
-Users may opt into one check per day; this never downloads or installs an update. The last-check
-timestamp is machine state and does not enter portable backups.
+Users may opt into one check per day; this never downloads or installs an update without
+confirmation. The last-check timestamp is machine state and does not enter portable backups.
 
-## Windows tracks
+## Distribution tracks
 
-- NSIS: `pnpm.cmd tauri:build:nsis` embeds updater support and creates a signed updater artifact.
-- MSI: `pnpm.cmd tauri:build:msi` compiles the app with the in-app updater disabled. MSI users
-  install a later MSI manually and should not mix installer types.
+- **Windows NSIS:** updater enabled; downloads and verifies the signed NSIS updater asset.
+- **Windows MSI:** updater disabled; close the app and install a newer MSI manually. Do not mix
+  NSIS and MSI tracks.
+- **macOS Universal:** updater enabled; both `darwin-x86_64` and `darwin-aarch64` feed keys point
+  to the same signed Universal `.app.tar.gz`. The DMG must also be Developer ID signed,
+  notarized, stapled, and accepted by Gatekeeper.
+- **Linux AppImage:** updater enabled; downloads and verifies the signed x64 AppImage.
+- **Linux deb:** updater disabled; close the app and install the newer deb manually. Do not use
+  the AppImage in-place updater for a deb installation.
 
-On Windows, confirming installation exits the running app. Check and download can be canceled;
-once installation begins it cannot be canceled.
+`latest.json` contains exactly `windows-x86_64`, `darwin-x86_64`,
+`darwin-aarch64`, and `linux-x86_64`. MSI and deb are distributed and checksummed but do not
+appear as updater targets.
 
 ## Native smoke isolation
 
-`tauri.updater-test.conf.json` uses the independent identifier
-`com.ebookreader.desktop.updater-test` and an HTTPS loopback endpoint. The RC smoke harness must
-serve a trusted local certificate and exercise an old test version to signed v0.3, invalid signature
-rejection, throttled cancellation, retained data, and post-install version. It must never reuse the
-production identifier or production user data.
+Updater and upgrade smoke tests use independent identifiers/data roots. They exercise signed
+installation, invalid-signature rejection, cancellation, retained data, and post-install version
+without reading, migrating, deleting, or renaming the production
+`com.ebookreader.desktop` profile.
 
-The updater signature is not Windows Authenticode. RC installers remain explicitly unsigned by
-Authenticode unless a commercial Code Signing certificate is supplied.
+Updater signatures are not Windows Authenticode or Apple Developer ID signatures. Each platform's
+installer trust checks remain separate hard gates. Before an RC is accepted, the maintainer must
+confirm a separate offline updater-key backup and record only that confirmation, never its
+location or secret contents.
 
-Never copy the updater private key into the repository, logs, SBOM input, workflow artifacts, or
-release bundles. Before an RC is accepted, the maintainer must confirm a separate offline backup
-and record only that confirmation—not the backup location or secret—in the private release log.
+For rollback, export a portable backup, retain the current app-data directory, and install a
+previously trusted artifact only according to the same distribution track. See
+[Upgrade and rollback](upgrade-and-rollback.md).
 
-For rollback, uninstall the newer build and install a previously trusted artifact only after
-exporting a portable backup. The installer rejects in-place downgrades; do not delete the app-data
-directory during uninstall. See [Upgrade and rollback](upgrade-and-rollback.md).
-
-Implementation follows the official [Tauri updater](https://v2.tauri.app/plugin/updater/) and
+Implementation follows the official [Tauri updater](https://v2.tauri.app/plugin/updater/),
+[macOS signing](https://v2.tauri.app/es/distribute/sign/macos/), and
 [Windows code-signing](https://v2.tauri.app/distribute/sign/windows/) guidance.

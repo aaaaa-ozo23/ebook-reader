@@ -2458,3 +2458,16 @@
 - **15.6 第十轮：** Actions run `30344095387` 的 Windows、macOS Intel 与 macOS ARM 质量作业全绿，证明 GPG 短路径、WebKit 图片覆盖层、焦点和子像素断言均稳定。Linux 为 23/24，仅 MOBI 的同一近末 progression 因分页几何报告 location 14 而非 15。
 - **15.6 第十轮修复：** 书末导航用例保留滑杆拖动/tooltip/前进断言，近末提交后允许位于倒数两项，并通过最多两次 Next 明确到达最终 location 与 100%；这验证用户结果且不把 EPUB generated location 误当固定视觉页码。
 - **15.6 最终门禁：** Actions run `30345615108` 在集成提交 `d93db39` 上 4/4 成功：Windows x64、Ubuntu 22.04、macOS Intel、macOS Apple Silicon 的共享 9+219、Rust、sidecar、安全和平台浏览器门禁全部通过；`build_rc=false`，签名 package/acceptance jobs 按边界跳过。
+- **15.7 版本：** root、core、desktop、Cargo manifest、Cargo lock 本地 crate、Tauri 与
+  release verifier 已统一为 0.4.0；Stage 14 历史 verifier 不改写。
+- **15.7 RC 汇总：** 新增确定性跨平台汇总器与 fixture 自测，产出 Windows NSIS/signature/MSI、
+  Universal DMG/updater/signature、AppImage/signature/deb、四份 SBOM、manifest、
+  `latest.json`、`SHA256SUMS.txt` 和 acceptance report；两个 Darwin feed key 指向同一资产。
+- **15.7 最终 CI：** package/acceptance job 全绿后才运行 `assemble-rc`；完整资产使用
+  `--complete` 安全模式验证，最终 artifact 仅保留 7 天，workflow 仍为 manual-only、
+  `contents: read` 且无 tag/Release 行为。
+- **15.7 文档：** README、CHANGELOG、平台支持、更新/回滚、v0.4 checklist 与 Stage 15
+  acceptance record 已同步，明确 NSIS/macOS/AppImage 自动更新和 MSI/deb 手动升级。
+- **15.7 外部门禁：** GitHub Actions 未配置 Apple Developer ID/App Store Connect/updater
+  secrets，故未 dispatch `build_rc=true`。当前为 `implementation_complete /
+  credentials_blocked`；不得宣称已生成可分发 RC，不得把 Stage 15 标记 complete。

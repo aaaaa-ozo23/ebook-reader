@@ -906,6 +906,22 @@
 - 编译期 `EBOOK_READER_BUILD_FLAVOR` 适合区分同一 OS 的自动/手动更新包；未知 flavor 必须 panic，避免错误拼写静默落入可安装 updater。
 - Tauri capability JSON 中的 `windows: ["main"]` 指 WebView window label，并非 Windows OS 限定；Stage 15 不应错误地复制或删除该配置。
 
+## 2026-07-29 Stage 15.7 v0.4.0 RC
+
+- 版本源必须同时覆盖 root、core、desktop、Cargo manifest、Cargo lock 本地 crate、Tauri
+  config 与 release verifier；历史 Stage 14 verifier 保持其历史 0.3.0 契约。
+- 三个平台的 package job 先保留各自原生目录和执行位，再由 Ubuntu 上的确定性汇总器递归
+  定位经过验收的资产并统一命名；这避免在 Windows/macOS/Linux job 之间传递可执行位或猜测
+  Tauri 原始文件名。
+- 完整 updater feed 只能包含 `windows-x86_64`、`darwin-x86_64`、
+  `darwin-aarch64`、`linux-x86_64`；两个 Darwin key 必须复用同一 Universal archive 和
+  signature。MSI/deb 不进入 updater feed。
+- 安全 verifier 需要区分 Windows 中间产物与 `--complete` 四平台产物，否则 Windows package
+  job 会因尚未存在 macOS/Linux SBOM 而提前失败。
+- 当前 GitHub 仓库未配置 Apple Developer ID/App Store Connect/updater secrets。按冻结门禁，
+  不能运行 `build_rc=true`、伪造签名资产或把 Stage 15 标记 complete；仓库实现完成状态应明确
+  记录为 `implementation_complete / credentials_blocked`。
+
 ### 第五轮跨平台质量矩阵
 
 - Windows runner 同时执行 35 个 Vitest 文件时，60 项 `App.test.tsx` 中 10 项在默认 1 秒异步等待边界附近失败；同一提交在 Linux/macOS ARM 及本地均为 217/217。CI worker 上限应显式设为 2，降低共享 runner 调度噪声，同时保留所有断言和产品超时。
